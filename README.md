@@ -1,8 +1,4 @@
-<style>
-td, th {
-   border: none!important;
-}
-</style>
+# THIS REPOSITORY PRESENTS OPEN SOURCE CODE OF MELAGE (BASIC) 
 
 <p align="center">
 <img src="resource/main.ico" alt="MELAGE" style="border:1px solid black" object-fit="contain" width="400"/><br>
