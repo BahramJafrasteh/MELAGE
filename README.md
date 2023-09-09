@@ -17,6 +17,7 @@
 - [Releases](#releases)
 - [Citation and acknowledgements](#citation-and-acknowledgements)
 
+
 ## Dependencies
 This software depends on the following libraries:
 ```
@@ -47,6 +48,7 @@ vtk==9.2.2
 ```
 
 ## Installation
+### MELAGE
 #### Windows and linux
 It is very easy to install melage on pc and laptop 
 1. clone library
@@ -62,6 +64,26 @@ pip install -r requirements.txt
 ```sh
 python melage.py
 ```
+### MELAGE+ (complete)
+### Windows
+
+[![Download MELAGE](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/latest/download)
+
+- Please extract the compressed files.
+- Copy the content into C:\MELAGE
+- create a short cut  C:\MELAGE\melage.exe
+- execute the .exe file
+- Upon openning it asks to add a UserName and an Email.
+- Enter a user name and a valid Email address from your institute
+- Click on generate to build an id.
+- send the generated id to <a href = "mailto: melage@inbica.com">mealge@inibica.es</a> with cc to <a href = "mailto: jafrasteh.bahram@inibica.es">jafrasteh.bahram@inibica.es</a>.
+- You will receive a key very soon. Copy the key to the corresponding field.
+- Now you can use MELAGE+ for free.
+Please do not forget to leave a comment for us ([MELAGE reviews](https://sourceforge.net/projects/melage/reviews/))
+
+
+### Linux(Ubunt)
+Wil be available soon
 
  -------- 
 ## Manual
@@ -634,10 +656,15 @@ Hum Brain Mapp.2002 Nov;17(3):143-55. doi: 10.1002/hbm.10062. PMID: 12391568; PM
 
 
 # license
-To ask for a license please contact <a href = "mailto: melage@inbica.com">mealge@inibica.es</a> or <a href = "mailto: jafrasteh.bahram@inibica.es">jafrasteh.bahram@inibica.es</a>.
+MELAGE has been registerd and protected. please see:
+[https://www.safecreative.org/work/2211222681375-melage](https://www.safecreative.org/work/2211222681375-melage).
+
+For any commercial usage and/or other additional services please contact <a href = "mailto: melage@inbica.com">mealge@inibica.es</a>.
 
 
-#Citation and acknowledgements
+
+
+# Citation and acknowledgements
 Please cite us:
 
 ```
