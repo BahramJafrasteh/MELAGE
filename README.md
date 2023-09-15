@@ -667,11 +667,10 @@ For any commercial usage and/or other additional services please contact <a href
 # Citation and acknowledgements
 Please cite us:
 
-```
-Jafrasteh, B., Lubián-López, S. P., & Benavente-Fernández, I. (2023). 
-MELAGE: A purely python based Neuroimaging software (Neonatal). arXiv preprint arXiv:X.X.
 
-```
+Jafrasteh, B., Lubián-López, S. P., & Benavente-Fernández, I. *Melage: A purely Python
+based neuroimaging software (neonatal)* (2023) \[[arXiv:2309.07175](https://arxiv.org/abs/2309.07175)\].
+
 
 
 # Releases
