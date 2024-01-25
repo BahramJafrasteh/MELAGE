@@ -48,7 +48,7 @@ vtk==9.2.2
 ```
 ## Releases
 
-### Melage_Mac.tar.gz
+### [![MacOS](https://img.shields.io/badge/Download%20for-MacOS-blue)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
 [![Download for MacOS](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
 - **Platform:** macOS x64
 - **Tested on:** MacOS x64
