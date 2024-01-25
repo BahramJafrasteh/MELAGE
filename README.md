@@ -1,3 +1,35 @@
+## Releases
+
+### [![MacOS](https://img.shields.io/badge/Download%20for-MacOS-blue)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
+- **Platform:** macOS x64
+- **Tested on:** MacOS x64
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
+
+### [![Ubuntu](https://img.shields.io/badge/Download%20for-Ubuntu-orange)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
+- **Platform:** Ubuntu 22.04
+- **Tested on:** Ubuntu 22.04
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
+
+### [![Windows](https://img.shields.io/badge/Download%20for-Windows-green)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
+- **Platform:** Windows 10 x64
+- **Tested on:** Windows 10 x64
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
+
+## Usage
+1. Download the appropriate release for your operating system.
+2. Extract the contents of the tar.gz (or zip) file from [SourceForge](https://sourceforge.net/projects/melage/files/release2/).
+3. Execute the file.
+4. Upon opening, the application will prompt you to add a UserName and an Email.
+5. Enter a user name and a valid email address from your institute.
+6. Click on "Generate" to build an ID.
+7. Send the generated ID to [mealge@inibica.es](mailto:mealge@inibica.es) with cc to [jafrasteh.bahram@inibica.es](mailto:jafrasteh.bahram@inibica.es).
+8. You will receive a key shortly.
+9. Copy the key to the corresponding field in the application.
+
+
 # THIS REPOSITORY PRESENTS OPEN SOURCE CODE OF MELAGE (BASIC) 
 
 <p align="center">
@@ -46,36 +78,7 @@ torch==1.12.1
 trimesh==3.17.0
 vtk==9.2.2
 ```
-## Releases
 
-### [![MacOS](https://img.shields.io/badge/Download%20for-MacOS-blue)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
-- **Platform:** macOS x64
-- **Tested on:** MacOS x64
-- **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
-
-### [![Ubuntu](https://img.shields.io/badge/Download%20for-Ubuntu-orange)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
-- **Platform:** Ubuntu 22.04
-- **Tested on:** Ubuntu 22.04
-- **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
-
-### [![Windows](https://img.shields.io/badge/Download%20for-Windows-green)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
-- **Platform:** Windows 10 x64
-- **Tested on:** Windows 10 x64
-- **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
-
-## Usage
-1. Download the appropriate release for your operating system.
-2. Extract the contents of the tar.gz (or zip) file from [SourceForge](https://sourceforge.net/projects/melage/files/release2/).
-3. Execute the file.
-4. Upon opening, the application will prompt you to add a UserName and an Email.
-5. Enter a user name and a valid email address from your institute.
-6. Click on "Generate" to build an ID.
-7. Send the generated ID to [mealge@inibica.es](mailto:mealge@inibica.es) with cc to [jafrasteh.bahram@inibica.es](mailto:jafrasteh.bahram@inibica.es).
-8. You will receive a key shortly.
-9. Copy the key to the corresponding field in the application.
 
 ## Light version from Github
 #### Windows and Linux
