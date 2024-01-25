@@ -25,7 +25,7 @@ matplotlib==3.6.1
 nibabel==4.0.2
 numba==0.56.4
 numpy==1.23.3
-opencv_python_headless==4.6.0.66
+opencv_python_headless==4.5.5.64
 pickle5==0.0.11
 Pillow==9.2.0
 Pillow==10.0.0
@@ -42,49 +42,59 @@ scipy==1.11.2
 SimpleITK==2.2.0
 SimpleITK==2.2.1
 surfa==0.4.2
-torch==1.12.1+cu116
+torch==1.12.1
 trimesh==3.17.0
 vtk==9.2.2
 ```
+## Releases
 
-## Installation
-### MELAGE
-#### Windows and linux
-It is very easy to install melage on pc and laptop 
-1. clone library
+### Melage_Mac.tar.gz
+[![Download for MacOS](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
+- **Platform:** macOS x64
+- **Tested on:** MacOS x64
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
 
-```sh
-git clone [https://github.com/bahramjafrasteh/melage](https://github.com/bahramjafrasteh/melage) <br>
-```
-2. install requirements
-```sh
-pip install -r requirements.txt
-```
-3. run melage
-```sh
-python melage.py
-```
-### MELAGE+ (complete)
-### Windows
+### Melage_UBUNTU22.04.tar.gz
+[![Download for Ubuntu](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
+- **Platform:** Ubuntu 22.04
+- **Tested on:** Ubuntu 22.04
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
 
-[![Download MELAGE](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/latest/download)
+### Melage_Windows.tar.gz
+[![Download for Windows](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
+- **Platform:** Windows 10 x64
+- **Tested on:** Windows 10 x64
+- **Created by:** PyInstaller
+- **Installation:** No installation required, just extract the contents.
 
-- Please extract the compressed files.
-- Copy the content into C:\MELAGE
-- create a short cut  C:\MELAGE\melage.exe
-- execute the .exe file
-- Upon openning it asks to add a UserName and an Email.
-- Enter a user name and a valid Email address from your institute
-- Click on generate to build an id.
-- send the generated id to <a href = "mailto: melage@inbica.com">mealge@inibica.es</a> with cc to <a href = "mailto: jafrasteh.bahram@inibica.es">jafrasteh.bahram@inibica.es</a>.
-- You will receive a key very soon. Copy the key to the corresponding field.
-- Now you can use MELAGE+ for free.
-Please do not forget to leave a comment for us ([MELAGE reviews](https://sourceforge.net/projects/melage/reviews/))
+## Usage
+1. Download the appropriate release for your operating system.
+2. Extract the contents of the tar.gz (or zip) file from [SourceForge](https://sourceforge.net/projects/melage/files/release2/).
+3. Execute the file.
+4. Upon opening, the application will prompt you to add a UserName and an Email.
+5. Enter a user name and a valid email address from your institute.
+6. Click on "Generate" to build an ID.
+7. Send the generated ID to [mealge@inibica.es](mailto:mealge@inibica.es) with cc to [jafrasteh.bahram@inibica.es](mailto:jafrasteh.bahram@inibica.es).
+8. You will receive a key shortly.
+9. Copy the key to the corresponding field in the application.
 
-
-### Linux(Ubunt)
-Wil be available soon
-
+## Light version from Github
+#### Windows and Linux
+Installing Melage on your PC and laptop is easy:
+1. Clone the library:
+    ```sh
+    git clone [https://github.com/bahramjafrasteh/melage](https://github.com/bahramjafrasteh/melage)
+    ```
+2. Install requirements:
+    ```sh
+    pip install -r requirements.txt
+    ```
+3. Run Melage:
+    ```sh
+    python melage.py
+    ```
  -------- 
 ## Manual
 
