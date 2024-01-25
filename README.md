@@ -49,21 +49,18 @@ vtk==9.2.2
 ## Releases
 
 ### [![MacOS](https://img.shields.io/badge/Download%20for-MacOS-blue)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
-[![Download for MacOS](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
 - **Platform:** macOS x64
 - **Tested on:** MacOS x64
 - **Created by:** PyInstaller
 - **Installation:** No installation required, just extract the contents.
 
-### Melage_UBUNTU22.04.tar.gz
-[![Download for Ubuntu](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
+### [![Ubuntu](https://img.shields.io/badge/Download%20for-Ubuntu-orange)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
 - **Platform:** Ubuntu 22.04
 - **Tested on:** Ubuntu 22.04
 - **Created by:** PyInstaller
 - **Installation:** No installation required, just extract the contents.
 
-### Melage_Windows.tar.gz
-[![Download for Windows](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
+### [![Windows](https://img.shields.io/badge/Download%20for-Windows-green)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
 - **Platform:** Windows 10 x64
 - **Tested on:** Windows 10 x64
 - **Created by:** PyInstaller
