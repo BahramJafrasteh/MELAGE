@@ -1,22 +1,22 @@
 ## Releases
 
 ### [![MacOS](https://img.shields.io/badge/Download%20for-MacOS-blue)](https://sourceforge.net/projects/melage/files/release2/Melage_Mac.tar.gz/download)
-- **Platform:** macOS x64
-- **Tested on:** MacOS x64
-- **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
+- **Platform:** macOS x64 (>=11.0.1) 
+- **Tested on:** MacOS x64 (MacOS x64 Big Sur 11.0.1)
+- **Created by:** PyInstaller (MacOS x64 Big Sur 11.0.1)
+- **Installation:** No installation required, just extract the contents, open a terminal, direct to the extraction directory and run ./melage
 
 ### [![Ubuntu](https://img.shields.io/badge/Download%20for-Ubuntu-orange)](https://sourceforge.net/projects/melage/files/release2/Melage_UBUNTU22.04.tar.gz/download)
-- **Platform:** Ubuntu 22.04
-- **Tested on:** Ubuntu 22.04
-- **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
+- **Platform:** Ubuntu 22.04 x64
+- **Tested on:** Ubuntu 22.04 x64
+- **Created by:** PyInstaller (Ubuntu 22.04 x64)
+- **Installation:** No installation required, just extract the contents, open a terminal, direct to the extraction directory and run ./melage
 
 ### [![Windows](https://img.shields.io/badge/Download%20for-Windows-green)](https://sourceforge.net/projects/melage/files/release1/melagep_windows.zip/download)
 - **Platform:** Windows 10 x64
 - **Tested on:** Windows 10 x64
 - **Created by:** PyInstaller
-- **Installation:** No installation required, just extract the contents.
+- **Installation:** No installation required, just extract the contents and run melage.exe
 
 ## Usage
 1. Download the appropriate release for your operating system.
