@@ -19,7 +19,6 @@ import cv2
 import math
 
 from collections import defaultdict
-from utils.Shaders import vsrc, fsrc, fsrcPaint, vsrcPaint
 from utils.GMM import GaussianMixture
 from sklearn.mixture import GaussianMixture
 import pyfftw
