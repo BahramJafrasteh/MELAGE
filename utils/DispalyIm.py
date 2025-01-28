@@ -23,6 +23,11 @@ from utils.Shaders import vsrc, fsrc, fsrcPaint, vsrcPaint
 from utils.GMM import GaussianMixture
 from sklearn.mixture import GaussianMixture
 import pyfftw
+from sys import platform
+if platform=='darwin':
+    from utils.Shaders_120 import vsrc, fsrc, fsrcPaint, vsrcPaint
+else:
+    from utils.Shaders_330 import vsrc, fsrc, fsrcPaint, vsrcPaint
 
 fft = pyfftw.interfaces.numpy_fft.fft2
 ifft = pyfftw.interfaces.numpy_fft.ifft2
