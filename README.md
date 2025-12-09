@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/demo.gif" alt="MELAGE Demo" width="400"/><br>
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/demo.gif" alt="MELAGE Demo" width="400"/><br>
   <h1 align="center">🧠🩻 MELAGE: Medical Imaging Software</h1>
   <p align="center">
     <em>Machine learning & analysis for next-generation neuroimaging and medical imaging research</em>  
@@ -113,7 +113,7 @@ After installation and activating your virtual environment, you can launch **MEL
 melage
 ```
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/MELAGE_main-1536x615.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/MELAGE_main.png" 
        alt="MELAGE GUI Screenshot" 
        style="max-width:800px; height:auto; border:1px solid #ccc; border-radius:10px;">
   <br>
@@ -157,7 +157,7 @@ The **Main Page** is the first window that appears after launching **MELAGE**.
 - 📂 **Load a previously saved project** (default format: `.bn`)  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/main_page.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/main_page.png" 
        alt="MELAGE Main Window" 
        width="800" 
        style="border:1px solid #ccc; border-radius:8px; object-fit:contain;">
@@ -184,7 +184,7 @@ Located at the **top-left** of the main window, the **Project Toolbar** provides
 - `File → Save`  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/open_save_load.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/open_save_load.png" 
        alt="MELAGE Project Toolbar" 
        width="250" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -201,11 +201,11 @@ To the **right of the Project Toolbar**, you’ll find the **Image Toolbar**, wh
 - 🧲 **Open Second Image** – Default button for loading **Second image**.  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/load_image_file.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/load_image_file.png" 
        alt="MELAGE Image Toolbar (no project)" 
        width="250" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain; margin-right:10px;">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/load_image_file_openp.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/load_image_file_openp.png" 
        alt="MELAGE Image Toolbar (project loaded)" 
        width="250" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -228,7 +228,7 @@ At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contai
 - 🧊 **3D Toggle** – Show or hide 3D widgets in the view.  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/toolbar_tools.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/toolbar_tools.png" 
        alt="MELAGE Tools Toolbar" 
        width="500" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -245,7 +245,7 @@ Just **below the Project Toolbar**, you’ll find the **Panning Toolbar** with t
 - ✋ **Panning** – Drag to move around within a slice (useful after zooming).  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/panning_toolbar.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/panning_toolbar.png" 
        alt="MELAGE Panning Toolbar" 
        width="220" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -269,7 +269,7 @@ On the **right side of the Panning Toolbar**, you’ll find the **Segmentation T
 - 🏷 **Color Name** – Shows the name of the active segmentation color.  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/segmentation_toolbar.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/segmentation_toolbar.png" 
        alt="MELAGE Segmentation Toolbar" 
        width="600" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -287,7 +287,7 @@ Finally, at the far right, you’ll find the **Exit Toolbar**, which includes:
 - ❌ **Exit** – Closes the application.  
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/exit_toolbar.png" 
+  <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/exit_toolbar.png" 
        alt="MELAGE Exit Toolbar" 
        width="300" 
        style="border:1px solid #ccc; border-radius:6px; object-fit:contain;">
@@ -303,13 +303,13 @@ Finally, at the far right, you’ll find the **Exit Toolbar**, which includes:
 <tr>
 <td>
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_color.png" alt="MELAGE" width="750" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_color.png" alt="MELAGE" width="750" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2"> Color </font> 
 </p>
 </td>
 <td>
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_color_additional.png" alt="MELAGE" width="1000" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_color_additional.png" alt="MELAGE" width="1000" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2"> Right click</font> 
 </p>
 </td>
@@ -333,14 +333,14 @@ You can import a new style via **Import**.
 Label names are editable, and you can create a new label by clicking a color in the **Segmentation Toolbar**.
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_color_add.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_color_add.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2"> Add a color</font> 
 </p>
 
 Pick a new color here. Then you’ll see a second window:
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_color_add2.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_color_add2.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2"> Add index and name</font> 
 </p>
 
@@ -355,13 +355,13 @@ If the index already exists, the new color will replace the previous one.
 <tr>
 <td>
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_mri.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_mri.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Image enhancement</font> 
 </p>
 </td>
 <td>
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_mri2.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_mri2.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Image enhancement (continued)</font> 
 </p>
 </td>
@@ -381,7 +381,7 @@ There’s also a **“sagittal ↔ coronal”** swap for datasets that need plan
 ## 📋 Table widget
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_table.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_table.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Table widget</font> 
 </p>
 
@@ -396,7 +396,7 @@ This table includes:
 - 🗂 **FileName** – file name  
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_table2.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_table2.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Table widget (context menu)</font> 
 </p>
 
@@ -410,7 +410,7 @@ Right-click options:
 ## 🖼️ Batch Images widget
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_images.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_images.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Images widget</font> 
 </p>
 
@@ -419,7 +419,7 @@ Manage a set of images (e.g., different modalities or sessions) and their corres
 - A segmentation file **requires** its image to be loaded first.  
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_images2.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_images2.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Images widget (context menu)</font> 
 </p>
 
@@ -433,7 +433,7 @@ Right-click options:
 When importing, you’ll see:
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_images3.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_images3.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Import dialog</font> 
 </p>
 
@@ -445,7 +445,7 @@ Use **Preview** to inspect an image before opening it. 👀
 ## 🌈 Segmentation intensity widget
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_segintensity.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_segintensity.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Segmentation intensity</font> 
 </p>
 
@@ -458,7 +458,7 @@ Adjust the **visual intensity** of the segmentation overlay.
 ## 🖍️ Marker size widget
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/widget_marker.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_marker.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Marker size</font> 
 </p>
 
@@ -472,7 +472,7 @@ Controls (top ➜ bottom):
 MELAGE includes three tabs:
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tabs.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tabs.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 <font size="2">Tabs overview</font> 
 </p>
 
@@ -486,11 +486,11 @@ MELAGE includes three tabs:
 - If one image is closed, the tab displays the three planes of the remaining image:
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/widget_tab_mutualview.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/widget_tab_mutualview.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/widget_tab_mutualview2.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/widget_tab_mutualview2.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 ### 2) 🧩 Top image (first image) workspace
@@ -501,7 +501,7 @@ Designed to focus on **one plane at larger size** while tracking the **instant 3
 - 🧊 **3D visualization**: real-time 3D feedback
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/tab1.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/tab1.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 ### 3) 🧩 Bottom image (second image) workspace
@@ -512,7 +512,7 @@ Same layout and controls, dedicated to the **second (bottom) image**.
 - 🧊 **3D visualization**: real-time 3D feedback
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/tab2.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/tab2.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 # 🧊 3D Visualization
@@ -520,7 +520,7 @@ Same layout and controls, dedicated to the **second (bottom) image**.
 Right-click on the 3D region to access various options:
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/3D_rightc.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 ## 🔎 GoTo
@@ -529,7 +529,7 @@ Right-click on the 3D region to access various options:
 - The selected point will also appear in the closest sagittal, coronal, or axial plane.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/3D_rightc_goto.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc_goto.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 
@@ -539,7 +539,7 @@ Right-click on the 3D region to access various options:
 - ⚠️ Tip: If it doesn’t activate immediately, switch to another tab and return.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/3D_rightc_seg.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc_seg.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 
@@ -553,7 +553,7 @@ MELAGE allows users to seamlessly overlay segmentation masks on top of anatomica
 - ⚠️ *Tip*: If the overlay does not activate immediately, switch to another tab and return.  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/transparent_3D_overlay_0.png" 
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/transparent_3D_overlay_0.png" 
      alt="MELAGE Transparent 3D Overlay" width="700" 
      style="border:1px solid black; object-fit:contain"/><br>
 <em>Transparent 3D overlay.</em>
@@ -561,7 +561,7 @@ MELAGE allows users to seamlessly overlay segmentation masks on top of anatomica
 
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/transparent_3D_overlay.png" 
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/transparent_3D_overlay.png" 
      alt="MELAGE Transparent 3D Overlay" width="700" 
      style="border:1px solid black; object-fit:contain"/><br>
 <em>Transparent 3D overlay of segmentation mask and anatomical image in MELAGE.</em>
@@ -576,14 +576,14 @@ MELAGE allows users to seamlessly overlay segmentation masks on top of anatomica
 
 ## 🖌️ Painting
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/3D_rightc_paint.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc_paint.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
 ### ✏️ Draw
 - Cut parts of the 3D image interactively by drawing.
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/cut_3D.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/cut_3D.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 
@@ -655,7 +655,7 @@ Right-click on a segmented contour to access these options:
 - ▶️ **Apply interpolation** – apply interpolation using current and previous slices  
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/tools_seg.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/tools_seg.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 
@@ -679,7 +679,7 @@ Right-click on a ruler gives access to:
 - 📤 **Send to table** – export ruler data  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/additional_resources/tools_ruler.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/tools_ruler.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 🔄 You can add unlimited rulers.
@@ -695,7 +695,7 @@ Options available under the **Tools menu**:
 - ℹ️ **Basic Info** – Histogram, Resize, Image Info  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_tools.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_tools.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 ### 🧮 N4 Bias Field Correction
@@ -709,7 +709,7 @@ Uses SimpleITK. Parameters include:
 After running, you can restore the **Original** image if needed.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_n4b.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_n4b.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -723,7 +723,7 @@ Keep or remove image parts using segmentation masks:
 Reset by using mask color `9876_Combined`.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_masking.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_masking.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -739,7 +739,7 @@ Parameters:
 - Radius of curvature  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_bet.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_bet.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -757,7 +757,7 @@ DL-based brain extraction with configurable options:
 💡 Tip: Adjust threshold without rerunning the model.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_deepbet.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_deepbet.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 
@@ -768,7 +768,7 @@ Multi-Otsu based thresholding:
 - Apply  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_threshold.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_threshold.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p>
 
 
@@ -780,7 +780,7 @@ Combine masks using summation or subtraction:
 - Apply  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_maskO.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_maskO.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -792,7 +792,7 @@ Combine masks using summation or subtraction:
 - Apply  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_cs.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_cs.png" alt="MELAGE" width="600" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -801,20 +801,20 @@ Combine masks using summation or subtraction:
 Tools for inspecting and resizing images.
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_basic.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_basic.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - 📈 **Histogram** – view image histogram  
 - 📐 **Resize** – isotropic resize  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_resize.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_resize.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - ℹ️ **Image info** – metadata with search  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/tools_imageinfo.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/tools_imageinfo.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 
@@ -822,7 +822,7 @@ Tools for inspecting and resizing images.
 # 📂 File Menu
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/menu_file.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 Options include:
@@ -833,19 +833,19 @@ Options include:
 - 📥 **Import** – import segmentation  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/menu_file_import.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file_import.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - 📤 **Export** – save modified image/segmentation with suffix  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/menu_file_export.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file_export.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - 📸 **Screenshot** – capture a plane or whole scene  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/menu_file_ss.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file_ss.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - ❌ **Close top image** – close first (top) image  
@@ -853,7 +853,7 @@ Options include:
 - ⚙️ **Settings** – change application defaults  
 
 <p align="center"> 
-<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/resource/manual_images/menu_file_settings.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
+<img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file_settings.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
 </p> 
 
 - 🚪 **Exit** – close app (confirmation window will ask to save project)
