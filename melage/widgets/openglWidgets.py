@@ -1,0 +1,744 @@
+__AUTHOR__ = 'Bahram Jafrasteh'
+
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtCore import Qt
+from melage.rendering.DisplayIm import GLWidget
+from melage.rendering.glScientific import glScientific
+class openglWidgets():
+    """
+    Maing OPENGL WIDGETS
+    """
+    def __init__(self):
+        pass
+
+
+    def create_mutual_view(self, colorsCombinations):
+        """
+        Initializes the 6 views (3 ECO, 3 MRI) and their controllers.
+        """
+        self.mutulaViewTab = QtWidgets.QWidget()
+        self.mutulaViewTab.setObjectName("tab1")
+
+        # Initialize the main grid
+        self.gridLayout = QtWidgets.QGridLayout(self.mutulaViewTab)
+        self.gridLayout.setObjectName("gridLayout")
+        self.gridLayout.setSpacing(0)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+
+        # Define configuration for the 6 views
+        # Format: (ID, WindowName, Type)
+        view_configs = [
+            (1, 'coronal', 'eco'),
+            (2, 'sagittal', 'eco'),
+            (3, 'axial', 'eco'),
+            (4, 'coronal', 'mri'),
+            (5, 'sagittal', 'mri'),
+            (6, 'axial', 'mri')
+        ]
+
+        # Loop to create all widgets dynamically
+        for view_id, window_name, img_type in view_configs:
+            self._init_single_view(colorsCombinations, view_id, window_name, img_type)
+
+        # Now that widgets exist, build the layout
+        self.create_vertical_mutualview()
+
+        self.create_horizontal_mutualview()
+    def _init_single_view(self, colorsCombinations, view_id, window_name, img_type):
+        """
+        Helper to initialize one set of (OpenGL + Slider + Label).
+        Sets attributes like self.openGLWidget_1, self.horizontalSlider_1, etc.
+        """
+        from melage.dialogs.helpers import custom_qscrollbar
+
+        # 1. Create OpenGL Widget
+        gl_widget = GLWidget(
+            colorsCombinations,
+            self.mutulaViewTab,
+            imdata=None,
+            currentWidnowName=window_name,
+            type=img_type,
+            id=view_id
+        )
+        gl_widget.setObjectName(f"openGLWidget_{view_id}")
+        gl_widget.setFocusPolicy(Qt.StrongFocus)
+        gl_widget.setEnabled(True)
+        gl_widget.setVisible(False)  # Start hidden until data loads
+
+        # 2. Create Slider (Pre-configured for Vertical Layout)
+        slider = custom_qscrollbar(self.mutulaViewTab, id=view_id)
+        slider.setObjectName(f"horizontalSlider_{view_id}")
+        slider.setOrientation(QtCore.Qt.Vertical)  # <--- Vertical by default now
+
+        # Connect signal (assuming _cutIM exists)
+        # Using default arg 'vid=view_id' to capture the value in the lambda closure
+        slider.cut_limit.connect(lambda val, vid=view_id: self._cutIM(val, vid))
+
+        # 3. Create Label
+        label = QtWidgets.QLabel(self.mutulaViewTab)
+        label.setObjectName(f"label_{view_id}")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+
+        # 4. Attach to 'self' dynamically
+        # This ensures self.openGLWidget_1 etc. still work in the rest of your app
+        setattr(self, f"openGLWidget_{view_id}", gl_widget)
+        setattr(self, f"horizontalSlider_{view_id}", slider)
+        setattr(self, f"label_{view_id}", label)
+
+    def clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+    def _make_control_pair(self, view_id, is_vertical, align_right=True):
+        """
+        Returns a Layout containing [Label + Slider].
+
+        Args:
+            view_id: ID of the view (1-6)
+            is_vertical: True for vertical sidebar, False for bottom bar
+            align_right: (Vertical only) True = Label | Slider. False = Slider | Label.
+        """
+        layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)  # Small gap between label and slider
+
+        slider = getattr(self, f"horizontalSlider_{view_id}")
+        label = getattr(self, f"label_{view_id}")
+
+        if is_vertical:
+            # Vertical Sidebar Logic
+            if align_right:
+                # Left Side: [ Label | Slider ] -> Pushes against Image
+                label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                layout.addWidget(label)
+                layout.addWidget(slider)
+                layout.setAlignment(QtCore.Qt.AlignRight)
+            else:
+                # Right Side: [ Slider | Label ] -> Pushes against Image
+                label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                layout.addWidget(slider)
+                layout.addWidget(label)
+                layout.setAlignment(QtCore.Qt.AlignLeft)
+        else:
+            # Horizontal Bottom Bar Logic: [ Slider -------- Label ]
+            # We add the slider first, then the label
+            layout.addWidget(slider)
+            layout.addWidget(label)
+
+        return layout
+
+    def create_horizontal_mutualview(self):
+        self.clear_layout(self.gridLayout)
+
+        # 1. Configure widgets for Horizontal orientation
+        # (Sliders become wide, labels align left/center)
+        self._configure_widgets_for_orientation(is_vertical=False)
+
+        # 2. Setup Grid Settings to minimize gaps
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.setSpacing(0)
+
+        # 3. Define the pairs for the 3 columns
+        # Format: (Column Index, Top_ID, Bottom_ID)
+        columns = [
+            (0, 1, 4),  # Col 0: Coronal
+            (1, 2, 5),  # Col 1: Sagittal
+            (2, 3, 6)  # Col 2: Axial
+        ]
+
+        for col, top_id, bot_id in columns:
+            # --- Top Block (Label -> Slider -> Image) ---
+            # Note: I am mapping your indices (0, 2, 4) to (0, 1, 2) to ensure tight packing
+            self.gridLayout.addWidget(getattr(self, f"label_{top_id}"), 0, col, 1, 1)
+            self.gridLayout.addWidget(getattr(self, f"horizontalSlider_{top_id}"), 1, col, 1, 1)
+            self.gridLayout.addWidget(getattr(self, f"openGLWidget_{top_id}"), 2, col, 1, 1)
+
+            # --- Bottom Block (Image -> Slider -> Label) ---
+            # Note: Mapping indices (5, 7, 9) to (3, 4, 5)
+            self.gridLayout.addWidget(getattr(self, f"openGLWidget_{bot_id}"), 3, col, 1, 1)
+            self.gridLayout.addWidget(getattr(self, f"horizontalSlider_{bot_id}"), 4, col, 1, 1)
+            self.gridLayout.addWidget(getattr(self, f"label_{bot_id}"), 5, col, 1, 1)
+
+        # 4. Set Stretch Factors to remove black spaces
+        # All columns share width equally
+        """
+
+        self.gridLayout.setColumnStretch(0, 1)
+        self.gridLayout.setColumnStretch(1, 1)
+        self.gridLayout.setColumnStretch(2, 1)
+
+        # Rows 2 and 3 (the Images) get all the height
+        self.gridLayout.setRowStretch(0, 0)  # Label
+        self.gridLayout.setRowStretch(1, 0)  # Slider
+        self.gridLayout.setRowStretch(2, 10)  # Top Image (Expand!)
+        self.gridLayout.setRowStretch(3, 10)  # Bot Image (Expand!)
+        self.gridLayout.setRowStretch(4, 0)  # Slider
+        self.gridLayout.setRowStretch(5, 0)  # Label
+                """
+        self.setup_layout_expansion()
+
+    def create_vertical_mutualview(self):
+        self.clear_layout(self.gridLayout)
+
+        # 1. Configure widgets for Vertical Mode
+        # (Sliders become tall/thin, Labels align correctly)
+        self._configure_widgets_for_orientation(is_vertical=True)
+        #height = self.height()
+        width = round(self.width()*0.1)
+        # 2. Setup Grid Settings
+        self.gridLayout.setContentsMargins(width, 0, width, 0)
+        self.gridLayout.setSpacing(0)
+
+        # 3. Add Widgets (Strictly following your provided rule)
+
+        # --- ROW 0 (Coronal) ---
+        self.gridLayout.addWidget(self.label_1, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.horizontalSlider_1, 0, 1, 1, 1)
+        self.gridLayout.addWidget(self.openGLWidget_1, 0, 2, 1, 1)  # Image
+        self.gridLayout.addWidget(self.openGLWidget_4, 0, 3, 1, 1)  # Image
+        self.gridLayout.addWidget(self.horizontalSlider_4, 0, 4, 1, 1)
+        self.gridLayout.addWidget(self.label_4, 0, 5, 1, 1)
+
+        # --- ROW 1 (Sagittal) ---
+        self.gridLayout.addWidget(self.label_2, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.horizontalSlider_2, 1, 1, 1, 1)
+        self.gridLayout.addWidget(self.openGLWidget_2, 1, 2, 1, 1)  # Image
+        self.gridLayout.addWidget(self.openGLWidget_5, 1, 3, 1, 1)  # Image
+        self.gridLayout.addWidget(self.horizontalSlider_5, 1, 4, 1, 1)
+        self.gridLayout.addWidget(self.label_5, 1, 5, 1, 1)
+
+        # --- ROW 2 (Axial) ---
+        self.gridLayout.addWidget(self.label_3, 2, 0, 1, 1)
+        self.gridLayout.addWidget(self.horizontalSlider_3, 2, 1, 1, 1)
+        self.gridLayout.addWidget(self.openGLWidget_3, 2, 2, 1, 1)  # Image
+        self.gridLayout.addWidget(self.openGLWidget_6, 2, 3, 1, 1)  # Image
+        self.gridLayout.addWidget(self.horizontalSlider_6, 2, 4, 1, 1)
+        self.gridLayout.addWidget(self.label_6, 2, 5, 1, 1)
+        """
+
+        # 4. Set Stretch Factors (The Fix for Black Spaces)
+        # Give all horizontal space to Columns 2 and 3 (the Images)
+        self.gridLayout.setColumnStretch(0, 0)  # Label Left
+        self.gridLayout.setColumnStretch(1, 0)  # Slider Left
+        self.gridLayout.setColumnStretch(2, 10)  # Image Left (EXPAND)
+        self.gridLayout.setColumnStretch(3, 10)  # Image Right (EXPAND)
+        self.gridLayout.setColumnStretch(4, 0)  # Slider Right
+        self.gridLayout.setColumnStretch(5, 0)  # Label Right
+
+        # Give equal vertical space to all rows
+        self.gridLayout.setRowStretch(0, 1)
+        self.gridLayout.setRowStretch(1, 1)
+        self.gridLayout.setRowStretch(2, 1)
+        """
+        self.setup_layout_expansion()
+
+    def _configure_widgets_for_orientation(self, is_vertical):
+        """
+        Helper ensures sliders are rotated and labels are aligned correctly.
+        """
+        ids = [1, 2, 3, 4, 5, 6]
+        for i in ids:
+            slider = getattr(self, f"horizontalSlider_{i}")
+            label = getattr(self, f"label_{i}")
+
+            if is_vertical:
+                # Vertical View: Slider is Vertical, Fixed Width
+                slider.setOrientation(QtCore.Qt.Vertical)
+                slider.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+
+                # Label aligns to the slider
+                label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+                # Align Right for Left controls (ids 1,2,3), Left for Right controls (ids 4,5,6)
+                align = QtCore.Qt.AlignRight if i <= 3 else QtCore.Qt.AlignLeft
+                label.setAlignment(align | QtCore.Qt.AlignVCenter)
+            else:
+                # Horizontal View: Slider is Horizontal
+                slider.setOrientation(QtCore.Qt.Horizontal)
+                slider.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+                label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+                label.setAlignment(QtCore.Qt.AlignCenter)
+
+    def _add_vertical_row(self, row_idx, left_id, right_id):
+        """Helper for Vertical View Row Construction"""
+        # Left Side: [Label | Slider] ... [Image]
+        l_grp = self._make_control_pair(left_id, is_vertical=True, align_right=True)
+        self.gridLayout.addLayout(l_grp, row_idx, 0)
+        self.gridLayout.addWidget(getattr(self, f"openGLWidget_{left_id}"), row_idx, 1)
+
+        # Right Side: [Image] ... [Slider | Label]
+        r_grp = self._make_control_pair(right_id, is_vertical=True, align_right=False)
+        self.gridLayout.addWidget(getattr(self, f"openGLWidget_{right_id}"), row_idx, 2)
+        self.gridLayout.addLayout(r_grp, row_idx, 3)
+
+    def _add_row_to_grid(self, row, left_ids, right_ids):
+        """
+        Helper to assemble one row.
+        left_ids = (label_id, slider_id, gl_id)
+        right_ids = (gl_id, slider_id, label_id)
+        """
+        # --- Left Side (Control + Image) ---
+        l_label = getattr(self, f"label_{left_ids[0]}")
+        l_slider = getattr(self, f"horizontalSlider_{left_ids[1]}")
+        l_gl = getattr(self, f"openGLWidget_{left_ids[2]}")
+
+        # Group Label+Slider tightly
+        left_control = self._make_control_group(l_label, l_slider, is_left=True)
+
+        self.gridLayout.addLayout(left_control, row, 0)  # Col 0
+        self.gridLayout.addWidget(l_gl, row, 1)  # Col 1
+
+        # --- Right Side (Image + Control) ---
+        r_gl = getattr(self, f"openGLWidget_{right_ids[0]}")
+        r_slider = getattr(self, f"horizontalSlider_{right_ids[1]}")
+        r_label = getattr(self, f"label_{right_ids[2]}")
+
+        # Group Slider+Label tightly
+        right_control = self._make_control_group(r_label, r_slider, is_left=False)
+
+        self.gridLayout.addWidget(r_gl, row, 2)  # Col 2
+        self.gridLayout.addLayout(right_control, row, 3)  # Col 3
+
+    def setup_layout_expansion(self):
+        # 1. Ensure the Container allows itself to grow
+        # This tells the tab/window: "I want to be as big as possible"
+        self.mutulaViewTab.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Expanding
+        )
+
+        # 2. Ensure the Layout has no dead zones
+        # Remove margins so the grid hits the exact edges of the window
+        #self.gridLayout.setContentsMargins(0, 0, 0, 0)
+
+        # CRITICAL: Do NOT set alignment on the layout itself.
+        # If you do self.gridLayout.setAlignment(Qt.AlignCenter),
+        # it forces the grid to SHRINK to its minimum size.
+        # By default (without alignment), a layout tries to fill the space.
+
+        # 3. Ensure the Inner Widgets (OpenGL) want to grow
+        # You likely did this, but double-check:
+        for gl_widget in [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3,
+        self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]:
+            gl_widget.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding,
+                QtWidgets.QSizePolicy.Expanding
+            )
+
+    def _make_control_group(self, label, slider, is_left):
+        """Creates the tight QHBoxLayout for controls."""
+        layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        slider.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+
+        if is_left:
+            # [Label | Slider]
+            label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            layout.addWidget(label)
+            layout.addWidget(slider)
+            layout.setAlignment(QtCore.Qt.AlignRight)
+        else:
+            # [Slider | Label]
+            label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            layout.addWidget(slider)
+            layout.addWidget(label)
+            layout.setAlignment(QtCore.Qt.AlignLeft)
+
+        return layout
+    def createOpenGLWidgets(self, centralwidget, colorsCombinations):
+        """
+        Creating main opengl widgets with its characteristics
+        :param centralwidget:
+        :param colorsCombinations:
+        :return:
+        """
+        self.gridLayout_main = QtWidgets.QGridLayout(centralwidget)
+        self.gridLayout_main.setObjectName("gridLayout_main")
+        self.tabWidget = QtWidgets.QTabWidget(centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.tabWidget.sizePolicy().hasHeightForWidth())
+        self.tabWidget.setSizePolicy(sizePolicy)
+        self.tabWidget.setMinimumSize(QtCore.QSize(100, 100))
+        self.tabWidget.setObjectName("tabWidget")
+
+        #self.create_horizontal_mutual_view(colorsCombinations)
+        self.create_mutual_view(colorsCombinations)
+
+        self.create_horizontal_mutualview()
+
+
+        self.tabWidget.addTab(self.mutulaViewTab, "fdfdfdfdf")
+
+        self.reservedTab = QtWidgets.QWidget()
+        self.reservedTab.setObjectName("tab_2")
+
+        self.gridLayout_3 = QtWidgets.QGridLayout(self.reservedTab)
+        self.gridLayout_3.setObjectName("gridLayout_3")
+        self.openGLWidget_10 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'axial', type='3d', id=10)
+        self.openGLWidget_10.setObjectName("openGLWidget_10")
+        self.openGLWidget_10.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_10.setEnabled(True)
+        self.openGLWidget_10.setVisible(False)
+        self.gridLayout_3.addWidget(self.openGLWidget_10, 3, 2, 1, 1)
+        self.openGLWidget_9 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'axial', type='eco', id=9)
+        self.openGLWidget_9.setObjectName("openGLWidget_9")
+        self.openGLWidget_9.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_9.setEnabled(True)
+        self.openGLWidget_9.setVisible(False)
+        self.gridLayout_3.addWidget(self.openGLWidget_9, 3, 0, 1, 1)
+        self.horizontalSlider_9 = QtWidgets.QSlider(self.reservedTab)
+        self.horizontalSlider_9.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_9.setObjectName("horizontalSlider_9")
+        self.gridLayout_3.addWidget(self.horizontalSlider_9, 4, 0, 1, 1)
+        self.label_8 = QtWidgets.QLabel(self.reservedTab)
+
+        self.label_8.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_8.setObjectName("label_8")
+        self.gridLayout_3.addWidget(self.label_8, 0, 2, 1, 1)
+        self.horizontalSlider_10 = QtWidgets.QSlider(self.reservedTab)
+        self.horizontalSlider_10.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_10.setObjectName("horizontalSlider_10")
+        self.gridLayout_3.addWidget(self.horizontalSlider_10, 4, 2, 1, 1)
+        self.label_7 = QtWidgets.QLabel(self.reservedTab)
+
+        self.label_7.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_7.setObjectName("label_7")
+        self.gridLayout_3.addWidget(self.label_7, 0, 0, 1, 1)
+        self.openGLWidget_7 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'coronal', type='eco', id=7)
+        self.openGLWidget_7.setObjectName("openGLWidget_7")
+        self.openGLWidget_7.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_7.setEnabled(True)
+        self.openGLWidget_7.setVisible(False)
+        self.gridLayout_3.addWidget(self.openGLWidget_7, 2, 0, 1, 1)
+        self.horizontalSlider_7 = QtWidgets.QSlider(self.reservedTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.horizontalSlider_7.sizePolicy().hasHeightForWidth())
+        self.horizontalSlider_7.setSizePolicy(sizePolicy)
+        self.horizontalSlider_7.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_7.setObjectName("horizontalSlider_7")
+        self.gridLayout_3.addWidget(self.horizontalSlider_7, 1, 0, 1, 1)
+        self.openGLWidget_8 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'sagittal', type='eco', id=8)
+        self.openGLWidget_8.setObjectName("openGLWidget_8")
+        self.openGLWidget_8.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_8.setEnabled(True)
+        self.openGLWidget_8.setVisible(False)
+        self.gridLayout_3.addWidget(self.openGLWidget_8, 2, 2, 1, 1)
+        self.horizontalSlider_8 = QtWidgets.QSlider(self.reservedTab)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.horizontalSlider_8.sizePolicy().hasHeightForWidth())
+        self.horizontalSlider_8.setSizePolicy(sizePolicy)
+        self.horizontalSlider_8.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_8.setObjectName("horizontalSlider_8")
+        self.gridLayout_3.addWidget(self.horizontalSlider_8, 1, 2, 1, 1)
+        self.label_9 = QtWidgets.QLabel(self.reservedTab)
+
+        self.label_9.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_9.setObjectName("label_9")
+        self.gridLayout_3.addWidget(self.label_9, 5, 0, 1, 1)
+        self.label_10 = QtWidgets.QLabel(self.reservedTab)
+
+        self.label_10.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_10.setObjectName("label_10")
+        self.gridLayout_3.addWidget(self.label_10, 5, 2, 1, 1)
+        self.tabWidget.addTab(self.reservedTab, "")
+
+        ################# LEFT SIDE ######################################
+        self.segmentationTab = QtWidgets.QWidget()
+        self.segmentationTab.setObjectName("segmentationTab")
+        self.gridLayout_seg = QtWidgets.QGridLayout(self.segmentationTab)
+        self.gridLayout_seg.setObjectName("gridLayout_seg")
+        self.splitter_main = QtWidgets.QSplitter(self.segmentationTab)
+        self.splitter_main.setOrientation(QtCore.Qt.Horizontal)
+        self.splitter_main.setObjectName("splitter_main")
+        self.splitter_left = QtWidgets.QSplitter(self.splitter_main)
+        self.splitter_left.setOrientation(QtCore.Qt.Vertical)
+        self.splitter_left.setObjectName("splitter_left")
+
+
+
+        width_3d, height_3d = self.width()//3, int(self.height()/1.2)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+
+        self.openGLWidget_11 = GLWidget(colorsCombinations,self.splitter_left, imdata=None, currentWidnowName='coronal', type='eco', id=11)
+
+
+        self.openGLWidget_11.setSizePolicy(sizePolicy)
+        self.openGLWidget_11.setMaximumSize(QtCore.QSize(self.width(), self.height()))
+        self.openGLWidget_11.setObjectName("openGLWidget_11")
+
+        self.splitter_slider = QtWidgets.QSplitter(self.splitter_left)
+        self.splitter_slider.setOrientation(QtCore.Qt.Vertical)
+        self.splitter_slider.setObjectName("splitter_slider")
+        self.label_11 = QtWidgets.QLabel(self.splitter_slider)
+
+        sizePolicy.setHeightForWidth(self.label_11.sizePolicy().hasHeightForWidth())
+        self.label_11.setSizePolicy(sizePolicy)
+        self.label_11.setMinimumSize(QtCore.QSize(10, 10))
+        self.label_11.setMaximumSize(QtCore.QSize(self.width()-self.width()//4, self.height()//44))
+        self.label_11.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_11.setObjectName("label_11")
+
+        self.horizontalSlider_11 = QtWidgets.QScrollBar(self.splitter_slider)
+        self.horizontalSlider_11.setSizePolicy(sizePolicy)
+        self.horizontalSlider_11.setMaximumSize(QtCore.QSize(self.width(), self.height()//44))
+        self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_11.setObjectName("horizontalSlider_11")
+
+        self.splitterRadioButton = QtWidgets.QSplitter(self.splitter_left)
+        self.splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
+        self.splitterRadioButton.setObjectName("splitterRadioButton")
+        self.splitterRadioButton.setSizePolicy(sizePolicy)
+        self.splitterRadioButton.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+
+
+        self.splitterRadioButton_3 = QtWidgets.QSplitter(self.splitterRadioButton)
+        self.splitterRadioButton_3.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+        self.splitterRadioButton_3.setOrientation(QtCore.Qt.Horizontal)
+        self.splitterRadioButton_3.setObjectName("splitterRadioButton_3")
+
+
+        self.radioButton_4 = QtWidgets.QCheckBox(self.splitterRadioButton)
+        self.radioButton_4.setObjectName("radioButton_4")
+        self.radioButton_4.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+        self.radioButton_4.setChecked(True)
+        self.radioButton_4.setSizePolicy(sizePolicy)
+
+        self.radioButton_1 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
+        self.radioButton_1.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+        self.radioButton_1.setSizePolicy(sizePolicy)
+        self.radioButton_1.setObjectName("radioButton_1")
+        self.radioButton_1.setChecked(True)
+
+        self.radioButton_2 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
+        self.radioButton_2.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+        self.radioButton_2.setSizePolicy(sizePolicy)
+        self.radioButton_2.setObjectName("radioButton_2")
+
+
+        self.radioButton_3 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
+        self.radioButton_3.setMaximumSize(QtCore.QSize(self.width(),
+                                                               self.height() // 44))
+        self.radioButton_3.setSizePolicy(sizePolicy)
+        self.radioButton_3.setObjectName("radioButton_3")
+
+
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+        splitter_right = QtWidgets.QSplitter(self.splitter_main)
+        splitter_right.setOrientation(QtCore.Qt.Vertical)
+        splitter_right.setObjectName("splitter_right")
+        self.openGLWidget_14 = glScientific(colorsCombinations,splitter_right, id=0)
+        self.openGLWidget_14.initiate_actions()
+        self.openGLWidget_14.setObjectName("openGLWidget_14")
+        self.openGLWidget_14.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_14.setSizePolicy(sizePolicy)
+        self.openGLWidget_14.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height()//3))
+        self.openGLWidget_11.setFocusPolicy(Qt.StrongFocus)
+
+
+
+        self.widget = QtWidgets.QWidget(splitter_right)
+        self.widget.setObjectName("widget")
+
+        self.verticalLayout = QtWidgets.QVBoxLayout(self.widget)
+        self.verticalLayout.setObjectName("verticalLayout")
+
+        self.label_points = QtWidgets.QLabel(self.widget)
+        self.label_points.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_points.setObjectName("label_points")
+        #self.label_points.setSizePolicy(sizePolicy)
+        #self.label_points.setFixedSize(QtCore.QSize(width_3d, 100))
+        txt = 'Sagittal:' + '0' + ', Coronal: ' + '0' + ', Axial: ' + '0'
+        self.label_points.setText(txt)
+        self.verticalLayout.addWidget(self.label_points)
+        spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.verticalLayout.addItem(spacerItem)
+        self.gridLayout_seg.addWidget(self.splitter_main, 0, 0, 1, 1)
+
+        self.tabWidget.addTab(self.segmentationTab, "")
+
+
+        ########################################## MRI TAB #########################################
+        ################# LEFT SIDE ######################################
+        self.MRISegTab = QtWidgets.QWidget()
+        self.MRISegTab.setObjectName("segmentationTab")
+        self.gridLayout_seg_2 = QtWidgets.QGridLayout(self.MRISegTab)
+        self.gridLayout_seg_2.setObjectName("gridLayout_seg")
+        splitter_main = QtWidgets.QSplitter(self.MRISegTab)
+        splitter_main.setOrientation(QtCore.Qt.Horizontal)
+        splitter_main.setObjectName("splitter_main")
+        splitter_left = QtWidgets.QSplitter(splitter_main)
+        splitter_left.setOrientation(QtCore.Qt.Vertical)
+        splitter_left.setObjectName("splitter_left")
+
+        width_3d, height_3d = self.width() // 3, int(self.height() // 1.2)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+
+        self.openGLWidget_12 = GLWidget(colorsCombinations, splitter_left, imdata=None, currentWidnowName='coronal',
+                                        type='mri', id=12)
+
+        self.openGLWidget_12.setSizePolicy(sizePolicy)
+        self.openGLWidget_12.setMaximumSize(QtCore.QSize(self.width(), self.height()))
+        self.openGLWidget_12.setObjectName("openGLWidget_11")
+        self.openGLWidget_12.setFocusPolicy(Qt.StrongFocus)
+
+        splitter_slider = QtWidgets.QSplitter(splitter_left)
+        splitter_slider.setOrientation(QtCore.Qt.Vertical)
+        splitter_slider.setObjectName("splitter_slider")
+        self.label_12 = QtWidgets.QLabel(splitter_slider)
+
+        sizePolicy.setHeightForWidth(self.label_12.sizePolicy().hasHeightForWidth())
+        self.label_12.setSizePolicy(sizePolicy)
+        self.label_12.setMinimumSize(QtCore.QSize(10, 10))
+        self.label_12.setMaximumSize(QtCore.QSize(self.width() - self.width() // 4, self.height() // 44))
+        self.label_12.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_12.setObjectName("label_11")
+
+        self.horizontalSlider_12 = QtWidgets.QScrollBar(splitter_slider)
+        self.horizontalSlider_12.setSizePolicy(sizePolicy)
+        self.horizontalSlider_12.setMaximumSize(QtCore.QSize(self.width(), self.height() // 44))
+        self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_12.setObjectName("horizontalSlider_11")
+
+        splitterRadioButton = QtWidgets.QSplitter(splitter_left)
+        splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
+        splitterRadioButton.setObjectName("splitterRadioButton")
+        splitterRadioButton.setSizePolicy(sizePolicy)
+        splitterRadioButton.setMaximumSize(QtCore.QSize(self.width(),
+                                                        self.height() // 44))
+
+        splitterRadioButton_3 = QtWidgets.QSplitter(splitterRadioButton)
+        splitterRadioButton_3.setMaximumSize(QtCore.QSize(self.width(),
+                                                          self.height() // 44))
+        splitterRadioButton_3.setOrientation(QtCore.Qt.Horizontal)
+        splitterRadioButton_3.setObjectName("splitterRadioButton_3")
+
+        self.radioButton_21 = QtWidgets.QCheckBox(splitterRadioButton)
+        self.radioButton_21.setObjectName("radioButton_4")
+        self.radioButton_21.setMaximumSize(QtCore.QSize(self.width(),
+                                                        self.height() // 44))
+        self.radioButton_21.setChecked(True)
+        self.radioButton_21.setSizePolicy(sizePolicy)
+
+        self.radioButton_21_1 = QtWidgets.QRadioButton(splitterRadioButton_3)
+        self.radioButton_21_1.setMaximumSize(QtCore.QSize(self.width(),
+                                                          self.height() // 44))
+        self.radioButton_21_1.setSizePolicy(sizePolicy)
+        self.radioButton_21_1.setObjectName("radioButton_1")
+        self.radioButton_21_1.setChecked(True)
+
+        self.radioButton_21_2 = QtWidgets.QRadioButton(splitterRadioButton_3)
+        self.radioButton_21_2.setMaximumSize(QtCore.QSize(self.width(),
+                                                          self.height() // 44))
+        self.radioButton_21_2.setSizePolicy(sizePolicy)
+        self.radioButton_21_2.setObjectName("radioButton_2")
+
+        self.radioButton_21_3 = QtWidgets.QRadioButton(splitterRadioButton_3)
+        self.radioButton_21_3.setMaximumSize(QtCore.QSize(self.width(),
+                                                          self.height() // 44))
+        self.radioButton_21_3.setSizePolicy(sizePolicy)
+        self.radioButton_21_3.setObjectName("radioButton_3")
+
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+        splitter_right = QtWidgets.QSplitter(splitter_main)
+        splitter_right.setOrientation(QtCore.Qt.Vertical)
+        splitter_right.setObjectName("splitter_right")
+        self.openGLWidget_24 = glScientific(colorsCombinations, splitter_right, id=1)
+        self.openGLWidget_24.initiate_actions()
+        self.openGLWidget_24.setObjectName("openGLWidget_14")
+        self.openGLWidget_24.setFocusPolicy(Qt.StrongFocus)
+        self.openGLWidget_24.setSizePolicy(sizePolicy)
+        self.openGLWidget_24.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height() // 3))
+
+        self.widget_2 = QtWidgets.QWidget(splitter_right)
+        self.widget_2.setObjectName("widget")
+
+        self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.widget_2)
+        self.verticalLayout_2.setObjectName("verticalLayout")
+
+        self.label_points_2 = QtWidgets.QLabel(self.widget_2)
+        self.label_points_2.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_points_2.setObjectName("label_points")
+        # self.label_points_2.setSizePolicy(sizePolicy)
+        # self.label_points_2.setFixedSize(QtCore.QSize(width_3d, 100))
+        txt = 'Sagittal:' + '0' + ', Coronal: ' + '0' + ', Axial: ' + '0'
+        self.label_points_2.setText(txt)
+        self.verticalLayout_2.addWidget(self.label_points_2)
+        spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.verticalLayout_2.addItem(spacerItem)
+        self.gridLayout_seg_2.addWidget(splitter_main, 0, 0, 1, 1)
+
+        self.tabWidget.addTab(self.MRISegTab, "")
+
+
+
+
+
+        self.gridLayout_main.addWidget(self.tabWidget, 2, 0, 1, 1)
+
+        self.openedFileName = QtWidgets.QLabel(centralwidget)
+        self.openedFileName.setAlignment(QtCore.Qt.AlignCenter)
+        self.openedFileName.setObjectName("FileName")
+        self.openedFileName.setText('US:NONE, MRI:NONE')
+        self.openedFileName.setVisible(True)
+        self.gridLayout_main.addWidget(self.openedFileName, 0, 0, 1, 1)
+
+
+        # mouse press event
+        self.openGLWidget_1.mousePress.connect(
+            lambda obj: self.mousePressEvent(obj)
+        )
+
+        self.openGLWidget_1.NewPoints.connect(
+            lambda totalPs, chInd: self.openGLWidget_2.subpaintGL(totalPs, chInd))
+        self.openGLWidget_1.NewPoints.connect(
+            lambda totalPs, chInd: self.openGLWidget_3.subpaintGL(totalPs, chInd))
+
+
+
+
+
+        #self.tabWidget.addTab(self.tab, "")
+        #self.gridLayout_main.addWidget(self.tabWidget, 0, 0, 1, 1)
+
+        self.tabWidget.setCurrentIndex(0)
+        self.horizontalSlider_1.valueChanged.connect(self.label_1.setNum)
+        self.horizontalSlider_2.valueChanged.connect(self.label_2.setNum)
+        self.horizontalSlider_3.valueChanged.connect(self.label_3.setNum)
+        self.horizontalSlider_4.valueChanged.connect(self.label_4.setNum)
+        self.horizontalSlider_5.valueChanged.connect(self.label_5.setNum)
+        self.horizontalSlider_6.valueChanged.connect(self.label_6.setNum)
+        self.horizontalSlider_7.valueChanged.connect(self.label_7.setNum)
+        self.horizontalSlider_8.valueChanged.connect(self.label_8.setNum)
+        self.horizontalSlider_9.valueChanged.connect(self.label_9.setNum)
+        self.horizontalSlider_10.valueChanged.connect(self.label_10.setNum)
+        self.horizontalSlider_11.valueChanged.connect(self.label_11.setNum)
+        self.horizontalSlider_12.valueChanged.connect(self.label_12.setNum)
+        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
+
+
+        self.openGLWidget_11.setVisible(False)
+        self.openGLWidget_12.setVisible(False)
+        for i in [0,1,2,3,4,5,6,7,8,9,10,11]:
+            try:
+                a='openGLWidget_{}'.format(i+1)
+                ats = getattr(self, a)
+                #ats.setSizePolicy(sizePolicy)
+                ats.clicked.connect(self.save_changes_auto)
+            except:
+                pass

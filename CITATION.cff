@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "MELAGE: An Open-Source Python Software for Neonatal and Adult Neuroimaging"
+message: "If you use this software, please cite it using the metadata below."
+version: "0.1.0"
+date-released: 2025-08-18
+authors:
+  - family-names: "Jafrasteh"
+    given-names: "Bahram"
+    orcid: "https://orcid.org/0000-0002-5071-7902"
+
+repository-code: "https://github.com/BahramJafrasteh/MELAGE"
+license: "Apache-2.0"
+keywords:
+  - neuroimaging
+  - MRI
+  - ultrasound
+  - segmentation
+  - neonatal
+identifiers:
+  - type: url
+    value: "https://pypi.org/project/melage"
+  - type: doi
+    value: "10.48550/arXiv.2309.07175"  
+

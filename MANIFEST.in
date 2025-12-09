@@ -1,0 +1,11 @@
+include README.md
+include LICENSE
+include CITATION.cff
+recursive-include assets *
+recursive-include melage *.py
+recursive-include melage *.json
+recursive-include melage *.yaml
+recursive-include melage *.yml
+recursive-include melage *.txt
+recursive-include data *
+recursive-include docs *

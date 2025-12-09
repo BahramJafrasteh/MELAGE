@@ -1,0 +1,110 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "melage"
+version = "1.0.0"
+description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Bahram Jafrasteh", email = "b.jafrasteh@gmail.com" }
+]
+keywords = ["neuroimaging", "MRI", "ultrasound", "segmentation", "visualization", "neonatal", "medical-imaging", "deep learning"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# Core runtime deps kept broad; pin versions later if needed
+dependencies = [
+  "numpy",
+  "scipy",
+  "scikit-image",
+  "scikit-learn",
+  "matplotlib",
+  "Pillow",
+  "nibabel",
+  "pydicom",
+  "pynrrd",
+  "qtwidgets",
+  "SimpleITK",
+  "opencv-python-headless",
+  "PyQt5",
+  "PyOpenGL",
+  "vtk",
+  "pyfftw",
+  "shapely",
+  "cryptography",
+  "trimesh",
+  "numba",
+  "einops",
+  "dominate",
+  "rdp",
+  "QtPy", 
+  "antspyx"
+]
+
+
+[project.optional-dependencies]
+# install with: pip install melage[dl]
+dl = [
+"torch>=1.12",
+]
+
+
+# install with: pip install melage[bids]
+bids = ["pybids>=0.16", "bids-validator>=1.14; python_version<'3.12'"]
+# install with: pip install melage[dev]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.4",
+  "mypy>=1.8",
+  "build>=1.2",
+  "twine>=5.0",
+]
+
+[project.scripts]
+melage = "melage.melage:main"
+
+[project.urls]
+Homepage = "https://github.com/BahramJafrasteh/MELAGE"
+Repository = "https://github.com/BahramJafrasteh/MELAGE"
+Issues = "https://github.com/BahramJafrasteh/MELAGE/issues"
+Documentation = "https://github.com/BahramJafrasteh/MELAGE#readme"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests", "tests.*", "docs", "examples"]
+
+# If you ship non-Python assets under melage/, add patterns here (and in MANIFEST.in)
+[tool.setuptools.package-data]
+melage = ["data/**", "resource/**", "models/**", "py.typed"]
+
+# Optional: type hints marker if you have them
+[tool.pyright]
+pythonVersion = "3.11"
+
+# (Optional) Ruff config if you use Ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "UP"]
