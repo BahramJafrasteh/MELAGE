@@ -7,6 +7,18 @@
   </p>
 </p>
 
+## Table of Contents
+- [Features](#features)
+- [Plugins & Dynamic Extensions](#plugins--dynamic-extensions)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Dependencies](#dependencies)
+- [Manual](#manual) *(collapsible)*
+- [License](#license)
+- [Citation & Acknowledgements](#citation--acknowledgements)
+- [Releases](#releases)
+
+---
 
 MELAGE is an open-source **neuroimaging software** designed for analysis, segmentation, and visualization of multimodal datasets.  
 It combines classical medical image processing with state-of-the-art deep learning support, making it useful for both researchers and practitioners.
@@ -46,6 +58,7 @@ This modular architecture supports:
    │   └── WarpSeg_schema.py <-- Contains the Plugin Scheme for GUI
    └── my_new_tool/
        └── ...
+   ```
 
 ## 🚀 Installation
 
@@ -146,7 +159,9 @@ MELAGE relies on the following core libraries:
 
 
 
-## 📖 Manual
+<a id="manual"></a>
+<details>
+<summary><h2>📖 Manual</h2></summary>
 
 ### 🏠 Main Page
 
@@ -166,11 +181,11 @@ The **Main Page** is the first window that appears after launching **MELAGE**.
 <p align="center"><em>The MELAGE Main Window</em></p>
 
 
-# 🛠️ Toolbars
+### 🛠️ Toolbars
  
 
 
-## 1️⃣ Project Toolbar
+#### 1️⃣ Project Toolbar
 
 Located at the **top-left** of the main window, the **Project Toolbar** provides quick access to essential project actions:  
 
@@ -193,7 +208,7 @@ Located at the **top-left** of the main window, the **Project Toolbar** provides
 <p align="center"><em>Project toolbar: (from left to right) Create New Project, Load Project, Save</em></p>
 
 
-## 2️⃣ Image Toolbar
+#### 2️⃣ Image Toolbar
 
 To the **right of the Project Toolbar**, you’ll find the **Image Toolbar**, which allows you to load up to two images simultaneously:  
 
@@ -215,7 +230,7 @@ To the **right of the Project Toolbar**, you’ll find the **Image Toolbar**, wh
 
 
 
-## 3️⃣ Tools Toolbar  
+#### 3️⃣ Tools Toolbar  
 
 At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contains **seven buttons** grouped into three sections:  
 
@@ -237,7 +252,7 @@ At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contai
 <p align="center"><em>Tools toolbar with essential navigation and annotation functions</em></p>
 
 
-## 4️⃣ Panning Toolbar  
+#### 4️⃣ Panning Toolbar  
 
 Just **below the Project Toolbar**, you’ll find the **Panning Toolbar** with two options:  
 
@@ -255,7 +270,7 @@ Just **below the Project Toolbar**, you’ll find the **Panning Toolbar** with t
 
 
 
-## 5️⃣ Segmentation Toolbar  
+#### 5️⃣ Segmentation Toolbar  
 
 On the **right side of the Panning Toolbar**, you’ll find the **Segmentation Toolbar**. From left to right:  
 
@@ -279,7 +294,7 @@ On the **right side of the Panning Toolbar**, you’ll find the **Segmentation T
 
 
 
-## 6️⃣ Exit Toolbar  
+#### 6️⃣ Exit Toolbar  
 
 Finally, at the far right, you’ll find the **Exit Toolbar**, which includes:  
 
@@ -295,9 +310,9 @@ Finally, at the far right, you’ll find the **Exit Toolbar**, which includes:
 
 <p align="center"><em> Exit toolbar with logo and close button</em></p>
 
-# Widgets
+### Widgets
 
-## 🎨 Color widget
+#### 🎨 Color widget
 
 <table>
 <tr>
@@ -349,7 +364,7 @@ If the index already exists, the new color will replace the previous one.
 
 
 
-## 🧰 Image enhancement widget
+#### 🧰 Image enhancement widget
 
 <table>
 <tr>
@@ -378,7 +393,7 @@ There’s also a **“sagittal ↔ coronal”** swap for datasets that need plan
 
 
 
-## 📋 Table widget
+#### 📋 Table widget
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_table.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
@@ -407,7 +422,7 @@ Right-click options:
 - 🗑 **Remove** – delete the current row  
 
 
-## 🖼️ Batch Images widget
+#### 🖼️ Batch Images widget
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_images.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
@@ -442,7 +457,7 @@ Use **Preview** to inspect an image before opening it. 👀
 
 
 
-## 🌈 Segmentation intensity widget
+#### 🌈 Segmentation intensity widget
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_segintensity.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
@@ -455,7 +470,7 @@ Adjust the **visual intensity** of the segmentation overlay.
 
 
 
-## 🖍️ Marker size widget
+#### 🖍️ Marker size widget
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/widget_marker.png" alt="MELAGE" width="300" style="border:1px solid black" object-fit="contain"/><br>
@@ -467,7 +482,7 @@ Controls (top ➜ bottom):
 - ✏️ **Pen thickness** for contour drawing  
 
 
-# Tabs
+### Tabs
 
 MELAGE includes three tabs:
 
@@ -515,7 +530,7 @@ Same layout and controls, dedicated to the **second (bottom) image**.
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/tab2.png" alt="MELAGE" width="800" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
-# 🧊 3D Visualization
+### 🧊 3D Visualization
 
 Right-click on the 3D region to access various options:
 
@@ -523,7 +538,7 @@ Right-click on the 3D region to access various options:
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc.png" alt="MELAGE" width="400" style="border:1px solid black" object-fit="contain"/><br>
 </p>
 
-## 🔎 GoTo
+#### 🔎 GoTo
 - Activating **GoTo** lets you jump to the corresponding location in the image.  
 - The approximate mouse position in 3D space appears at the **bottom-right** of the window.  
 - The selected point will also appear in the closest sagittal, coronal, or axial plane.
@@ -534,7 +549,7 @@ Right-click on the 3D region to access various options:
 
 
 
-## 🧩 Segmentation
+#### 🧩 Segmentation
 - Toggle segmentation overlay within the 3D view.  
 - ⚠️ Tip: If it doesn’t activate immediately, switch to another tab and return.
 
@@ -543,7 +558,7 @@ Right-click on the 3D region to access various options:
 </p>
 
 
-## 🧩 Transparent 3D Overlay
+#### 🧩 Transparent 3D Overlay
 
 MELAGE allows users to seamlessly overlay segmentation masks on top of anatomical images within the 3D visualization module. This feature enables clear comparison between raw data and segmented structures, while maintaining anatomical context.
 
@@ -568,13 +583,13 @@ MELAGE allows users to seamlessly overlay segmentation masks on top of anatomica
 </p>
 
 
-## 🎨 BG color
+#### 🎨 BG color
 - Change the background color of the 3D visualization.  
 - Choose between different themes to improve contrast.
 
 
 
-## 🖌️ Painting
+#### 🖌️ Painting
 <p align="center"> 
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/3D_rightc_paint.png" alt="MELAGE" width="700" style="border:1px solid black" object-fit="contain"/><br>
 </p>
@@ -637,15 +652,15 @@ MELAGE allows users to seamlessly overlay segmentation masks on top of anatomica
 
 
 
-## 🧭 Axis
+#### 🧭 Axis
 - Display axes alongside the 3D visualization for orientation.
 
-## 🗺️ Grid
+#### 🗺️ Grid
 - Show a reference grid within the 3D window.
 
-# 🛠️ Tools
+### 🛠️ Tools
 
-## ✏️ Segmentation options with contour
+#### ✏️ Segmentation options with contour
 Right-click on a segmented contour to access these options:
 - 🎯 **Center** – show center of the region  
 - 📐 **Surface area** – compute region surface  
@@ -659,7 +674,7 @@ Right-click on a segmented contour to access these options:
 </p>
 
 
-## 🔀 Interpolation between slices
+#### 🔀 Interpolation between slices
 To interpolate across slices:
 1. ✅ Activate the colors you want to interpolate  
 2. 🖼 Select a segmented region in one plane (sagittal, axial, or coronal)  
@@ -669,7 +684,7 @@ To interpolate across slices:
 
 
 
-## 📏 Ruler
+#### 📏 Ruler
 The ruler measures distances between two points in an image.  
 Right-click on a ruler gives access to:
 - 🎯 **Center position**  
@@ -686,7 +701,7 @@ Right-click on a ruler gives access to:
 
 
 
-## 🧰 Tools menu
+#### 🧰 Tools menu
 Options available under the **Tools menu**:
 
 - ↩️ **Undo** – revert up to 10 segmentations  
@@ -819,7 +834,7 @@ Tools for inspecting and resizing images.
 
 
 
-# 📂 File Menu
+### 📂 File Menu
 
 <p align="center"> 
 <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/menu_file.png" alt="MELAGE" width="500" style="border:1px solid black" object-fit="contain"/>
@@ -858,19 +873,21 @@ Options include:
 
 - 🚪 **Exit** – close app (confirmation window will ask to save project)
 
-# 📜 License  
+</details>
+
+## 📜 License  
 For licensing inquiries, please contact:  
 - [b.jafrasteh@gmail.com](mailto:b.jafrasteh@gmail.com)  
 - [baj4003@med.cornell.edu](mailto:baj4003@med.cornell.edu)  
 
-##  Protection & Registration  
+###  Protection & Registration  
 **MELAGE** is registered in the **Electronic Register of Intellectual Property** as software, under file **FCAD-22002**, by the Technology Transfer Office of the Andalusian Public Health System (OTT-SSPA).  
 - **Identifier:** 2211222681375  
 - [View registration details on SafeCreative](https://www.safecreative.org/work/2211222681375-melage?0)  
 This legal protection ensures intellectual property rights are formally secured.
 
 
-# 📖 Citation & Acknowledgements  
+## 📖 Citation & Acknowledgements  
 If you use **MELAGE** in your research, please cite the following work:  
 
 > Jafrasteh, B., Lubián-López, S. P., & Benavente-Fernández, I. (2023).  
@@ -881,7 +898,7 @@ We would like to acknowledge all contributors and collaborators who have support
 
 
 
-# 🚀 Releases  
+## 🚀 Releases  
 Stable releases and updates of **MELAGE** are available on the [GitHub Releases page](https://github.com/BahramJafrasteh/MELAGE/releases).  
 - 🟢 **Stable releases**: Fully tested, recommended for production and research use.  
 - 🧪 **Pre-releases / beta versions**: For testing new features and providing feedback.  
