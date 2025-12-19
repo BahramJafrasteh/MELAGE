@@ -5,7 +5,7 @@ __AUTHOR__ = 'Bahram Jafrasteh'
 import sys
 from operator import index
 from pathlib import Path
-
+import re
 sys.path.append("../../")
 import numpy as np
 import struct
@@ -852,7 +852,7 @@ def _get_color_filepath(app_instance, show_dialog, unique_count):
 
     """Gets color file path via dialog or automatic selection."""
     if show_dialog:
-        filters = "Text files (*.txt)"
+        filters = "Text files (*.txt *.lut)"
         opts = QFileDialog.DontUseNativeDialog
         file_path, _ = QFileDialog.getOpenFileName(app_instance, "Open Color File", settings.DEFAULT_USE_DIR, filters,
                                                    options=opts)
@@ -1318,7 +1318,7 @@ def set_new_color_scheme(self):
             try:
                 clrvalue = self.color_index_rgb[self.color_index_rgb[:,0]==int(float(indc)),:][0]
             except:
-                pass
+                continue
             addTreeRoot(parent, indc, descp, clrvalue[1:-1])
 
     check_nul = [l for l in self.color_name if '9876' in l.split('_')]
@@ -1581,121 +1581,230 @@ def clean_parent_image(self, index_row, indc,index_view):
 
 
 ################# read color information from text files ###########################
-def read_txt_color(file, mode ='lut', from_one= False):
-    def is_number(vl):
-        return bool(re.match(r'^-?\d+(\.\d+)?$', vl))
-    """
-    read color information from text files
-    Args:
-        file: name of the file
-        mode: mode of reading
-        from_one:
 
-    Returns:
 
-    """
-    import re
+def _is_number(s):
+    """Helper to check if a string represents a number."""
+    return bool(re.match(r'^-?\d+(\.\d+)?$', str(s).strip()))
+def _read_standard_color(file):
     inital_col = []
-    if mode=='lut':
-        with open(file, 'r') as fp:
-            lines = fp.readlines()
-            num_colors = len(lines) // 2
-            color_name = []
-            color_info = []
-            r = 0
-            for n, l in enumerate(lines):
-                if n%2 ==0:
-                    if from_one:
-                        color_name.append('{}_'.format(r+1)+l.rstrip('\n'))
-                        r += 1
-                    else:
-                        color_name.append(lines[n+1].split(' ')[0]+ '_'+l.rstrip('\n'))
-                else:
-                    color_info.append([int(i) for i in l.rstrip("\n").split(' ')])
+    color_name = []
+    color_index_rgb = np.array([])
 
-            #color_info = [[int(i) for i in l.rstrip("\n").split(' ')] for l in lines if not l[4].isalpha()]
-            color_index_rgb = np.array(color_info).astype('float')
-            color_index_rgb[:, [1, 2, 3, 4]] = color_index_rgb[:, [1, 2, 3, 4]] / 255.0
-            inital_col = color_index_rgb[:, 0].copy()
-            if from_one:
-                color_index_rgb[:, 0] = np.arange(color_index_rgb.shape[0])+1
-            #color_name = [l.rstrip('\n') for l in lines if l[0].isalpha()]
-    else:
-        # itk
-        with open(file, 'r') as fp:
-            lines = fp.readlines()
-            #color_name = [l.split('\n')[0].split(',')[0]+'_'+l.split('\n')[0].split(',')[-1] for l in lines]
-            for id, l in enumerate(lines):
-                if l[0] == '#':
-                    continue
+    names = []
+    data = []
+    with open(file, 'r') as fp:
+        for line in fp:
+            # Remove comments (#) and strip whitespace
+            clean_line = line.split('#')[0].strip()
+            if not clean_line:
+                continue
+
+            parts = clean_line.split()
+
+            # Standard Format: ID Name R G B (A)
+            # We need at least ID, Name, R, G, B (5 parts)
+            if len(parts) >= 5 and is_number(parts[0]):
                 try:
-                    spl = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '']
-                    spl_1 = spl[1:]
-                    if len(spl_1)>3:
-                        indices_3 = [
-                            i for i in range(len(spl_1) - 2)  # Ensure there are at least four elements to check
-                            if all(is_number(spl_1[i + j]) for j in range(3))  # Check the next four elements
-                        ]
-                        indices_4 = [
-                            i for i in range(len(spl_1) - 3)  # Ensure there are at least four elements to check
-                            if all(is_number(spl_1[i + j]) for j in range(4))  # Check the next four elements
-                        ]
-                        indices_6 = [
-                            i for i in range(len(spl_1) - 5)  # Ensure there are at least four elements to check
-                            if all(is_number(spl_1[i + j]) for j in range(6))  # Check the next four elements
-                        ]
-                        if len(indices_3)==1: #RGB
-                            index_colr_start = indices_3[0] + 1
-                            index_colr_end = index_colr_start + 3
-                        elif len(indices_4)==1:#RGBA
-                            index_colr_start = indices_4[0] + 1
-                            index_colr_end = index_colr_start + 4
-                        elif len(indices_6)==1:#RGB (CCC)
-                            index_colr_start = indices_6[0] + 1
-                            index_colr_end = index_colr_start + 6
-                    indices_non_numeric = [r for r, s in enumerate(spl_1) if not is_number(s)]
-                    indices_non_numeric = indices_non_numeric[np.argmax([len(spl_1[el]) for el in indices_non_numeric])]+1
-                    break
-                    """
-                    #spl = [r for r in re.split(r'[ ,|;"]+', l[:-1]) if r != '']
-                    spl = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '']
-                    int(spl[0])
-                    if [r for r, s in enumerate(spl) if not s.isnumeric()][0]==7:
-                        #itk mode
-                        last_before_name = 7
-                        index_colr = 4
-                    elif [r for r, s in enumerate(spl) if not s.isnumeric()][0]==4:
-                        last_before_name=4
-                        index_colr=4
-                    else:
-                        last_before_name = 7
-                        index_colr = 4
-                    break
-                    """
-                except:
-                    continue
+                    idx = int(parts[0])
+                    name = parts[1]
 
-            #color_name = [l.split('\t')[0]+"_"+l.split('\t')[-1][1:-2] for l in lines[id:]]
-            #color_name = [[r for r in re.sub(r'\s+', ' ', l).split() if r != '' and r!='\n'][0] + "_"+' '.join([r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '' and r!='\n'][indices_non_numeric]) for l in lines[id:] if l[0]!='#']
-            lines = [l for l in lines if l.strip() and not l.strip().startswith('#')]
-            id = 0
-            color_name = [[r for r in re.sub(r'\s+', ' ', l).split() if r != '' and r!='\n'][0] + "_"+"".join([r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '' and r!='\n'][indices_non_numeric]) for l in lines[id:] if l[0]!='#']
-            indices_el = [int([r for r in re.sub(r'\s+', ' ', l).split() if r != '' and r != '\n'][0])  for l in lines[id:] if l[0] != '#']
-            color_index_rgb = np.array([[int(float(s)) for s in [r for r in re.sub(r'\s+', ' ', l).split() if r != '' and r != '\n'][index_colr_start:index_colr_end]] for l in
-             lines[id:] if l[0] != '#']).astype('float')
-            #color_index_rgb = np.array([[int(l.split('\t')[0]), int(l.split('\t')[1]), int(l.split('\t')[2]), int(l.split('\t')[3]), 1] for l in
-            #          lines[id:]]).astype('float')
-            color_index_rgb = color_index_rgb[..., :3]
+                    if _is_number(name):
+                        raise ValueError(f"Standard format expects text name, found number: {name}")
+                    name = f"{idx}_{name}"
+                    r = float(parts[2])
+                    g = float(parts[3])
+                    b = float(parts[4])
 
-            #color_index_rgb = np.hstack( (color_index_rgb, np.ones((color_index_rgb.shape[0],1))))
-            #color_index_rgb[:, [1, 2, 3]] = color_index_rgb[:, [1, 2, 3]] / 255.0
-            color_index_rgb[:, [0, 1, 2]] = color_index_rgb[:, [0, 1, 2]] / 255.0
-            color_index_rgb = np.hstack((np.array(indices_el).reshape(-1, 1), color_index_rgb, np.ones((color_index_rgb.shape[0],1))))
-            #if from_one:
-            #    color_index_rgb[:, 0] = np.arange(color_index_rgb.shape[0])+1
-            inds = color_index_rgb[:, [1, 2, 3]].sum(1) != 0
-            color_index_rgb = color_index_rgb[inds, :]
-            color_name = list(np.array(color_name)[inds])
+                    # Alpha is optional. If missing, assume 255 (opaque).
+                    # Note: FreeSurfer files often list 0 for alpha.
+                    # If you want to force opacity, change 'float(parts[5])' to 255.0
+                    a = float(parts[5]) if len(parts) > 5 else 255.0
+
+                    names.append(name)
+                    data.append([idx, r, g, b, a])
+                except ValueError:
+                    if _is_number(name):
+                        raise ValueError(f"Standard format expects text name, found number: {name}")
+                    continue  # Skip malformed lines
+    if len(data) > 0:
+        color_index_rgb = np.array(data)
+        # Normalize R, G, B, A columns (indices 1, 2, 3, 4) to 0-1
+        color_index_rgb[:, 1:] = color_index_rgb[:, 1:] / 255.0
+
+        color_name = names
+        inital_col = color_index_rgb[:, 0].copy()
+    return color_name, color_index_rgb, inital_col
+
+
+def _read_heuristic_color(file):
+    inital_col = []
+    color_name = []
+    color_index_rgb = np.array([])
+
+    with open(file, 'r') as fp:
+        lines = fp.readlines()
+
+        # Helper logic to find columns (kept mostly same as your original)
+        index_colr_start = 0
+        index_colr_end = 0
+        indices_non_numeric = 0
+
+        for id_line, l in enumerate(lines):
+            if l.strip().startswith('#'):
+                continue
+            try:
+                # Clean line
+                spl = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '']
+                spl_1 = spl[1:]  # Skip first element (usually ID)
+
+                if len(spl_1) > 3:
+                    # Heuristic: Find sequences of 3, 4, or 6 numbers
+                    indices_3 = [i for i in range(len(spl_1) - 2) if all(is_number(spl_1[i + j]) for j in range(3))]
+                    indices_4 = [i for i in range(len(spl_1) - 3) if all(is_number(spl_1[i + j]) for j in range(4))]
+                    indices_6 = [i for i in range(len(spl_1) - 5) if all(is_number(spl_1[i + j]) for j in range(6))]
+
+                    if len(indices_3) == 1:  # RGB
+                        index_colr_start = indices_3[0] + 1
+                        index_colr_end = index_colr_start + 3
+                    elif len(indices_4) == 1:  # RGBA
+                        index_colr_start = indices_4[0] + 1
+                        index_colr_end = index_colr_start + 4
+                    elif len(indices_6) == 1:  # RGB (CCC)
+                        index_colr_start = indices_6[0] + 1
+                        index_colr_end = index_colr_start + 4
+
+                    # Find name index
+                    indices_non_numeric_list = [r for r, s in enumerate(spl_1) if not is_number(s)]
+                    if indices_non_numeric_list:
+                        indices_non_numeric = indices_non_numeric_list[np.argmax(
+                            [len(spl_1[el]) for el in indices_non_numeric_list])] + 1
+                    break
+            except:
+                continue
+
+        # Parsing based on found indices
+        clean_lines = [l for l in lines if l.strip() and not l.strip().startswith('#')]
+
+        # Extract names
+        color_name = []
+        for l in clean_lines:
+            tokens = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l.strip()).split()]
+            if len(tokens) > indices_non_numeric:
+                prefix = tokens[0]
+                suffix = tokens[indices_non_numeric]
+                cur_name = f"{prefix}_{suffix}"
+                if _is_number(cur_name):
+                    raise ValueError(f"Standard format expects text name, found number: {cur_name}")
+
+                color_name.append(cur_name)
+
+        # Extract IDs
+        indices_el = [int(re.sub(r'\s+', ' ', l).split()[0]) for l in clean_lines]
+
+        # Extract RGB/RGBA
+        rgb_data = []
+        for l in clean_lines:
+            tokens = [r for r in re.sub(r'\s+', ' ', l).split()]
+            vals = [float(s) for s in tokens[index_colr_start:index_colr_end]]
+            rgb_data.append(vals)
+
+        color_index_rgb = np.array(rgb_data)
+        value_use = 1
+        if color_index_rgb.max()>1:
+            value_use = 255
+        # Handle 3-column (RGB) vs 4-column (RGBA)
+        if color_index_rgb.shape[1] == 3:
+            # Add Alpha = 1.0 column (pre-normalized) or 255 (if pre-division)
+            # Assuming raw values are 0-1 based on logic below
+            color_index_rgb = np.hstack((color_index_rgb, np.full((color_index_rgb.shape[0], 1), value_use)))
+        #elif color_index_rgb.shape[1] == 4:
+        #if np.max(color_index_rgb[:, -1])<= 1:
+        #    color_index_rgb[:, -1] *= 255
+
+        # Normalize colors to 0-1
+        color_index_rgb = color_index_rgb / value_use
+
+        # Prepend ID column
+        ids_col = np.array(indices_el).reshape(-1, 1)
+        color_index_rgb = np.hstack((ids_col, color_index_rgb))
+
+        # Filter zero colors? (Your original logic: inds = color_index_rgb[:, [1, 2, 3]].sum(1) != 0)
+        # This removes black labels. Keep or remove based on preference.
+        inds = color_index_rgb[:, 1:4].sum(1) != 0
+        color_index_rgb = color_index_rgb[inds, :]
+        color_name = list(np.array(color_name)[inds])
+
+        # Fix: Populate inital_col for ITK mode
+        inital_col = color_index_rgb[:, 0].copy()
+    return color_name, color_index_rgb, inital_col
+
+def _read_custom_color(file, from_one):
+    inital_col = []
+    color_name = []
+    color_index_rgb = np.array([])
+    with open(file, 'r') as fp:
+        lines = fp.readlines()
+        color_info = []
+        r = 0
+        for n, l in enumerate(lines):
+            raw_name = l.rstrip('\n')
+            if _is_number(raw_name.split()[0]):
+                raise ValueError(f"Line {n} expected name but found number: {raw_name}")
+            if n % 2 == 0:
+                if from_one:
+                    color_name.append('{}_'.format(r + 1) + raw_name)
+                    r += 1
+                else:
+                    color_name.append(lines[n + 1].split(' ')[0] + '_' + raw_name)
+            else:
+                color_info.append([int(i) for i in l.rstrip("\n").split(' ')])
+
+        color_index_rgb = np.array(color_info).astype('float')
+        # Normalize RGBA (Cols 1-4)
+        color_index_rgb[:, [1, 2, 3, 4]] = color_index_rgb[:, [1, 2, 3, 4]] / 255.0
+        inital_col = color_index_rgb[:, 0].copy()
+        if from_one:
+            color_index_rgb[:, 0] = np.arange(color_index_rgb.shape[0]) + 1
+    return color_name, color_index_rgb, inital_col
+
+def is_number(vl):
+    return bool(re.match(r'^-?\d+(\.\d+)?$', vl))
+
+
+
+def read_txt_color(file, mode='lut', from_one=False):
+    """
+    Read color information from text files (LUTs).
+    Supports: 'lut' (legacy), 'freeview'/'fsleyes' (FreeSurfer/FSL), and generic 'itk'.
+    """
+    inital_col = []
+    color_name = []
+    color_index_rgb = np.array([])
+
+    # Define the pool of strategies
+    # We wrap them in lambdas or partials if arguments differ
+    strategies = {
+        'custom': lambda: _read_custom_color(file, from_one),
+        'standard': lambda: _read_standard_color(file),
+        'heuristic': lambda: _read_heuristic_color(file)
+    }
+
+    # 1. Add Primary Strategy based on input mode
+    # 2. Add remaining strategies as fallback
+    # The order here determines preference if the primary fails.
+    # Standard is usually safest, then Heuristic, then Custom (which is very brittle)
+    execution_order = [strategies['standard'],strategies['heuristic'], strategies['custom']]
+
+    last_error = None
+
+    for strategy in execution_order:
+        try:
+            return strategy()
+        except Exception as e:
+            last_error = e
+            continue  # Try next strategy
+
 
     return color_name, color_index_rgb, inital_col
 
@@ -1845,36 +1954,8 @@ def cursorPaint():
 def cursorPaintX():
     bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/HandwritingPlusX.png")
     return QtGui.QCursor(bitmap)
-def cursorCircle(size = 50):
-
-    def pil_image_to_qpixmap(pil_img):
-
-        buffer = BytesIO()
-        pil_img.save(buffer, format='PNG')  # Save image to BytesIO buffer
-        pixmap = QtGui.QPixmap()
-        pixmap.loadFromData(buffer.getvalue())  # Load data into QPixmap
-        return pixmap
-
-    from PIL import Image, ImageDraw
-
-    size_im = max(200,size)
-    image = Image.new('RGBA', (size_im, size_im))
-    draw = ImageDraw.Draw(image)
-    # Size of Bounding Box for ellipse
-
-    x, y = size_im, size_im
-    eX, eY = size / 2, size / 2
-    bbox = (x / 2 - eX / 2, y / 2 - eY / 2, x / 2 + eX / 2, y / 2 + eY / 2)
-
-    draw.ellipse(bbox, fill=None, outline='blue', width=2)
-
-    eX, eY = size / 50, size / 50
-    bbox2 = (x / 2 - eX / 2, y / 2 - eY / 2, x / 2 + eX / 2, y / 2 + eY / 2)
-    draw.ellipse(bbox2, fill='blue', outline='blue', width=2)
 
 
-    #return QtGui.QCursor(image.toqpixmap())
-    return QtGui.QCursor(pil_image_to_qpixmap(image))
 
 def cursorErase():
     bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/HandwritingMinus.png")
@@ -2023,7 +2104,9 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
             #widget.updateEvents()
             widget.setMouseTracking(True)
             widget.enabledCircle = True
-            widget.setCursor(cursorCircle(rad_circle))
+            #widget.setCursor(cursorCircle(rad_circle))
+            widget.setCursor(QtCore.Qt.ArrowCursor)
+            widget.is_cursor_on_screen = False
 
     else:
         if code == 4:  # ImPaint
@@ -2224,13 +2307,22 @@ def permute_axis(whiteVoxels, edges, segmentShowWindowName):
     """
     if segmentShowWindowName == 'sagittal':
         whiteVoxels = whiteVoxels[:, [1, 0, 2]]
-        edges = edges[:, [1, 0, 2]]
+        if edges is not None:
+            edges = edges[:, [1, 0, 2]]
     elif segmentShowWindowName == 'coronal':
         whiteVoxels = whiteVoxels[:, [1, 2, 0]]
-        edges = edges[:, [1, 2, 0]]
+        if edges is not None:
+            edges = edges[:, [1, 2, 0]]
     elif segmentShowWindowName == 'axial':
         whiteVoxels = whiteVoxels[:, [2, 1, 0]]
-        edges = edges[:, [2, 1, 0]]
+        if edges is not None:
+            edges = edges[:, [2, 1, 0]]
+    elif segmentShowWindowName=='video':
+        whiteVoxels = whiteVoxels[:, [1, 0, 2]]
+        if edges is not None:
+            edges = edges[:, [1, 0, 2]]
+    else:
+        raise exit("unknown window name")
     return whiteVoxels, edges
 
 ###################### find painted voxels ######################
@@ -2282,6 +2374,8 @@ def PermuteProperAxis(whiteVoxels, segmentShowWindowName, axis = None):
             axis = [1, 2, 0]
         elif segmentShowWindowName == 'axial':
             axis = [2, 1, 0]
+        elif segmentShowWindowName=='video':
+            axis = [1, 0, 2]
         whiteVoxels = whiteVoxels[:, axis]
     else:
         whiteVoxels = whiteVoxels[:, axis]
@@ -2554,7 +2648,102 @@ def point_in_contour(segSlice, point, color):
 
 
 ######extract attributes from widget and assign it to the dictionary######################
+
+
+
 def getAttributeWidget(widget, nameWidget, dic):
+    """
+    Extract attributes from widget and assign it to the dictionary.
+    Safe for lists containing Widgets.
+    """
+
+    def IsSafeList(val):
+        """Check if a list contains only safe, pickle-able items"""
+        if not isinstance(val, list):
+            return False
+        if len(val) == 0:
+            return True
+        # If the list contains Qt Objects (Widgets), DO NOT save it
+        for item in val:
+            if isinstance(item, (QtCore.QObject, QtWidgets.QWidget)):
+                return False
+        return True
+
+    def IsKnownType(val):
+        # Check basic primitives
+        if val is None: return True
+        if isinstance(val, (int, float, str, bool, np.ndarray, tuple, Qt.GlobalColor)):
+            return True
+        # Check dictionaries
+        if isinstance(val, (dict, defaultdict)):
+            return True
+        # Check Lists (using the safety check)
+        if isinstance(val, list):
+            return IsSafeList(val)
+        return False
+
+    def updateDic(val, attr, at):
+        for el in attr:
+            try:
+                if hasattr(val, el):
+                    vl = getattr(val, el)()
+                    if IsKnownType(vl):
+                        dic[nameWidget][at][el] = vl
+            except Exception as e:
+                print(f'Update Dictionary Error for {at}: {e}')
+
+    dic[nameWidget] = defaultdict(list)
+
+    # Iterate over all attributes
+    for at in dir(widget):
+        if at.startswith('_') or at == 'program':
+            continue
+
+        val = getattr(widget, at)
+
+        # --- 1. HANDLE WIDGET TYPES ---
+        if isinstance(val, QtWidgets.QSlider):
+            dic[nameWidget][at] = defaultdict(list)
+            dic[nameWidget][at]['type'] = 'QSlider'
+            updateDic(val, ['minimum', 'maximum', 'value', 'isHidden'], at)
+
+        elif isinstance(val, QtWidgets.QLabel):
+            dic[nameWidget][at] = defaultdict(list)
+            dic[nameWidget][at]['type'] = 'QLabel'
+            updateDic(val, ['text', 'isHidden'], at)
+
+        elif isinstance(val, QtWidgets.QRadioButton):
+            dic[nameWidget][at] = defaultdict(list)
+            dic[nameWidget][at]['type'] = 'QRadioButton'
+            updateDic(val, ['isHidden', 'isChecked'], at)
+
+        elif type(val).__name__ == 'AnimatedToggle':  # Check by name to avoid import issues
+            dic[nameWidget][at] = defaultdict(list)
+            dic[nameWidget][at]['type'] = 'AnimatedToggle'
+            updateDic(val, ['isHidden', 'isChecked'], at)
+
+        # NEW: Handle CollapsibleBox specifically
+        elif type(val).__name__ == 'CollapsibleBox':
+            dic[nameWidget][at] = defaultdict(list)
+            dic[nameWidget][at]['type'] = 'CollapsibleBox'
+            # Save the expanded/collapsed state
+            # Assuming your class has .is_expanded() or checking the button
+            is_expanded = val.toggle_button.isChecked() if hasattr(val, 'toggle_button') else False
+            dic[nameWidget][at]['isExpanded'] = is_expanded
+            dic[nameWidget][at]['isHidden'] = val.isHidden()
+
+        # --- 2. HANDLE VARIABLES (Ints, Lists, Arrays) ---
+        elif IsKnownType(val):
+            # Special handling for 'items' which might be a dictionary
+            if at == 'items' and isinstance(val, defaultdict):
+                val = list(val.keys())
+                at = 'items_names'
+
+            dic[nameWidget][at] = val
+
+    return dic
+
+def getAttributeWidget2(widget, nameWidget, dic):
     """
     extract attributes from widget and assign it to the dictionary
     Args:
@@ -2571,6 +2760,8 @@ def getAttributeWidget(widget, nameWidget, dic):
                type(val) == Qt.GlobalColor or \
                type(val) == str or type(val)==bool or \
                type(val) == tuple
+
+
     def updateDic(val, attr, at):
         for el in attr:
             try:
@@ -2643,22 +2834,30 @@ def loadAttributeWidget(widget, nameWidget, dic, progressbar):
                 if tpe == 'QLabel':
                     attr = ['text', 'isHidden']
                     Qel.setVisible(not subDic['isHidden'])
-                    Qel.setText(subDic['text'])
+                    #Qel.setText(subDic['text'])
                 elif tpe == 'QRadioButton' or tpe == 'AnimatedToggle':
                     attr = ['isHidden', 'isChecked']
                     Qel.setVisible(not subDic['isHidden'])
-                    Qel.setChecked(subDic['isChecked'])
+                    #Qel.setChecked(subDic['isChecked'])
                 elif tpe == 'QSlider':
                     attr = ['minimum', 'maximum', 'value', 'isHidden']
                     Qel.setVisible(not subDic['isHidden'])
-                    Qel.setRange(subDic['minimum'], subDic['maximum'])
-                    Qel.setValue(subDic['value'])
+                    #Qel.setRange(subDic['minimum'], subDic['maximum'])
+                    #Qel.setValue(subDic['value'])
             else:
                 setattr(widget, key, dic[nameWidget][key])
         else:
             #if key == 'ImCenter':
             #    print(key)
+            if key == "segSlice":
+                try:
+                    if dic[nameWidget][key].ndim==3:
+                        dic[nameWidget][key] = dic[nameWidget][key][:,:,0]
+                except:
+                    pass
             setattr(widget, key, dic[nameWidget][key])
+
+
 
     if hasattr(widget, 'update'):
         if hasattr(widget, 'resetInit'):
@@ -2684,6 +2883,8 @@ def getCurrentSlice(widget, npImage, npSeg, sliceNum, tract=None, tol_slice=3):
     imSlice = None
     segSlice = None
     trk = None
+    if widget.currentWidnowName=='video':
+        return npImage, npSeg, trk
 
     if widget.activeDim == 0:
         imSlice = npImage[sliceNum, :, :]
@@ -2718,6 +2919,9 @@ def setSliceSeg(widget, npSeg):
 
     """
     sliceNum = widget.sliceNum
+    if widget.currentWidnowName=='video':
+        widget.segSlice = npSeg
+        return
     if widget.activeDim == 0:
         segSlice = npSeg[sliceNum, :, :]
     elif widget.activeDim == 1:
@@ -2746,6 +2950,9 @@ def getCurrentSlider(slider, widget, value):
     return int(sliceNum)
 
 ########Updating image view##############
+
+
+
 def updateSight(slider, widget, reader, value, tol_slice=3):
     """
     Update slider and widget
@@ -3003,7 +3210,50 @@ def LargestCC(segmentation, connectivity=3):
     return labels, frequency
 
 
+def getscale_safe(data, dst_min, dst_max, f_low=0.0, f_high=0.999):
+    """
+    Robustly scales image intensities to range dst_min..dst_max.
+    Optimized for standard 0-255 medical video frames (excludes black background from stats).
+    """
+    # 1. Input Validation
+    # If data is all zeros or flat, return identity
+    if np.min(data) == np.max(data):
+        return 0.0, 1.0
 
+    # 2. Get Source Min/Max (Robustly)
+    # We only care about NON-ZERO pixels for robust statistics
+    # (ignoring the black background mask we just created)
+    valid_pixels = data[data > 0]
+
+    if len(valid_pixels) == 0:
+        # Fallback if image is somehow entirely black
+        src_min, src_max = dst_min, dst_max
+    else:
+        # Sort pixels to find percentiles accurately without histogram binning errors
+        # This is more accurate than the binning method in your original code
+        valid_pixels = np.sort(valid_pixels)
+        n_pixels = len(valid_pixels)
+
+        # Find index for lower and upper bounds
+        idx_min = int(f_low * n_pixels)
+        idx_max = int(f_high * n_pixels) - 1
+
+        # Clamp indices to be safe
+        idx_min = max(0, min(idx_min, n_pixels - 1))
+        idx_max = max(0, min(idx_max, n_pixels - 1))
+
+        src_min = valid_pixels[idx_min]
+        src_max = valid_pixels[idx_max]
+
+    # 3. Calculate Scale
+    # Avoid division by zero
+    if src_max <= src_min:
+        scale = 1.0
+    else:
+        scale = (dst_max - dst_min) / (src_max - src_min)
+
+
+    return src_min, scale
 
 
 def getscale(data, dst_min, dst_max, f_low=0.0, f_high=0.999):
@@ -3069,7 +3319,8 @@ def getscale(data, dst_min, dst_max, f_low=0.0, f_high=0.999):
     # scale
     if src_min == src_max:
         scale = 1.0
-
+    elif src_max< src_min:
+        scale = (dst_max - dst_min) / (src_max - src_min)
     else:
         scale = (dst_max - dst_min) / (src_max - src_min)
 
@@ -3375,7 +3626,7 @@ def SearchForAdditionalPoints(nseg, sliceNum, windowname, max_threshold_to_be_li
     return total_points, success_h*success_v, len_lines
 
 ###################### find index of selected colors ######################
-def _get_color_index(npSeg, WI):
+def _get_color_index2(npSeg, WI):
     uq = np.unique(npSeg[tuple(zip(*WI))])
     inds, us = [], []
     for u in uq:
@@ -3384,7 +3635,202 @@ def _get_color_index(npSeg, WI):
         us.append(u)
     return inds, us
 
+
+def _get_color_index(npSeg, WI):
+    if WI is None or len(WI) == 0:
+        return [], []
+
+    idx = tuple(zip(*WI))
+    extracted_vals = npSeg[idx]  # Shape: (N_pixels,)
+    uq = np.unique(extracted_vals)  # Shape: (N_labels,)
+
+    # Broadcasting Magic
+    # Compare (1, N_pixels) vs (N_labels, 1)
+    # Result is a boolean matrix of shape (N_labels, N_pixels)
+    masks = (extracted_vals[None, :] == uq[:, None])
+
+    # Convert rows to list
+    return list(masks), list(uq)
+
 ###################### updating segmentation ######################
+
+def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lines=False):
+    """
+    Optimized update_last_video:
+    - Removes dangerous full-volume calculations.
+    - Uses safe Numpy indexing instead of zip(*WI).
+    - Prevents crashes during fast painting.
+    """
+    # 1. Get Frames involved in this update
+    # (Assuming whiteInd_all is N x 3: [x, y, frame_idx])
+    num_update = np.unique(whiteInd_all[:, 2])
+
+    for iw in num_update:
+        # Get the specific frame (2D array)
+        current_npseg = reader.seg_ims.get_frame(iw)
+
+        # Extract pixels for this specific frame 'iw'
+        # Mask: Check column 2 for frame index
+        mask_frame = (whiteInd_all[:, 2] == iw)
+
+        # Get (X, Y) coordinates for this frame
+        # Make sure to copy to avoid view issues
+        WI = whiteInd_all[mask_frame][:, [0, 1]]
+
+        # --- SAFETY CHECK 1: BOUNDS ---
+        # Ensure we don't try to write pixels outside the image (Causes SEGFAULT)
+        h, w = current_npseg.shape
+        valid_mask = (WI[:, 0] >= 0) & (WI[:, 0] < h) & \
+                     (WI[:, 1] >= 0) & (WI[:, 1] < w)
+        WI = WI[valid_mask]
+
+        if len(WI) < 1:
+            continue
+
+        # --- LOGIC SELECTION ---
+        if colorInd != 0:
+            # OPTIMIZATION: Use Numpy Indexing (Fast & Safe)
+            # Old: tuple(zip(*WI)) -> Slow & Crashy on large arrays
+            # New: (WI[:, 0], WI[:, 1])
+
+            # Find pixels that are NOT already the target color
+            current_vals = current_npseg[WI[:, 0], WI[:, 1]]
+            diff_mask = (current_vals != colorInd)
+            WI = WI[diff_mask]
+
+            if len(WI) < 1:
+                return
+
+            # History / Undo Logic
+            # Note: Ensure _get_color_index uses the new safe version we wrote
+            inds, us = _get_color_index(current_npseg, WI)
+            self._lastReaderSegCol.append(colorInd)
+            self._lastReaderSegInd.append([WI, inds, us, iw])
+
+        else:
+            # Erase Mode
+            WI = getNoneZeroSeg(current_npseg, whiteInd, colorInd2, 9876)
+            if len(WI) < 1:
+                return
+
+            self._lastReaderSegCol.append(colorInd)
+            inds, us = _get_color_index(current_npseg, WI)
+            self._lastReaderSegInd.append([WI, inds, us, iw])
+
+        # Update History Buffers
+        self._lastReaderSegPrevCol.append(colorInd2)
+        self._undoTimes = 0
+        if len(self._lastReaderSegInd) > self._lastMax:
+            self._lastReaderSegCol = self._lastReaderSegCol[1:]
+            self._lastReaderSegInd = self._lastReaderSegInd[1:]
+            self._lastReaderSegPrevCol = self._lastReaderSegPrevCol[1:]
+
+        if guide_lines:
+            self._lastlines.append(WI)
+
+        # --- APPLY CHANGES ---
+        # Fast Numpy Write
+        current_npseg[WI[:, 0], WI[:, 1]] = colorInd
+
+        # Commit to Proxy (Ensure this doesn't call makeObject!)
+        reader.commit_frame_segmentation_changes(current_npseg, iw)
+
+        # --- TEXT UPDATE (SAFE VERSION) ---
+        # Calculating total volume of a video ((npSeg>0).sum()) is too heavy.
+        # It reads 10GB of data for every pixel you draw.
+        # SOLUTION: Just calculate the CURRENT FRAME volume for display.
+
+        spacing_vol = self.readImECO.ImSpacing[0] ** 3 / 1000
+
+        # Only sum the current frame (Fast)
+        if colorInd == 9876:
+            vol = (current_npseg > 0).sum() * spacing_vol
+            label_type = "Total"
+        else:
+            colsel = colorInd if colorInd != 0 else colorInd2
+            vol = (current_npseg == colsel).sum() * spacing_vol
+            label_type = f"Label {colsel}"
+
+        # Update Text
+        txt = f'File: {self.filenameEco} | Frame {int(iw)} {label_type} Vol: {vol:0.2f} cm\u00b3'
+        self.openedFileName.setText(txt)
+
+        if colorInd == 1500:
+            self._lineinfo.append(WI)
+
+def update_last_video2(self, reader, colorInd, whiteInd_all, colorInd2, guide_lines = False):
+    """
+    update last
+    Args:
+        self:
+        reader:
+        colorInd:
+        whiteInd:
+        colorInd2:
+        guide_lines:
+
+    Returns:
+
+    """
+
+    num_update = np.unique(whiteInd_all[:, 2])
+    for iw in num_update:
+        current_npseg = reader.seg_ims.get_frame(iw)
+        whiteInd = whiteInd_all[whiteInd_all[:, 2] == iw, :]
+        whiteInd = whiteInd[:, [0,1]]
+
+        if colorInd != 0:
+            WI = whiteInd[np.where(current_npseg[tuple(zip(*whiteInd))] != colorInd)[0], :]
+            #WI = whiteInd
+            if WI.shape[0]< 1:
+                return
+            inds, us = _get_color_index(current_npseg, WI)
+            self._lastReaderSegCol.append(colorInd)
+            self._lastReaderSegInd.append([WI, inds, us, iw])
+
+            WI = whiteInd # to be commented to not check
+
+        else:
+            WI = getNoneZeroSeg(current_npseg, whiteInd, colorInd2, 9876)
+            if WI.shape[0]< 1:
+                return
+            self._lastReaderSegCol.append(colorInd)
+            inds, us = _get_color_index(current_npseg, WI)
+            self._lastReaderSegInd.append([WI, inds, us, iw])
+
+        self._lastReaderSegPrevCol.append(colorInd2)
+        self._undoTimes = 0
+        if len(self._lastReaderSegInd) > self._lastMax:
+            self._lastReaderSegCol = self._lastReaderSegCol[1:]
+            self._lastReaderSegInd = self._lastReaderSegInd[1:]
+            self._lastReaderSegPrevCol = self._lastReaderSegPrevCol[1:]
+        if guide_lines:
+            self._lastlines.append(WI)
+        current_npseg[tuple(zip(*WI))] = colorInd
+        reader.commit_frame_segmentation_changes(current_npseg, iw)
+        if colorInd == 0:
+            colsel = colorInd2
+        else:
+            colsel = colorInd
+        if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_eco]:
+
+            txt = 'File: {}'.format(self.filenameEco)
+            if colorInd == 9876:
+                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg > 0).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+            else:
+                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg == colsel).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+            self.openedFileName.setText(txt)
+        else:
+            txt = 'File: {}'.format(self.filenameMRI)
+            if colorInd==9876:
+                txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg > 0).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+            else:
+                txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg == colsel).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+            self.openedFileName.setText(txt)
+        if colorInd == 1500:
+            self._lineinfo.append(WI)
+
+
 def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False):
     """
     update last
@@ -3399,6 +3845,7 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
     Returns:
 
     """
+
     if colorInd != 0:
         WI = getZeroSeg(npSeg, whiteInd, colorInd)
         #WI = whiteInd
@@ -3406,7 +3853,7 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
             return
         inds, us = _get_color_index(npSeg, WI)
         self._lastReaderSegCol.append(colorInd)
-        self._lastReaderSegInd.append([WI, inds, us])
+        self._lastReaderSegInd.append([WI, inds, us, 0])
         WI = whiteInd # to be commented to not check
 
     else:
@@ -3415,7 +3862,7 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
             return
         self._lastReaderSegCol.append(colorInd)
         inds, us = _get_color_index(npSeg, WI)
-        self._lastReaderSegInd.append([WI, inds, us])
+        self._lastReaderSegInd.append([WI, inds, us, 0])
 
     self._lastReaderSegPrevCol.append(colorInd2)
     self._undoTimes = 0
@@ -3463,7 +3910,7 @@ def select_proper_widgets(self):
             widgets.append(self.openGLWidget_1)
             widgets.append(self.openGLWidget_2)
             widgets.append(self.openGLWidget_3)
-    elif self.tabWidget.currentIndex() == 2:
+    elif self.tabWidget.currentIndex() == 1:
         wndnm = self.openGLWidget_11.currentWidnowName
         if wndnm.lower() == 'sagittal':
             widgets.append(self.openGLWidget_2)
@@ -3472,7 +3919,7 @@ def select_proper_widgets(self):
         elif wndnm.lower() == 'axial':
             widgets.append(self.openGLWidget_3)
         widgets.append(self.openGLWidget_11)
-    elif self.tabWidget.currentIndex() == 3:
+    elif self.tabWidget.currentIndex() == 2:
         wndnm = self.openGLWidget_11.currentWidnowName
         if wndnm.lower() == 'sagittal':
             widgets.append(self.openGLWidget_5)
@@ -3485,9 +3932,119 @@ def select_proper_widgets(self):
 
 
 ###################### save numpy array to image ######################
-def save_numpy_to_png(file, img):
-    from matplotlib.image import imsave
-    imsave(file, img)
+def save_snapshot(q_image, filename):
+    # Qt detects format from extension (.png, .jpg)
+    # For JPG: quality=100 (0-100)
+    # For PNG: quality is compression level (0-9, usually ignored or -1 default)
+    if filename.endswith(".jpg"):
+        q_image.save(filename, "JPG", 100)
+    else:
+        q_image.save(filename, "PNG")
+
+    print(f"Saved to {filename}")
+
+
+def get_global_crop_box(image_list, threshold=10):
+    """
+    Finds the smallest rectangle that contains all non-black pixels
+    across the entire set of images.
+    """
+    # 1. Create a "Maximum Projection"
+    # We stack all images effectively on top of each other to see the full valid area
+    max_proj = np.zeros_like(image_list[0])
+    for img in image_list:
+        max_proj = np.maximum(max_proj, img)
+    max_proj = cv2.cvtColor(max_proj, cv2.COLOR_BGR2GRAY)
+    # 2. Threshold to separate image content from pure black background
+    # Any pixel value > threshold is considered "content"
+    _, thresh = cv2.threshold(max_proj, threshold, 255, cv2.THRESH_BINARY)
+
+    # 3. Find the bounding box of the white area
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        # Fallback: If image is all black, return full size
+        return image_list
+    main_contour = max(contours, key=cv2.contourArea)
+
+    # --- 3. Filter: Keep ONLY the largest connected object ---
+    # This ignores the "small not connected object" you mentioned
+    main_contour = max(contours, key=cv2.contourArea)
+
+    # Create a "Cookie Cutter" mask (White on main object, Black everywhere else)
+    mask = np.zeros_like(max_proj)
+    cv2.drawContours(mask, [main_contour], -1, 255, thickness=cv2.FILLED)
+
+    # Calculate crop box from this clean mask
+    x, y, w, h = cv2.boundingRect(main_contour)
+    print(f"Detected Main Area: x={x}, y={y}, w={w}, h={h}")
+
+    # --- 4. Apply Mask & Crop to every frame ---
+    cleaned_stack = []
+    for img in image_list:
+        # Ensure img matches mask channels
+        if len(img.shape) == 3:
+            # If image is color, we need a 3-channel mask
+            mask_3ch = cv2.merge([mask, mask, mask])
+            cleaned_img = cv2.bitwise_and(img, mask_3ch)
+        else:
+            cleaned_img = cv2.bitwise_and(img, mask)
+
+        # Crop to the bounding box
+        cropped_img = cleaned_img[y:y + h, x:x + w]
+        cleaned_stack.append(cropped_img)
+
+    return cleaned_stack
+
+
+def detect_modality_and_window(data):
+    """
+    Analyzes the numpy array to guess the modality and returns
+    the prepared uint8 image.
+    """
+    # 1. Check Dimensions
+    # 4D data is almost always MRI (fMRI, DTI, or Multi-phase)
+    if data.ndim == 4:
+        print("Detected: 4D MRI/DTI")
+        # For visualization, we usually take the first volume or mean
+        # But per your logic, we might visualize one channel
+        return (255.0*(data - data.min())/(data.max()-data.min())).astype(np.uint8)
+
+    min_val = data.min()
+    max_val = data.max()
+
+    # 2. Check for CT Signature (Negative Values)
+    # CT Air is -1000. If we see values significantly below 0, it's CT.
+    # We use -200 as a safe threshold to distinguish from noisy MRI background.
+    if min_val < -200:
+        print(f"Detected: CT (Range: {min_val} to {max_val})")
+        # Apply Soft Tissue Window (modify as needed)
+        return apply_ct_window(data, window_center=40, window_width=400)
+
+    # 3. Check for MRI Signature (Positive only, start at 0)
+    else:
+        print(f"Detected: MRI (Range: {min_val} to {max_val})")
+        return normalize_mri(data)
+
+
+
+def apply_ct_window(data, window_center=40, window_width=400):
+    min_visible = window_center - (window_width / 2.0)
+    max_visible = window_center + (window_width / 2.0)
+    windowed = np.clip(data, min_visible, max_visible)
+    # Normalize 0-255
+    normalized = (windowed - min_visible) / (max_visible - min_visible)
+    return (normalized * 255.0).astype(np.uint8)
+
+
+def normalize_mri(data):
+    # Robust normalization using percentiles (ignores outliers)
+    p1 = np.percentile(data, 1)  # Ignore bottom 1% (noise)
+    p99 = np.percentile(data, 99)  # Ignore top 1% (artifacts)
+
+    normalized = np.clip(data, p1, p99)
+    normalized = (normalized - p1) / (p99 - p1)
+    return (normalized * 255.0).astype(np.uint8)
 
 
 ###################### saving 3D images ######################
@@ -3805,6 +4362,18 @@ def slice_intepolation(reader, slices, currentWidnowName, colorInd, WI):
     elif currentWidnowName == 'axial':
         selected_slices = reader.npSeg[slices, :, :]
         selected_slices = np.transpose(selected_slices, [1, 2, 0])
+    elif currentWidnowName=='video':
+        # 1. Initialize Array: (Height, Width, N_Slices)
+        # Use 'len(slices)' instead of shape if slices is a list
+        num_slices = len(slices)
+        selected_slices = np.zeros((reader.npSeg.shape[0], reader.npSeg.shape[1], num_slices), dtype=np.uint8)
+        # 2. Loop with Enumerate to keep track of index 'i'
+        for i, slice_idx in enumerate(slices):
+            # READ FROM SEG PROXY (Not Video Image)
+            # We want the Label (2D), not the MRI/Video (3D RGB)
+            mask = reader.seg_ims.get_frame(slice_idx)
+            # 3. Assign to the specific layer 'i'
+            selected_slices[:, :, i] = mask
     ind_zero = selected_slices != colorInd
     selected_slices[ind_zero]=0
     for j in range(slices.shape[0]-1):

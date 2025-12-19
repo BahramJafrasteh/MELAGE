@@ -11,7 +11,8 @@ from melage.utils.utils import cursorPaint, zonePoint, cursorOpenHand, \
 from OpenGL.GL import *
 import sys
 import numpy as np
-from skimage.segmentation import flood
+import time
+
 from PyQt5.QtCore import pyqtSignal, QPoint, QSize, Qt, QEvent
 from PyQt5.QtGui import (QColor, QMatrix4x4, QOpenGLShader, QKeyEvent,
         QOpenGLShaderProgram, QPainter, QWheelEvent)
@@ -57,6 +58,7 @@ class GLWidget(QOpenGLWidget):
     NewPoints = pyqtSignal(object, object) # adding new points
     mousePress = pyqtSignal(object) # if mouse pressed
     interpolate = pyqtSignal(object) # if interpolation is required
+    intensity_change = pyqtSignal(object)
 
     def __init__(self, colorsCombinations, parent=None, currentWidnowName = 'sagittal',
                  imdata=None, type= 'eco',id=0
@@ -70,6 +72,7 @@ class GLWidget(QOpenGLWidget):
         self.id = id # unique id of the class
         self.colorsCombinations = colorsCombinations # coloring scheme
         self.color_name = []
+
         self.imType = type # image type
         self.affine = None # image affine
         self.tract = None # tractography
@@ -109,7 +112,7 @@ class GLWidget(QOpenGLWidget):
         self.program = []
         self.showSeg = True # visualize segmentation or not
         self.width_line_tract = 3 # width line for tractography
-        self.polygon_info = [] # inforamtion of polygon
+        #self.polygon_info = [] # inforamtion of polygon
         if imdata is not None:
             self.imSeg = np.zeros_like(imdata) #
         else:
@@ -117,6 +120,7 @@ class GLWidget(QOpenGLWidget):
 
 
         self.initialState()
+        self.resetInit()
 
     def clear(self):
         """
@@ -177,6 +181,7 @@ class GLWidget(QOpenGLWidget):
         self.colorInd = 9876 # color index
         self.colorInds = [9876] # color indices
         self.affine = np.eye(4)
+        self.is_cursor_on_screen = False
 
     def initialState(self):
         """
@@ -317,7 +322,10 @@ class GLWidget(QOpenGLWidget):
         :param shape:
         :return:
         """
-        self.imXMax, self.imYMax, self.imZMax = shape
+        if len(shape)==3:
+            self.imXMax, self.imYMax, self.imZMax = shape
+        elif len(shape)== 4: #RGB
+            self.imXMax, self.imYMax, self.imZMax, _ = shape
 
         if self.currentWidnowName == 'sagittal':
             self.labelX = 'C'
@@ -358,6 +366,19 @@ class GLWidget(QOpenGLWidget):
             self.imWidth = self.imZMax
             self.imHeight = self.imXMax
             self.imDepth = self.imYMax
+        elif self.currentWidnowName == 'video': # TODO
+            self.labelX = 'X'
+            self.colorXID = Qt.red
+            self.colorX = [1, 0, 0]
+
+            self.labelY = 'Y'
+            self.colorYID = Qt.green
+            self.colorY = [0, 1, 0]
+
+            self.activeDim = 2# matrix for slicing
+            self.imWidth = self.imYMax
+            self.imHeight = self.imXMax
+            self.imDepth = self.imZMax
 
         self.imAr = self.imWidth / self.imHeight # image aspect ratio
 
@@ -538,6 +559,8 @@ class GLWidget(QOpenGLWidget):
             xyz = [centerXY[1], self.sliceNum, centerXY[0], 1]
         elif self.currentWidnowName == 'axial':
             #xyz = [xyz[2], xyz[1], xyz[0], 1]
+            xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
+        elif self.currentWidnowName== 'video':
             xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
         loc = self.affine @ np.array(xyz)
         xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(loc[0], loc[1], loc[2]))
@@ -1056,6 +1079,7 @@ class GLWidget(QOpenGLWidget):
 
 
         # draw additional
+
         self.drawImPolygon()  # draw imFreeHand
 
 
@@ -1068,8 +1092,8 @@ class GLWidget(QOpenGLWidget):
         if len(self.linePoints) > 3:
             self.DrawLines(self.linePoints)
 
-        if self.enabledCircle:
-            self.DrawCricles(self._center_circle)
+        if self.enabledCircle and self.is_cursor_on_screen:
+            self.DrawCircles(self._center_circle)
 
         if self.tract is not None: # for tract file
             self.Draw_tract(self.tract, self.width_line_tract)
@@ -1221,9 +1245,9 @@ class GLWidget(QOpenGLWidget):
         Painting GL
         :return:
         """
-        if self.imSlice is None:
+        if self.imSlice is None or not hasattr(self, 'imWidth'):
             return
-
+        self._uploadTexture()
         #version_str = glGetString(GL_VERSION)
         #print(f"OpenGL Version: {version_str.decode('utf-8')}")
         self.paintGL_start()
@@ -1349,37 +1373,24 @@ class GLWidget(QOpenGLWidget):
 
         painter.restore()
 
-    def takescreenshot(self, area=None, width=0, height=0):
+    def takescreenshot(self):
         """
-        This function has been designed to make screenshot from GL
-        :param area:
-        :param width:
-        :param height:
-        :return:
+        Captures the current OpenGL frame as a QImage.
         """
-        if self.imSlice is None:
-            return None
-        if area=='whole':
-            self.makeObject()
-        else:
-            self.paintGL()
-        if width==0:
-            width = self.width()
-        if height==0:
-            height = self.height()
-        val = max(height, width)
-        glPixelStorei(GL_PACK_ALIGNMENT, 1)
-        z = glReadPixels(0, 0, val, val, GL_RGBA,
-                         GL_FLOAT)[::-1]
-        if val == width:
-            z = z[val-height:width, 0:width]
-        else:
-            z = z[0:height, 0:width]
+        # 1. Ensure the context is current and scene is updated
+        self.makeCurrent()
+        self.paintGL()  # Force a redraw so the buffer is fresh
 
-        return z
+        # 2. Grab the framebuffer (Handles flipping and formatting automatically)
+        q_image = self.grabFramebuffer()
+
+        # 3. Done! You can save it or convert it
+        # q_image.save("screenshot.png")
+
+        return q_image
 
     def resizeGL(self, width, height):
-        if self.imSlice is None:
+        if self.imSlice is None or not hasattr(self, 'imWidth'):
             return
         self.UpdatePaintInfo()
         side = min(width, height)
@@ -1387,8 +1398,25 @@ class GLWidget(QOpenGLWidget):
         glViewport((width- side) // 2, (height-side) // 2, self.imWidth,
                 self.imHeight)
 
+    def set_center_circles(self, num_segments, radius, xc, yc):
+        realx, realy = self.to_real_world(xc, yc)
+
+        # 1. Generate all angles at once (0 to 2pi)
+        # endpoint=False ensures we don't duplicate the start/end point
+        theta = np.linspace(0, 2 * np.pi, num_segments, endpoint=False)
+
+        # 2. Vectorized Calculation (No loops)
+        x = radius * np.cos(theta) + realx
+        y = radius * np.sin(theta) + realy
+        z = np.full(num_segments, self.sliceNum)  # constant Z
+
+        # 3. Stack into (N, 3) array
+        # This creates the list of [x, y, z] points in one go
+        self._center_circle = np.column_stack((x, y, z)).astype(np.float32)
+
     def mousePressEvent(self, event):
         self.mousePress.emit(event)
+        self.setFocus()
         self.lastPos = event.pos()
         """
         
@@ -1436,38 +1464,6 @@ class GLWidget(QOpenGLWidget):
                     self.update()
 
 
-
-        elif self.enabledCircle:
-            if self._magic_slice is not None:
-                    slc = self._magic_slice.sum(2)
-                    slc = slc/slc.max()
-                    l1 = list(np.where((slc-self.segSlice) > 0))
-                    if len(l1[0])>0:
-                        whiteInd = np.stack([l1[1], l1[0], len(l1[0]) * [self.sliceNum]]).T
-                        whiteInd, _ = permute_axis(whiteInd, whiteInd, self.currentWidnowName)
-                        self.segChanged.emit(whiteInd.astype("int"), self.currentWidnowName, self.colorInd, self.sliceNum)
-                        self.makeObject()
-                        self.update()
-
-            if self._NenabledCircle>0 or 1>2:
-                xc, yc = event.pos().x(), event.pos().y()
-                num_segments = 50
-                #if self.zoom_level_x<=1:
-                radius = self._radius_circle/4#*self.imSpacing[0]#*self.zoom_level_x
-                #else:
-                #    radius = self._radius_circle/self.zoom_level_x
-                points = []
-                realx, realy = self.to_real_world(xc, yc)
-                for ii in range(num_segments):
-                    theta = 2.0 * np.pi * ii / num_segments  # get the current angle
-                    x = radius * np.cos(theta)  # calculate the x component
-                    y = radius * np.sin(theta)  # calculate the y component
-                    #x1, y1 = self.to_real_world(xc+x,yc+y)
-                    x1, y1 = realx +x, realy + y
-                    points.append([x1,y1, self.sliceNum])
-                self._center_circle = points
-                self.update()
-            self._NenabledCircle += 1
         elif self.enabledPointSelection:
 
             x , y = self.to_real_world(event.pos().x(), event.pos().y())
@@ -1575,12 +1571,129 @@ class GLWidget(QOpenGLWidget):
     def leaveEvent(self, event):
         if self.enabledMagicTool or self.enabledCircle:
             self._magic_slice = None
+            #self.makeObject()
+            self.is_cursor_on_screen = False
             self.makeObject()
-            self.update()
+            self.setCursor(QtCore.Qt.ArrowCursor)
+            self.update()  # Force repaint to remove the drawn circle
         super().leaveEvent(event)
 
 
+    def _compute_mask_circle_box(self, event, realx, realy):
+
+        # 2. Define Bounding Box (Square ROI)
+        # Instead of calculating 50 polygon points, we just get the square bounds
+        radius = int(self._radius_circle / 4.0)
+
+        # Center coordinates in image space (Integers)
+        cx, cy = int(realx), int(realy)
+
+        # Calculate bounds ensuring we stay within image limits
+        h, w = self.imSlice.shape[:2]
+        min_x = max(0, cx - radius)
+        max_x = min(w, cx + radius)
+        min_y = max(0, cy - radius)
+        max_y = min(h, cy + radius)
+
+        # If cursor is off-screen, abort
+        if max_x <= min_x or max_y <= min_y:
+            return super().mouseMoveEvent(event)
+
+        # 3. Extract ROI (Region of Interest) - FAST NumPy Slicing
+        # This replaces the slow 'zip(*a1)' and 'whiteInd' logic
+        roi = self.imSlice[min_y:max_y, min_x:max_x]
+
+        # 4. Pre-process for Segmentation
+        # Determine if RGB
+        is_rgb = (roi.ndim == 3 and roi.shape[2] in [3, 4])
+
+        if is_rgb:
+            # OpenCV needs Grayscale for FloodFill/Equalize
+            roi_proc = roi[..., :3].astype(np.uint8).copy() if roi.shape[2] == 4 else roi.astype(np.uint8).copy()
+        else:
+            roi_proc = roi.astype(np.uint8)
+            # Enhance Contrast
+            roi_proc = cv2.equalizeHist(roi_proc)
+
+        # 5. Fast Segmentation (cv2.floodFill)
+        # Seed point is relative to the ROI (center of the box)
+        seed_x = cx - min_x
+        seed_y = cy - min_y
+
+        # Safety check: ensure seed is inside ROI
+        if 0 <= seed_x < roi_proc.shape[1] and 0 <= seed_y < roi_proc.shape[0]:
+            try:
+                # Calculate dynamic tolerance based on ROI std dev
+                # (Lowering the multiplier slightly usually feels more responsive in real-time)
+                std_dev = np.std(roi_proc)
+                tol_val = max(1.0, self._tol_cricle_tool * std_dev)
+                # For RGB, loDiff and upDiff must be tuples: (R_tol, G_tol, B_tol)
+                # For Gray, they are scalars.
+                if is_rgb:
+                    tolerance = (tol_val, tol_val, tol_val)
+                else:
+                    tolerance = tol_val
+                # Create mask for floodFill (Must be 2 pixels larger than ROI)
+                # Note: mask is uint8
+                h_roi, w_roi = roi_proc.shape[:2]
+                mask = np.zeros((h_roi + 2, w_roi + 2), np.uint8)
+
+                # Perform FloodFill
+                # flags=4 | (255 << 8): Fill with 255, connectivity 4
+                # cv2.FLOODFILL_MASK_ONLY: We only want the mask, don't modify the image
+                flags = 4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY | cv2.FLOODFILL_FIXED_RANGE
+                if is_rgb:
+                    cv2.floodFill(roi_proc, mask, (seed_x, seed_y), (255, 255, 255),
+                                  loDiff=tolerance, upDiff=tolerance, flags=flags)
+                else:
+                    cv2.floodFill(roi_proc, mask, (seed_x, seed_y), 255,
+                                  loDiff=tolerance, upDiff=tolerance, flags=flags)
+
+                # Crop mask to match ROI size (remove the extra 1px border floodFill adds)
+                seg_mask = mask[1:-1, 1:-1]
+
+                # 6. Apply Circular Constraint (The "Lens" Effect)
+                # Create a grid to calculate distance from center
+                y_grid, x_grid = np.ogrid[:h_roi, :w_roi]
+                dist_sq = (x_grid - seed_x) ** 2 + (y_grid - seed_y) ** 2
+                circular_mask = dist_sq <= radius ** 2
+
+                # Combine: Pixel must be flood-filled AND inside the circle
+                final_mask = (seg_mask > 0) & circular_mask
+
+                # 7. Update Visualization
+                if np.any(final_mask):
+                    color = self.colorsCombinations[self.colorInd]
+
+                    # Create the colored overlay (Reuse existing buffers if possible for speed)
+                    # We create a full-size black image (or reuse a class member to avoid allocation)
+                    if self._magic_slice is None or self._magic_slice.shape[:2] != (h, w):
+                        self._magic_slice = np.zeros((h, w, 3), dtype=np.float32)
+                    else:
+                        self._magic_slice.fill(0)  # Clear previous
+
+                    # Place the colored ROI back into the full size overlay
+                    # Vectorized assignment is much faster than loops
+
+                    # Prepare color patch
+                    patch_color = np.zeros((h_roi, w_roi, 3), dtype=np.float32)
+                    patch_color[final_mask] = [color[0] * 255, color[1] * 255, color[2] * 255]
+
+                    # Paste patch into full image
+                    self._magic_slice[min_y:max_y, min_x:max_x] = patch_color
+
+                    self.makeObject()
+                    self.update()
+
+                else:
+                    self._magic_slice = None
+                    # self.update() # Optional: only update if something changed
+            except Exception as e:
+                # print(e)
+                pass
+
     def mouseMoveEvent(self, event):
+
         if self.enabledMagicTool:
             xc, yc = event.pos().x(), event.pos().y()
 
@@ -1601,109 +1714,25 @@ class GLWidget(QOpenGLWidget):
             else:
                 self._magic_slice = None
         elif self.enabledCircle:
-            # from MELAGE.utils.utils import
+            self.is_cursor_on_screen = True
+            xc, yc = event.pos().x(), event.pos().y()
+            num_segments = 50
+            radius = self._radius_circle / 4
+            self.set_center_circles(num_segments, radius, xc, yc)
+            self.update()
             if self._NenabledCircle > 0 and self.colorInd != 9876:
+                # 1. Get Mouse Position & Real World Coordinates
 
-                self._center_circle = []
-                xc, yc = event.pos().x(), event.pos().y()
-                xc_mp, yc_mp = self.to_real_world(xc, yc)
-
-                num_segments = 50
-                # if self.zoom_level_x<=1:
-                radius = self._radius_circle / 4.0  # *self.imSpacing[0]#*self.zoom_level_x
-                # else:
-                #    radius = self._radius_circle/self.zoom_level_x
-                sum_diff = 100
                 realx, realy = self.to_real_world(xc, yc)
+                sum_diff = 100
+                # Optimization: Only process if mouse moved significantly
+
                 if hasattr(self, 'lastPos'):
                     xc_l, yc_l = self.lastPos.x(), self.lastPos.y()
                     realx_l, realy_l = self.to_real_world(xc_l, yc_l)
                     sum_diff = abs(realx_l-realx)+abs(realy_l-realy)
-                if sum_diff>0.1:
-                    #print(sum_diff)
-                    points = []
-                    for ii in range(num_segments):
-                        theta = 2.0 * np.pi * ii / num_segments  # get the current angle
-                        x = radius * np.cos(theta)  # calculate the x component
-                        y = radius * np.sin(theta)  # calculate the y component
-                        # x1, y1 = self.to_real_world(xc+x,yc+y)
-                        x1, y1 = realx + x, realy + y
-                        points.append([x1, y1, self.sliceNum])
-                    if len(points) > 2:
-                        from melage.utils.utils import seperate_lcc
-                        polygonC = ConvertPointsToPolygons(points, width=0)
-                        whiteInd = None
-                        if polygonC.is_valid:
-                            whiteInd, edges = findIndexWhiteVoxels(polygonC, self.currentWidnowName,
-                                                                   bool_permute_axis=False)
-                        else:
-                            # print('not valid polygon')
-                            # polygonC = polygonC.buffer(0)
-                            multipolys = ConvertPToPolygons(self.penPoints)
-                            whiteInd = np.empty((0, 3))
-                            for poly in multipolys:
-                                if poly.is_valid:
-                                    if poly.area < 2:
-                                        continue
-                                    voxels, edges = findIndexWhiteVoxels(poly, self.currentWidnowName)
-                                    if voxels is not None:
-                                        whiteInd = np.vstack((whiteInd, voxels))
-
-                        #center_intensity = self.imSlice[int(yc_mp), int(xc_mp)]
-                        ind_1 = (whiteInd[:, 1] < self.imSlice.shape[0])*(whiteInd[:, 1]>0)
-                        whiteInd = whiteInd[ind_1, :]
-                        ind_2 = (whiteInd[:, 0] < self.imSlice.shape[1]) * (whiteInd[:, 0] > 0)
-                        whiteInd = whiteInd[ind_2, :]
-                        if len(whiteInd)==0:
-                            return  super().mouseMoveEvent(event)
-                        new_index_intensity = self.imSlice[whiteInd[:, 1], whiteInd[:, 0]]
-
-
-
-                        # seg_c =  self.segSlice[int(yc_mp), int(xc_mp)]
-                        segs = self.segSlice[whiteInd[:, 1], whiteInd[:, 0]]
-
-                        # ind_seg = segs != seg_c
-                        min_whit = whiteInd.min(0)
-                        from scipy.ndimage import gaussian_filter
-                        a1 = whiteInd[:, [1, 0]] - min_whit[[1, 0]]
-                        im1 = np.zeros(a1.max(0) + 1)
-                        seg1 = np.zeros_like(im1)
-                        try:
-                            im1[tuple(
-                                zip(*a1))] = new_index_intensity  # im1[a1[:, 1], a1[:, 0]] = new_index_intensity
-                            seg1[tuple(zip(*a1))] = segs
-                        except:
-                            pass
-
-                        seed_point = (int(yc_mp) - min_whit[1], int(xc_mp) - min_whit[0])
-
-                        im1 = cv2.equalizeHist(im1.astype(np.uint8))
-                        # im1 = cv2.GaussianBlur(im1, (0, 0), 1)
-                        try:
-                            segmented_area = flood(im1, seed_point, connectivity=1,
-                                            tolerance=self._tol_cricle_tool*im1.std())
-
-                            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-                            sub_seg_new = cv2.morphologyEx((segmented_area>0).astype(np.float32), cv2.MORPH_CLOSE, kernel)
-                            im_l, im_f = LargestCC(sub_seg_new, 1)
-                            if im_f.shape[0]>1:
-                                index_sel = im_l[seed_point[1], seed_point[0]]
-                                sub_seg_new = (im_l == index_sel).astype('int')
-                        except:
-                            sub_seg_new = None
-                        if sub_seg_new is not None and self.colorInd != 9876:
-                            color = self.colorsCombinations[self.colorInd]
-                            seg_new = np.zeros_like(self.segSlice)
-                            seg_new[whiteInd[:, 1], whiteInd[:, 0]] = sub_seg_new[tuple(zip(*a1))]
-                            color_image = np.stack(
-                                (seg_new * color[0] * 255, seg_new * color[1] * 255, seg_new * color[2] * 255), axis=-1)
-                            self._magic_slice = color_image
-                            self.makeObject()
-                            self.update()
-                        else:
-                            self._magic_slice = None
-
+                if sum_diff > 0.1:
+                    self._compute_mask_circle_box(event, realx, realy)
         def compute_line(x, m, b):
             return m*x+b
         #print(self.cursor().pos())
@@ -1719,6 +1748,10 @@ class GLWidget(QOpenGLWidget):
                 x = endIm[1]
                 y = endIm[2]
             self.penPoints.append([x, y, self.sliceNum])
+            if len(self.penPoints)>2:
+                poly = ConvertPointsToPolygons(self.penPoints, width=self.widthPen)
+                self._cached_pen_poly = list(poly.exterior.coords)
+
             self.updateCursor(event, x, y, dx, dy, endIm[0])
 
             # update the window
@@ -1873,11 +1906,31 @@ class GLWidget(QOpenGLWidget):
 
 
     def keyPressEvent(self, event: QKeyEvent):
-
+        NexSlice = 0
         if event.key() == Qt.Key_Control:
             self.enabledRotate = True
             self.enabledZoom = True
             try_disconnect(self)
+        Intensity = 0
+        if event.key() == QtCore.Qt.Key_Left:
+            NexSlice = -1  # Go to previous slice
+        elif event.key() == QtCore.Qt.Key_Right:
+            NexSlice = 1  # Go to next slice
+        if event.key() == QtCore.Qt.Key_Up:
+            Intensity = 1  # intensity increase
+        elif event.key() == QtCore.Qt.Key_Down:
+            Intensity = -1  # intensit decrease
+        if NexSlice != 0:
+            # Emit signal with the new slice number
+            self.sliceNChanged.emit(self.sliceNum + NexSlice)
+            # Accept the event so it doesn't propagate further
+            event.accept()
+        elif Intensity != 0:
+            self.intensity_change.emit(int(self.intensitySeg*100.1+ Intensity))
+            event.accept()
+        super().keyPressEvent(event)
+
+
 
     def keyReleaseEvent(self, event: QtGui.QKeyEvent) -> None:
         #key options
@@ -1938,181 +1991,27 @@ class GLWidget(QOpenGLWidget):
                 polErase = ConvertPToPolygons(self.erasePoints) # convert to polygons
                 self.erasePolygon(polErase)
         elif self.enabledCircle:
-            #from MELAGE.utils.utils import
-            if self._NenabledCircle>0:
 
-                self._center_circle=[]
-                xc, yc = event.pos().x(), event.pos().y()
-                xc_mp, yc_mp = self.to_real_world(xc, yc)
-                num_segments = 50
-                #if self.zoom_level_x<=1:
-                radius = self._radius_circle/4.0#*self.imSpacing[0]#*self.zoom_level_x
-                #else:
-                #    radius = self._radius_circle/self.zoom_level_x
-                realx, realy = self.to_real_world(xc, yc)
-
-                points = []
-                for ii in range(num_segments):
-                    theta = 2.0 * np.pi * ii / num_segments  # get the current angle
-                    x = radius * np.cos(theta)  # calculate the x component
-                    y = radius * np.sin(theta)  # calculate the y component
-                    #x1, y1 = self.to_real_world(xc+x,yc+y)
-                    x1, y1 = realx + x, realy + y
-                    points.append([x1,y1, self.sliceNum])
-                if len(points) > 2:
-                    from melage.utils.utils import seperate_lcc
-                    polygonC = ConvertPointsToPolygons(points, width = 0)
-                    try:
-                        whiteInd = None
-                        if polygonC.is_valid:
-                            whiteInd, edges = findIndexWhiteVoxels(polygonC, self.currentWidnowName, bool_permute_axis=False)
-                        else:
-                            #print('not valid polygon')
-                            #polygonC = polygonC.buffer(0)
-                            multipolys = ConvertPToPolygons(self.penPoints)
-                            whiteInd = np.empty((0, 3))
-                            for poly in multipolys:
-                                if poly.is_valid:
-                                    if poly.area<2:
-                                        continue
-                                    voxels, edges = findIndexWhiteVoxels(poly, self.currentWidnowName)
-                                    if voxels is not None:
-                                        whiteInd = np.vstack((whiteInd, voxels))
-                            #if whiteInd is not None:
-                             #   self.imSeg[tuple(zip(*whiteInd))] = self.colorInd
-                        #if whiteInd is not None:
-                         #   self.segSlice[tuple(zip(*whiteInd))] = self.colorInd
-                        center_intensity = self.imSlice[int(yc_mp), int(xc_mp)]
-
-
-                        whiteInd = whiteInd[whiteInd[:, 1] < self.imSlice.shape[0], :]
-                        whiteInd = whiteInd[whiteInd[:, 0] < self.imSlice.shape[1], :]
-                        new_index_intensity = self.imSlice[whiteInd[:, 1], whiteInd[:, 0]]
-
-                        std_strategy = False
-                        if std_strategy:
-                            std_d = new_index_intensity.std()
-                            index_proximity = (new_index_intensity > (center_intensity - 20*std_d)) * (new_index_intensity < (
-                                    center_intensity + 20*std_d))
-                            whiteInd = whiteInd[index_proximity, :]
-                            try:
-                                whiteInd = seperate_lcc(whiteInd, [int(yc_mp), int(xc_mp)])
-                            except:
-                                pass
-                        else:
-                            from skimage.segmentation import flood
-                            #seg_c =  self.segSlice[int(yc_mp), int(xc_mp)]
-                            segs =self.segSlice[whiteInd[:, 1], whiteInd[:, 0]]
-                            #ind_seg = segs != seg_c
-                            min_whit = whiteInd.min(0)
-                            from scipy.ndimage import gaussian_filter
-                            a1 = whiteInd[:,[1,0]] - min_whit[[1,0]]
-                            im1 = np.zeros(a1.max(0) + 1)
-                            seg1 = np.zeros_like(im1)
-                            try:
-                                im1[tuple(zip(*a1))] = new_index_intensity# im1[a1[:, 1], a1[:, 0]] = new_index_intensity
-                                seg1[tuple(zip(*a1))] = segs
-                            except:
-                                pass
-                            debug = False
-                            if debug:
-                                ims = np.zeros_like(self.imSlice)
-                                ims[tuple(zip(*whiteInd[:, [1, 0]]))] = 0
-                                ims[int(yc_mp), int(xc_mp)] = 1000
-                                a1 = whiteInd[:, [1, 0]] - min_whit[[1, 0]]
-                                im1 = np.zeros(a1.max(0) + 1)
-                                im1[tuple(zip(*a1))] = new_index_intensity
-
-                                ims = self.imSlice.copy()
-                                ims[tuple(zip(*whiteInd[:, [1, 0]]))] = 0
-                                ims[int(yc_mp), int(xc_mp)] = 1000
-                                #whit = np.argwhere(ind_sel)[:, [1, 0]] + min_whit[[1, 0]]
-                                #ims[tuple(zip(*whit))] = 0
-
-                                #import matplotlib.pyplot as plt
-                                #plt.imshow(ims)
-                                #plt.show()
-
-                            seed_point = (int(yc_mp) - min_whit[1], int(xc_mp) - min_whit[0])
-
-                            im1 = cv2.equalizeHist(im1.astype(np.uint8))
-                            #im1 = cv2.GaussianBlur(im1, (0, 0), 1)
-
-                            ind_sel = flood(im1, seed_point, connectivity=1,
-                                      tolerance=self._tol_cricle_tool*im1.std())*im1
-                            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-                            ind_sel = cv2.morphologyEx((ind_sel > 0).astype(np.float32), cv2.MORPH_CLOSE,
-                                                           kernel)
-
-                            im_l, im_f = LargestCC(ind_sel, 1)
-                            if im_f.shape[0] > 1:
-                                index_sel = im_l[seed_point[1], seed_point[0]]
-                                ind_sel = (im_l == index_sel).astype('int')
-
-                            whit = np.argwhere(ind_sel)[:, [0, 1]] + min_whit[[1, 0]]
-                            whiteInd = np.c_[whit[:,[1,0]], np.full(whit.shape[0], whiteInd[0, 2])]
-                            #try:
-                            #    whiteInd = seperate_lcc(whiteInd, [int(yc_mp), int(xc_mp)])
-                            #except:
-                            #    pass
-                            """
-                            ind_seg = seg1 == seg_c
-                            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
-                            _, labels, centers = cv2.kmeans(np.float32(im1.reshape((-1, 2))), 2, None, criteria, 2,
-                                                            cv2.KMEANS_RANDOM_CENTERS)
-                            segmented_image = centers[labels.flatten()]
-                            segmented_image = segmented_image.reshape(im1.shape)
-                            seg_c = segmented_image[int(yc_mp)-min_whit[0], int(xc_mp)-min_whit[1]]
-                            (segmented_image-seg_c)
-
-                            from MELAGE.utils.utils import Threshold_MultiOtsu
-                            num_class = 3
-
-                            ths = Threshold_MultiOtsu(im1, num_class)
-
-                            for i in range(3):
-                                if i == 0:
-                                    im1[im1 <= ths[i]] = i
-                                elif i == len(ths):
-                                    im1[im1 >= ths[i - 1]] = i
-                                    print(i)
-                                else:
-                                    im1[(im1 <= ths[i]) * (im1 > ths[i - 1])] = i
-
-                            
-                            prob = np.exp(-(im1 - im1[ind_seg].mean()) ** 2)
-                            prob = gaussian_filter(prob, sigma=2)
-                            ind_sel = prob > prob.mean()
-                            whit = np.argwhere(ind_sel)[:,[1,0]]+min_whit[[1,0]]
-                            whiteInd = np.c_[whit, np.full(whit.shape[0], whiteInd[0, 2])]
-
-
-                            prob = np.exp(-(new_index_intensity - new_index_intensity[~ind_seg].mean()) ** 2)
-                            ind_sel = prob>0.5
-                            whiteInd = whiteInd[ind_sel, :]
-                            
-                            
-                            segs[ind_seg] = 0
-                            segs[~ind_seg]=1
-                            #X = np.concatenate([np.argwhere(ind_seg), self.imSlice[ind_seg].reshape(-1, 1)], 1)
-                            X = np.concatenate([whiteInd[:, [1, 0]]], 1)
-                            theta, residuals, rank, s = np.linalg.lstsq(
-                                X,segs, rcond=None)
-                            pred = np.dot(X, theta)
-                            X_new = np.concatenate([whiteInd[:, [1, 0]]], 1)
-                            pred_new = np.dot(X_new, theta).squeeze()
-                            tol = 0.5
-                            ind_sel = (pred_new<=1+tol)*(pred_new>=1-tol)
-                            whiteInd = whiteInd[ind_sel,:]
-                            """
-                        whiteInd, _ = permute_axis(whiteInd, edges, self.currentWidnowName)
-                        self.segChanged.emit(whiteInd.astype("int"), self.currentWidnowName, self.colorInd, self.sliceNum)
-                        self.polygon_info.append([polygonC.centroid.x, polygonC.centroid.y, polygonC.area])
-                        self.update()
-                    except Exception as e:
-                        print(e)
-
-
+            if self._NenabledCircle > 0 and self._magic_slice is not None:
+                # 1. Get Mouse Position & Real World Coordinates
+                mask_indices = np.any(self._magic_slice > 0, axis=-1)
+                if np.any(mask_indices):
+                    # 2. Update the Actual Segmentation Data
+                    # self.segSlice is likely shape (H, W)
+                    self.segSlice[mask_indices] = self.colorInd
+                    y_idx, x_idx = np.where(mask_indices)
+                    # Stack into standard format: [[x, y, z], [x, y, z], ...]
+                    # self.sliceNum is the current slice depth (Z)
+                    whiteInd = np.column_stack((
+                        x_idx,
+                        y_idx,
+                        np.full_like(x_idx, self.sliceNum)
+                    ))
+                    whiteInd, _ = permute_axis(whiteInd, None, self.currentWidnowName)
+                    self.segChanged.emit(whiteInd.astype("int"), self.currentWidnowName, self.colorInd, self.sliceNum)
+                    self._magic_slice = None
+                    self.makeObject()
+                    self.update()
 
         elif self.enabledRuler: # if ruler option is activated
             if 'points' in self.rulerPoints[self.N_rulerPoints]:
@@ -2174,7 +2073,7 @@ class GLWidget(QOpenGLWidget):
                     #if whiteInd is not None:
                      #   self.segSlice[tuple(zip(*whiteInd))] = self.colorInd
                     self.segChanged.emit(whiteInd.astype("int"), self.currentWidnowName, self.colorInd, self.sliceNum)
-                    self.polygon_info.append([polygonC.centroid.x, polygonC.centroid.y, polygonC.area])
+                    #self.polygon_info.append([polygonC.centroid.x, polygonC.centroid.y, polygonC.area])
                     self.update()
                 except Exception as e:
                     print(e)
@@ -2268,6 +2167,8 @@ class GLWidget(QOpenGLWidget):
             glEnd()
     """
 
+
+
     def drawImPolygon(self): # draw polygons
         def changeAccordingToWN(points, windowname):
             if windowname == 'coronal':
@@ -2278,51 +2179,31 @@ class GLWidget(QOpenGLWidget):
                     points = np.array(points)[:, [2, 0, 1]]
                     return points
 
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+        glDisable(GL_LIGHTING)
 
+        self.program[1].bind()
 
+        # Enable position array (we will update the pointer inside _draw_buffer)
+        self.program[1].enableAttributeArray(self.program[1].vertPosAttrId)
 
-        #glPushMatrix()
-        glPushAttrib(GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT)
-        glMatrixMode(GL_MODELVIEW)
-
-
-        glUseProgram(self.program[1].programId())
+        # Set Uniforms
         glUniformMatrix4fv(self.program[1].vertModelViewAttrId, 1, GL_FALSE, self.mvpMatrix)
 
+        color_loc = glGetUniformLocation(self.program[1].programId(), "my_color")
+        if color_loc != -1:
+            glUniform4fv(color_loc, 1, self.colorObject)
 
-
-        self.program[1].enableAttributeArray(self.program[1].vertTexCoordAttrId)
-        self.program[1].setAttributeArray(self.program[1].vertTexCoordAttrId, self.coord)
-        self.program[1].enableAttributeArray(self.program[1].vertPosAttrId)
-        self.program[1].setAttributeArray(self.program[1].vertPosAttrId, self.vertex)
-
-        # set brightness/contrast
-
-        # self.deinterlace = [100, 0, 0]
-        color_location = glGetUniformLocation(self.program[1].programId(), "my_color")
-        glUniform4fv(color_location, 1, self.colorObject)
-
-
-        glDisable(GL_LIGHTING)
-        glNormal3f(0.5, 1.0, 1.0)
-        glLineWidth(1.0)
-        glClearColor(1.0, 0.0, 0.0, 1.0)
-
-        # antialias
-        glEnable(GL_LINE_SMOOTH)
-        glEnable(GL_BLEND)
-
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
-
-        glUniform4fv(color_location, 1, self.colorObject)
         if len(self.points)>1:
-            self.NewPoints.emit(self.points, self.currentWidnowName)
+            #self.NewPoints.emit(self.points, self.currentWidnowName)
 
             glBegin( GL_LINE_STRIP )  # These vertices form a closed polygon
             #glColor3f(1.0, 0.0, 0.0)
             for (x, y, z) in self.points:
-
                 glVertex2f(x, y)
             glEnd()
 
@@ -2339,8 +2220,9 @@ class GLWidget(QOpenGLWidget):
 
         if len(self.penPoints)>2:
             #self.NewPoints.emit(self.penPoints, None)
-            polygonC = ConvertPointsToPolygons(self.penPoints, width=self.widthPen)
-            penPoints = list(polygonC.exterior.coords)
+            penPoints = self._cached_pen_poly
+
+            
             glLineWidth(1)
             glBegin( GL_LINE_STRIP )  # These vertices form a closed polygon
             #glColor3f(1.0, 0.0, 0.0)
@@ -2348,6 +2230,7 @@ class GLWidget(QOpenGLWidget):
                 glVertex2f(x, y)
             glEnd()
             glLineWidth(1.0)
+
 
         if self.senderPoints is not None: # arrange points arrray according to the windows information
             points = changeAccordingToWN(self.senderPoints, self.senderWindow)
@@ -2359,10 +2242,9 @@ class GLWidget(QOpenGLWidget):
             glEnd()
             glLineWidth(1.0)
 
-        glUseProgram(0)
+        self.program[1].disableAttributeArray(self.program[1].vertPosAttrId)
+        self.program[1].release()
         glPopAttrib()
-        # glPopMatrix()
-        glMatrixMode(GL_MODELVIEW)
 
 
     def DrawerasePolygon(self):
@@ -2446,48 +2328,61 @@ class GLWidget(QOpenGLWidget):
         glPopMatrix()
 
 
-    def DrawCricles(self, points):
-        """
-        Draw circle to segment image
-        :param points:
-        :return:
-        """
 
+    def DrawCircles(self, points):
+        """
+        Optimized software cursor drawing using Vertex Arrays (PyOpenGL direct).
+        """
+        if len(points)==0:
+            return
 
+        # 1. Prepare Data
+        # Ensure it is 32-bit float and contiguous (flattened)
+        vertex_data = np.array(points, dtype=np.float32).flatten()
+
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
         glPushMatrix()
-        glPushAttrib(GL_CURRENT_BIT)
 
-        glUseProgram(self.program[1].programId())
-        glUniformMatrix4fv(self.program[1].vertModelViewAttrId, 1, GL_FALSE, self.mvpMatrix)
+        try:
+            self.program[1].bind()
 
-        self.program[1].enableAttributeArray(self.program[1].vertTexCoordAttrId)
-        self.program[1].setAttributeArray(self.program[1].vertTexCoordAttrId, self.coord)
-        self.program[1].enableAttributeArray(self.program[1].vertPosAttrId)
-        self.program[1].setAttributeArray(self.program[1].vertPosAttrId, self.vertex)
+            # Send Matrix
+            glUniformMatrix4fv(self.program[1].vertModelViewAttrId, 1, GL_FALSE, self.mvpMatrix)
 
+            # Set Color (Yellow)
+            color_location = glGetUniformLocation(self.program[1].programId(), "my_color")
+            if color_location != -1:
+                glUniform4fv(color_location, 1, [1.0, 1.0, 0.0, 1.0])
 
+            glDisable(GL_DEPTH_TEST)  # Ensure cursor is always on top
+            glEnable(GL_LINE_STIPPLE)
+            glLineStipple(1, 0x00FF)
+            glLineWidth(2.0)
 
-        # color location
-        color_location = glGetUniformLocation(self.program[1].programId(), "my_color")
-        glUniform4fv(color_location, 1, [1,1,0, 1])
-        #glLineStipple(1, 0x00FF)  # [1] dashed lines
-        glEnable(GL_LINE_STIPPLE)
-        #glDisable(GL_LIGHTING)
-        glEnable(GL_LIGHTING)
-        glNormal3f(0.5, 1.0, 1.0)
-        glLineWidth(2.0)
+            # 2. Enable Attribute
+            self.program[1].enableAttributeArray(self.program[1].vertPosAttrId)
 
-        glBegin( GL_LINE_LOOP )  # These vertices form a closed polygon
-        glColor3f(1.0, 1.0, 0.0)  # Red
-        for (x, y, z) in points:
-            glVertex3f(x, y, z)
-        glEnd()
+            # 3. Pass Data (The Fix)
+            # We use standard OpenGL instead of Qt's wrapper for the array pointer
+            glVertexAttribPointer(
+                self.program[1].vertPosAttrId,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                0,
+                vertex_data
+            )
 
-        glUseProgram(0)
-        glDisable(GL_LINE_STIPPLE)
-        glPopAttrib()
-        glPopMatrix()
+            # 4. Draw
+            glDrawArrays(GL_LINE_LOOP, 0, len(points))
 
+            # 5. Cleanup
+            self.program[1].disableAttributeArray(self.program[1].vertPosAttrId)
+            self.program[1].release()
+
+        finally:
+            glPopAttrib()
+            glPopMatrix()
 
 
     def DrawRulerLines(self):
@@ -2535,211 +2430,250 @@ class GLWidget(QOpenGLWidget):
                 glPopAttrib()
                 glPopMatrix()
 
-
-
-
     def makeObject(self):
         """
-        Create object before painting
-        :return:
+        Optimized makeObject:
+        1. Reuses Texture ID (No GPU re-allocation)
+        2. Optimized Segmentation Overlay (No massive array copying)
         """
-        activate_kspace = False
-
         if self.imSlice is None:
             return
-        if self.BandPR1 > 0 or self.contrast!=1.0 or self.hamming: # if image enhancement is active
+
+        # --- 1. PREPARE IMAGE DATA (CPU) ---
+        activate_kspace = False
+        if self.BandPR1 > 0 or self.contrast != 1.0 or self.hamming:
             activate_kspace = True
-        imslice = self.imSlice
-        if activate_kspace:
-            if self.sliceNum in self._kspaces.keys():
+
+        # Fast Copy
+        imslice = self.imSlice.copy()
+
+        # Handle RGB input check
+        is_rgb = (imslice.ndim == 3 and imslice.shape[2] in [3, 4])
+
+        # [HEAVY MATH BLOCK - KSPACE]
+        # Kept mostly same, but protected by logic checks
+        if activate_kspace and not is_rgb:
+            # Check cache for KSpace
+            if self.sliceNum in self._kspaces:
                 kspace = np.copy(self._kspaces[self.sliceNum])
             else:
                 kspace = fftshift(fft(ifftshift(imslice)))
                 self._kspaces[self.sliceNum] = np.copy(kspace)
 
-
-            # band pass filter
+            # BandPass Filter
             if self.BandPR1 > 0:
+                # Note: Imports inside function are slow. Move 'from melage...' to top of file if possible.
                 from melage.utils.utils import computeAnisotropyElipse
-                self.insideElipse = computeAnisotropyElipse(kspace)
-                #SigmaSquared = (self.imWidth*self.BandPR1/10)** 2
-                #g = np.array([np.exp(-(np.arange(0,self.imWidth) - self.imWidth/2)** 2 / SigmaSquared)]*self.imHeight)
-                #TwoDGauss = g*g
-                #HighPass = fftshift(TwoDGauss);
-                #kspace*=TwoDGauss
 
-                r = np.hypot(*kspace.shape) / 2 * (self.BandPR1/2)
-                r2 = self.BandPR2*r
-                r2=0
-                rows, cols = np.array(kspace.shape, dtype=int)
-                a, b = np.floor(np.array((rows, cols)) / 2).astype("int")
+                # Re-calculating grids every frame is slow.
+                # Ideally, cache 'x, y' grids in __init__ if image size is constant.
+                rows, cols = kspace.shape
+                a, b = rows // 2, cols // 2
                 y, x = np.ogrid[-a:rows - a, -b:cols - b]
-                #xx = kspace.shape[0] // 2
-                #yy = kspace.shape[1] // 2
-                #xpx = 1
-                # = np.copy(kspace[xx-xpx:xx+xpx, yy-xpx:yy+xpx])
 
+                r = np.hypot(rows, cols) / 2 * (self.BandPR1 / 2)
+                r2 = self.BandPR2 * r  # Note: your code had r2=0 overriding this immediately?
 
-                notMask = self.insideElipse(x, y, r2)
-                valcenter = np.copy(kspace[notMask])
+                self.insideElipse = computeAnisotropyElipse(kspace)
+
+                # Create Masks
                 mask = self.insideElipse(x, y, r)
 
-                kspace[mask] = (self.BandPR2-0.5)*2*kspace[mask]
-                #kspace[xx - xpx:xx + xpx, yy - xpx:yy + xpx] = valcenter
-                kspace[notMask] = valcenter
+                # Apply Filter
+                # Optimized to avoid double indexing
+                kspace[mask] *= (self.BandPR2 - 0.5) * 2
 
+            # Contrast
+            if self.contrast != 1.0:
+                cx, cy = kspace.shape[0] // 2, kspace.shape[1] // 2
+                kspace[cx - 2:cx + 2, cy - 2:cy + 2] *= self.contrast
 
-
-
-            if self.contrast!=1.0:
-
-                x = kspace.shape[0] // 2
-                y = kspace.shape[1] // 2
-                kspace[x-2:x+2, y-2:y+2] *= self.contrast
-
+            # Hamming
             if self.hamming:
+                if kspace.ndim == 2:
+                    h_x, h_y = kspace.shape
+                    window = np.outer(np.hamming(h_x), np.hamming(h_y))
+                    kspace *= window
+                else:
+                    h_x, h_y, _ = kspace.shape
+                    window = np.outer(np.hamming(h_x), np.hamming(h_y))
+                    kspace *= window[..., None]
 
-                x, y = kspace.shape
-                window = np.outer(np.hamming(x), np.hamming(y))
-                kspace*=window
+            # Visualization Logic (IFFT)
+            imslice = np.absolute(fftshift(ifft(ifftshift(kspace))))
 
-            vis = False
-            if vis:
-                kspaceAbs = np.absolute(kspace)
-                if kspaceAbs.max() > 0:
-                    scaling_c = np.power(10., -3)
-                    np.log1p(kspaceAbs * scaling_c, out=kspaceAbs)
-                    # normalize between 0 and 255
-                    fmin = float(kspaceAbs.min())
-                    fmax = float(kspaceAbs.max())
-                    if fmax != fmin:
-                        coeff = fmax - fmin
-                        kspaceAbs[:] = np.floor((kspaceAbs[:] - fmin) / coeff * 255.)
+        # --- 2. PREPARE SEGMENTATION BLEND (CPU) ---
 
-
-                #imslice = np.require(kspaceAbs, np.uint8)
-                imslice = kspaceAbs
-            else:
-                imslice = np.absolute(fftshift(ifft(ifftshift(kspace))))
-
-
-
-
-
-        ##############################################################################
-        glEnable(GL_TEXTURE_2D) # Enable texturing
-        glEnable(GL_COLOR_MATERIAL)
-
-        self.textureID = glGenTextures(1) # Obtain an id for the texture
-        glBindTexture(GL_TEXTURE_2D, self.textureID) # Set as the current texture
-        if self.smooth:
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        else:
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
-
-        glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE)# automatic mipmap
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
-        #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
-
-
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-        #glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
-
-        #glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.imWidth, self.imHeight, 0,
-                             #GL_RGB, GL_UNSIGNED_BYTE,
-                             #self.imdata)
-
-        glPixelTransferf(GL_RED_SCALE, 1)
-        glPixelTransferf(GL_GREEN_SCALE, 1)
-        glPixelTransferf(GL_BLUE_SCALE, 1)
-
-        if self.n_colors>1:
-            if self.sliceNum not in self._threshold_image or self.n_colors!= self._n_colors_previous\
-                    or activate_kspace:
+        # Standardize imslice to RGB for display
+        # Check threshold logic
+        if self.n_colors > 1:
+            if (self.sliceNum not in self._threshold_image or
+                    self.n_colors != self._n_colors_previous or activate_kspace):
                 self.create_histogram(imslice, self.n_colors)
                 self._n_colors_previous = self.n_colors
-            imslice = self._threshold_image[self.sliceNum].copy()
-            imslice_seg = imslice
 
+            imslice_seg = self._threshold_image[self.sliceNum].copy()
         else:
-            imslice = np.tile(np.expand_dims(imslice, -1), 3)
-        if self.showSeg:
-            imSeg = np.ones_like(self.segSlice.astype(np.float64))*10000
-            imSeg = np.tile(np.expand_dims(imSeg, -1), 3)
-            #imSeg[:,3]= 1
-            uq = np.unique(self.segSlice.astype(np.float64))
-            if 9876 not in self.colorInds:#len(self.colorsCombinations):
-                selected_ud = self.colorInds
+            # If grayscale, make RGB so we can draw colored segmentation on it
+            if imslice.ndim == 2:
+                imslice_seg = cv2.cvtColor(imslice.astype(np.uint8), cv2.COLOR_GRAY2RGB)
             else:
-                selected_ud = uq
-            for u in uq:
-                if u == 0:
-                    continue
-                elif u == 1500:
-                    color = [0.9,0.5,0.0,1]
-                    ind = self.segSlice == u
-                    try:
-                        imSeg[ind, 0] = color[0]*255.0
-                        imSeg[ind, 1] = color[1]*255.0
-                        imSeg[ind, 2] = color[2]*255.0
-                    except:
-                        print('Please check the color index {}'.format(u))
-                if u in selected_ud and u in self.colorsCombinations:
-                    color = self.colorsCombinations[u]
-                    ind = self.segSlice == u
-                    try:
-                        imSeg[ind, 0] = color[0]*255.0
-                        imSeg[ind, 1] = color[1]*255.0
-                        imSeg[ind, 2] = color[2]*255.0
-                    except:
-                        print('Please check the color index {}'.format(u))
-                #imslice[ind, 3] = color[3]
+                imslice_seg = imslice.copy()  # Work on copy
 
-            ind_total = imSeg.sum(2)!=30000
+        if self.showSeg and hasattr(self, 'segSlice') and self.segSlice is not None:
             try:
-                imslice_seg = imslice
-                if self._magic_slice is not None:
-                    seg = self._magic_slice
-                    imSeg[seg > 0] = seg[seg > 0]
-                    ind_total = imSeg.sum(2) != 30000
+                # A. PREPARE LUT (Look Up Table)
+                # Only do this once if colors rarely change!
+                max_id = int(self.segSlice.max())
+                if max_id > 0:
+                    lut = np.zeros((max_id + 1, 3), dtype=np.uint8)
+                    mask_active = np.zeros(max_id + 1, dtype=bool)
 
-                if ind_total.sum()>0:
+                    show_all = 9876 in self.colorInds
 
-                    imslice_seg[ind_total, :] = cv2.addWeighted(imslice[ind_total, :].astype('uint8'), 1-self.intensitySeg,
-                                                                imSeg[ind_total, :].astype('uint8'), self.intensitySeg, 1)
+                    # Iterate dictionary is fast (small N)
+                    for u, color in self.colorsCombinations.items():
+                        if u > max_id or u == 0: continue
+                        if show_all or (u in self.colorInds):
+                            lut[int(u)] = (np.array(color[:3]) * 255).astype(np.uint8)
+                            mask_active[int(u)] = True
 
-                    #ind_total = (seg-self.segSlice>0) > 0
-                    #if ind_total.sum()>0:
-                    #    imslice_seg[ind_total, :] = cv2.addWeighted(imslice[ind_total, :].astype('uint8'), 1 - self.intensitySeg,
-                    #                              self._magic_slice[ind_total, :].astype('uint8'), self.intensitySeg, 1)
+                    # B. FAST INDEXING (The Speedup)
+                    # Instead of creating a huge "imSeg" array, we just find pixels to change
+                    seg_indices = self.segSlice.astype(np.int32)
+
+                    # Boolean mask of pixels that actually have a label
+                    valid_pixels_mask = mask_active[seg_indices]
+
+                    # C. BLENDING
+                    # Only operate on pixels that are True in valid_pixels_mask
+                    if np.any(valid_pixels_mask):
+                        # Extract the RGB colors for valid pixels
+                        overlay_rgb = lut[seg_indices[valid_pixels_mask]]
+                        background_rgb = imslice_seg[valid_pixels_mask]
+
+                        # Manual Blend: Result = (BG * (1-alpha)) + (Overlay * alpha)
+                        # This replaces cv2.addWeighted which requires full-frame arrays
+                        alpha = self.intensitySeg
+                        blended = cv2.addWeighted(background_rgb, 1 - alpha, overlay_rgb, alpha, 0)
+
+                        # Put pixels back
+                        imslice_seg[valid_pixels_mask] = blended
+
+                    # D. MAGIC SLICE HANDLING (If applicable)
+                    if self._magic_slice is not None:
+                        # Assume magic slice is an overlay mask
+                        magic_mask = self._magic_slice > 0
+                        if np.any(magic_mask):
+                            imslice_seg[magic_mask] = cv2.addWeighted(
+                                imslice_seg[magic_mask], 1 - self.intensitySeg,
+                                self._magic_slice[magic_mask].astype(np.uint8), self.intensitySeg, 0
+                            )
+
             except Exception as e:
-                print(e)
-            if len(imslice)!=0:
-                imslice_seg = imslice_seg.clip(0, 255)
+                print(f"Seg Error: {e}")
+
+        if hasattr(self, '_magic_slice') and self._magic_slice is not None:
+            # Optimized: Only touch pixels where magic slice > 0
+            magic_mask = self._magic_slice > 0
+
+            if np.any(magic_mask):
+                # Extract pixels
+                bg_magic = imslice_seg[magic_mask]
+                fg_magic = self._magic_slice[magic_mask].astype(np.uint8)
+
+                # Convert FG to RGB if it's grayscale (likely is)
+                # 3. Handle Channel Matching (Robust Fix)
+                bg_channels = 1 if bg_magic.ndim == 1 else bg_magic.shape[-1]
+
+                if bg_channels == 1:
+                    # CASE 1: Background is Grayscale (N,)
+                    # We must force Foreground to be Grayscale too (N,)
+                    fg_magic = fg_magic  # It is already 1D grayscale
+
+                    # (Optional) If you really WANTED color, you should have converted
+                    # imslice_seg to RGB earlier in the function.
+
+                else:
+                    # CASE 2: Background is Color (N, 3) or (N, 4)
+                    # We must stack Foreground to match
+                    fg_magic = np.stack((fg_magic,) * bg_channels, axis=-1)
+
+                # 4. Blend
+                alpha = self.intensitySeg
+                blended_magic = cv2.addWeighted(bg_magic, 1 - alpha, fg_magic, alpha, 0).squeeze()
+
+
+
+                # Apply back
+                imslice_seg[magic_mask] = blended_magic
+        # Ensure correct type for OpenGL
+        self._imslice_seg = np.ascontiguousarray(imslice_seg, dtype=np.uint8)
+
+        # --- 3. UPLOAD TO GPU (Optimized) ---
+    def _uploadTexture(self):
+        if not hasattr(self, 'imWidth'):
+            return
+        _imslice_seg = self._imslice_seg
+        glEnable(GL_TEXTURE_2D)
+
+        # 1. Initialization (Only runs ONCE or when size changes)
+        # Check if texture exists AND if dimensions match (handle video resize)
+        if (not hasattr(self, 'textureID') or
+                getattr(self, '_last_w', -1) != self.imWidth or
+                getattr(self, '_last_h', -1) != self.imHeight):
+
+            # Store dimensions to detect changes later
+            self._last_w = self.imWidth
+            self._last_h = self.imHeight
+
+            if hasattr(self, 'textureID'):
+                glDeleteTextures([self.textureID])  # Clean up old if resizing
+
+            self.textureID = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, self.textureID)
+
+            # --- SPEED OPTIMIZATION 1: DISABLE MIPMAPS ---
+            # Medical/Video images are usually viewed 1:1 or zoomed IN.
+            # Mipmaps are useless here and cost massive performance.
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+
+            # Setup Filters
+            filter_mode = GL_LINEAR if self.smooth else GL_NEAREST
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_mode)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_mode)
+
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
+
+            # Allocate GPU Memory (But don't strictly need to send data yet)
+            # We pass 'None' as data just to reserve the VRAM block
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.imWidth, self.imHeight, 0,
+                         GL_RGB, GL_UNSIGNED_BYTE, None)
+
         else:
-            imslice_seg = imslice
+            # Bind existing texture
+            glBindTexture(GL_TEXTURE_2D, self.textureID)
 
+            # Update filter only if needed (avoids state change overhead)
+            # You can skip this block if self.smooth doesn't change often
+            filter_mode = GL_LINEAR if self.smooth else GL_NEAREST
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_mode)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_mode)
 
+        # --- SPEED OPTIMIZATION 2: USE SUBIMAGE ---
+        # Ensure data is contiguous C-array (Crucial for driver speed)
+        if not _imslice_seg.flags['C_CONTIGUOUS']:
+            imslice_seg = np.ascontiguousarray(_imslice_seg, dtype=np.uint8)
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, self.imWidth, self.imHeight, 0,
-                             GL_RGB, GL_UNSIGNED_BYTE,
-                             imslice_seg)
+        # Upload pixels to EXISTING memory (Zero allocation)
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.imWidth, self.imHeight,
+                        GL_RGB, GL_UNSIGNED_BYTE, _imslice_seg)
 
-        glDisable(GL_COLOR_MATERIAL)
-        glDisable(GL_TEXTURE_2D)  # Disable texturing
+        glDisable(GL_TEXTURE_2D)
 
-
-        ##############################################################################
-
-        #genList = glGenLists(1)
-        #glNewList(1, GL_COMPILE)
 
 
     def updateEvents(self):

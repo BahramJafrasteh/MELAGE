@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget
 import nibabel as nib
-
+from .ui_schema import *
+from .ui_builder import UIBuilder
 class MelagePlugin:
     """
     The base class "contract" for all MELAGE plugins.

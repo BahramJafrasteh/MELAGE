@@ -3,14 +3,15 @@ __AUTHOR__ = 'Bahram Jafrasteh'
 
 import sys
 sys.path.append('..')
-from melage.utils.utils import Item, Item_equal, normalize_mri, convert_to_ras, make_affine, fast_split_min_dim, get_size_minDim, guess_num_image_index
+from melage.utils.utils import Item, Item_equal, normalize_mri, convert_to_ras, make_affine, fast_split_min_dim, get_global_crop_box, guess_num_image_index, detect_modality_and_window
 import SimpleITK as sitk
 from datetime import datetime
 import numpy as np
 import nibabel as nib
 import re
 import os
-
+import cv2
+from .videoarray import VideoArrayProxy, VideoLabelProxy
 class readData():
     """
     This is the main file to read images
@@ -31,9 +32,12 @@ class readData():
         self.rotationMat = np.eye(4) # roation matrix
         self.metadata = {}
         self.npEdge = []
+        self._isRGB = False
         self._npSeg = None
         self._num_dims = 3
+        self.current_frame = 0
         self.type = type
+        self.isChunkedVideo = False
         #if type=='t1':
         #    self.target_system = target_system#'IPL'
         #elif type == 'eco':
@@ -95,12 +99,19 @@ class readData():
             np.fill_diagonal(affine[:-1, :-1], self.ImSpacing)
 
         data = self.npImage
-        self._imChanged = nib.Nifti1Image(data, affine, hdr)
-        self._imChanged.header.set_zooms(np.array(self.ImSpacing))
+        if data.ndim==4:
+            initial_data = data[::-1, ::-1, ::-1, :].transpose(2, 1, 0, 3)
+        elif data.ndim == 3:
+            initial_data = data[::-1, ::-1, ::-1].transpose(2, 1, 0)
+        self._imChanged = nib.Nifti1Image(initial_data, affine, hdr)
+        if len(self.ImSpacing)==3 and data.ndim==4:
+            self._imChanged.header.set_zooms(np.append(np.array(self.ImSpacing), 1))
+        else: #TODO need improvement
+            self._imChanged.header.set_zooms(np.array(self.ImSpacing))
         transform, self.source_system = convert_to_ras(self._imChanged.affine, self.target_system)
         self._imChanged = self._imChanged.as_reoriented(transform)
         self.im = self._imChanged.__class__(self._imChanged.dataobj[:], self._imChanged.affine, self._imChanged.header)
-        if hasattr(self, 'npImages'):
+        if hasattr(self, 'npImages'): # TODO Need to be improved
             self.ims = nib.Nifti1Image(self.npImages, affine, hdr)
             self.ims = self.ims.as_reoriented(transform)
 
@@ -654,6 +665,51 @@ class readData():
             self.im = resample_to_spacing(self.im, newSpacing, method)
             #print('resampling')
 
+
+
+
+
+    def _video_to_nifti0(self, file_path):
+        """
+        Reads an MP4/AVI file and returns a Nifti1Image object.
+        Maps Video Time -> Volume Depth (Z).
+        """
+        cap = cv2.VideoCapture(file_path)
+        frames = []
+
+        if not cap.isOpened():
+            raise IOError(f"Could not open video file: {file_path}")
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # OpenCV reads in BGR, standard NIfTI/Qt expects RGB
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame)
+
+        cap.release()
+
+        if not frames:
+            return None
+        frames = get_global_crop_box(frames, threshold=10)
+        # 1. Stack frames: Shape is (Time, Height, Width, 3)
+        data = np.array(frames, dtype=np.uint8)
+
+        # 2. Transpose to medical orientation: (Height, Width, Time/Depth, RGB)
+        # This makes the "Play" slider act like the "Slice" scroll
+        data = np.transpose(data, (1, 2, 0, 3))
+
+        # 3. Create a fake Affine (Identity Matrix)
+        # Since video has no "World Coordinates", we place it at 0,0,0
+        affine = np.eye(4)
+
+        # 4. Wrap in Nifti1Image
+        img = nib.Nifti2Image(data, affine)
+
+        return img
+
+
     def readDICOM(self, file, type='eco', ind_series=0):
         """
         Read DICOM image
@@ -773,6 +829,32 @@ class readData():
         self.im_metadata['Affine'] = self.im.affine
 
 
+
+    def read_video_segmentations(self, file):
+        """
+        Read video segmentation file
+        :param file:
+        :return:
+        """
+        # Load video labels as if it were a NIfTI object
+        if hasattr(self, 'seg_ims') and hasattr(self.seg_ims, 'dataobj'):
+            if hasattr(self.seg_ims.dataobj, 'close'):
+                self.seg_ims.dataobj.close()  # Closes label thread
+
+        proxy_data = VideoLabelProxy(parent_video_proxy=self.video_im, label_file_path=file)
+        ims = proxy_data
+        if ims is None:
+            print("Error reading video segmentation.")
+            return [False, False, 'Failed']
+
+        self.seg_ims = ims
+        # Set the initial active segmentation slice (Chunk 0)
+        # This matches self.im (Video Chunk 0)
+        self.npSeg = self.seg_ims.get_frame(self.current_frame)
+
+
+        return [self.npSeg, True, 'Success']
+
     def readNIFTI(self, file, type = 'eco'):
         """
         Read file with nifti format
@@ -780,33 +862,93 @@ class readData():
         :param type:
         :return:
         """
-        ims = nib.load(file) # read image
+        # --- STEP 1: Detect Format & Load ---
+        ext = file.lower().split('.')[-1]
+        is_mp4 = False
+        if ext in ['mp4', 'avi', 'mov', 'mkv']:
+            is_mp4 = True
+            # Load video as if it were a NIfTI object
+            if hasattr(self, 'ims') and hasattr(self.ims.dataobj, 'close'):
+                self.ims.dataobj.close()  # Closes video thread
 
+            if hasattr(self, 'seg_ims') and hasattr(self.seg_ims.dataobj, 'close'):
+                self.seg_ims.dataobj.close()  # Closes label thread
+
+
+            proxy_data = VideoArrayProxy(file)
+            affine = np.eye(4)
+            ims = proxy_data
+            if ims is None:
+                print("Error reading video.")
+                return [False, False, 'Failed']
+        else:
+            # Standard NIfTI Load
+            ims = nib.load(file)
+        is_video_proxy = isinstance(ims, VideoArrayProxy)
         dtype = ims.get_data_dtype()
         if len(dtype)>0:
             print('structured array :{}'.format(dtype))
             imsg = ims.get_fdata()
             imsg = imsg.view((imsg.dtype[0], len(imsg.dtype.names)))
             ims = nib.Nifti1Image(imsg, ims.affine, ims.header)
-        if ims.ndim>4:
-            ims = nib.Nifti1Image(ims.get_fdata().squeeze(), ims.affine, ims.header)
-        self.ims = ims
+            # Only squeeze if it is NOT our special Video Proxy.
+            # If we try to squeeze the proxy, it loads all 100GB of video and crashes.
 
-        if self.ims.ndim==4:
+            if ims.ndim > 4 and not is_video_proxy:
+                ims = nib.Nifti1Image(ims.get_fdata().squeeze(), ims.affine, ims.header)
+        self.ims = ims
+        if is_video_proxy:
+            print("Detected 5D Chunked Video")
+            # Select Chunk 0 as the default active volume
+            # Shape: (H, W, Frames, Chunks, RGB) -> Slicing 4th dim (Chunk 0)
+            # We use the proxy's internal slicer mechanism or nibabel slicing
+            delattr(self, 'ims')
+            self.video_im = ims
+            self.current_frame = ims.shape[2]//2  # Start in middle frame
+            frame0_data = self.video_im.get_frame(self.current_frame)
+
+            # Create the visual object for the viewer
+            self.im = frame0_data
+
+
+            # Store full object for slider access later
+            # self.full_video_5d = self.ims
+            self._isRGB = True
+            self.isChunkedVideo = True
+
+            # 1. Initialize the Sparse Label Proxy using the video as parent
+            self.seg_ims = VideoLabelProxy(self.video_im)
+
+
+            # 3. Set the initial active segmentation slice (Chunk 0)
+            # This matches self.im (Video Chunk 0)
+            self.npImage = frame0_data
+            self.npSeg = self.seg_ims.get_frame(self.current_frame)
+            self.read_pars_video()
+
+            return [True, False, 'Success']
+
+        elif self.ims.ndim==4:
             #from nibabel.funcs import four_to_three
             min_dim, self._num_dims = guess_num_image_index(self.ims)
             #nib_images, num_dims = fast_split_min_dim(self.ims)
             #self.im = nib_images[0] # select the first image
-            if self._num_dims>1:
+            if self.ims.shape[min_dim]==3: # possible RGB images
+                transform, _ = convert_to_ras(self.ims.affine, target=self.target_system)
+                self.im = self.ims
+                self._isRGB = True
+                delattr(self, 'ims')
+            elif self._num_dims>1:
                 transform, _ = convert_to_ras(self.ims.affine, target=self.target_system)
                 #self.npImages = self.ims.as_reoriented(transform).get_fdata()
                 self.im = fast_split_min_dim(self.ims, min_dim, desired_index=0) # select the first image
             else:
                 self.im = fast_split_min_dim(self.ims, min_dim, desired_index=0) # select the first image
                 delattr(self, 'ims')
-        elif self.ims.ndim==5 or self.ims.ndim==3:
+        elif (self.ims.ndim==3 or self.ims.ndim==5):
             self.im = self.ims
             delattr(self, 'ims')
+
         else:
             return
         if file.split('.')[-1] != 'gz' and file.split('.')[-1] != 'nii' :#'delta' in self.im.header: # TODO: newly update from August 21, 2024
@@ -828,6 +970,94 @@ class readData():
         self.read_pars()
         return [found_meta_data, found_image_data, 'Success']
 
+    def update_video_and_seg_frame(self, frame_index):
+        """
+        Updates the current frame of the video and segmentation.
+        Call this when the frame slider is moved.
+        """
+        # 1. Check if we are in Video Mode
+        if not hasattr(self, 'seg_ims'):
+            return
+
+        # 2. Update Current Frame Index
+        self.current_frame = frame_index
+
+        # 3. Update Image Slice
+        frame_data = self.video_im.get_frame(self.current_frame)
+        self.im = frame_data
+        self.npImage = frame_data
+        # 4. Update Segmentation Slice
+        seg_frame_data = self.seg_ims.get_frame(self.current_frame)
+        self.npSeg = seg_frame_data
+        self.read_pars_video(reset_seg=False)
+
+    def commit_frame_segmentation_changes(self, npSeg, frame_index = None):
+        """
+        Saves the current visible 2D segmentation into the sparse proxy.
+        Call this on mouseReleaseEvent.
+        """
+        # 1. Check if we are in Video Mode
+        if not hasattr(self, 'seg_ims'):
+            return
+
+
+        # 3. Get the modified mask (The 2D array you drew on)
+        # Ensure it is the correct shape and type
+        new_mask = npSeg.astype(np.uint8)
+        if frame_index is None:
+            frame_index = self.current_frame
+
+        print(f"Saving edits for Frame {frame_index}...")
+
+        # (Direct Proxy Access - Safe/Cleane)
+        self.seg_ims.sparse_data[frame_index] = new_mask.astype(np.uint8)
+        if frame_index == self.current_frame:
+            self.npSeg = new_mask.astype(np.uint8)
+
+
+    def read_pars_video(self, reset_seg=True, adjust_for_show=True, im_new=None, seg_new=None):
+        """
+
+        :param reset_seg: if True segmentation is removed
+        :return:
+        """
+        # assing image parameters
+        if im_new is not None:
+            self.im = im_new
+            self._read_sub_nifti()
+
+
+        # self.affine, shape = get_affine_shape(self.im)
+        self.affine = np.eye(4)
+        # self.header = self.im.header
+        num_images = self.video_im.shape[-2]
+
+        if reset_seg:
+            shape = self.npImage.shape
+            self.npSeg = np.zeros((shape[0], shape[1])).astype('int')
+        elif seg_new is not None:
+            self.npSeg = seg_new
+        # self.npEdge = np.empty((0,3))
+
+        self.ImDirection = ('R', 'A', 'S')
+        # transpose_axis_inv = [2,1,0]#self.transpose_axis[::-1]
+        transpose_axis_inv = [0, 1, 2]
+        h, w, _ = self.npImage.shape
+        self.ImExtent = (0, h, 0,w, 0,num_images)
+
+        self.ImSpacing = [1,1,1]
+        self.ImOrigin = np.array([0,0,0])[
+            transpose_axis_inv]  # qoffset_x, qoffset_y, qoffset_z
+        self.ImEnd = np.zeros(shape=(3,))
+        self.ImCenter = np.zeros(shape=(3,))
+        for i in range(3):
+            self.ImEnd[i] = self.ImOrigin[i] + (self.ImExtent[i * 2 + 1] - self.ImExtent[i * 2]) * self.ImSpacing[i]
+
+        self.ImCenter[0] = self.ImOrigin[0] + self.ImSpacing[0] * 0.5 * (self.ImExtent[0] + self.ImExtent[1])
+        self.ImCenter[1] = self.ImOrigin[1] + self.ImSpacing[1] * 0.5 * (self.ImExtent[2] + self.ImExtent[3])
+        self.ImCenter[2] = self.ImOrigin[2] + self.ImSpacing[2] * 0.5 * (self.ImExtent[4] + self.ImExtent[5])
+
+
 
     def read_pars(self, reset_seg=True, adjust_for_show=True, im_new = None, seg_new=None):
         """
@@ -847,19 +1077,29 @@ class readData():
 
         data = self.im.get_fdata()
         if adjust_for_show:
-            data = data.transpose(2, 1, 0)[::-1, ::-1, ::-1]
+            if self._isRGB:
+                data = data.transpose(2, 1, 0, 3)[::-1, ::-1, ::-1,:]
+            else:
+                data = data.transpose(2, 1, 0)[::-1, ::-1, ::-1]
 
         if data.ndim == 5 and data.shape[-1]==1:
             data = data.squeeze()
+        """
+        
         if data.ndim == 4:
             is_rgb = np.where([el == 3 for el in data.shape])[0]
             if len(is_rgb)>0:
                 dim_act = is_rgb[0]
                 data = np.mean(data,dim_act)
-
-        self.npImage = normalize_mri(data).astype(np.uint8)
+        """
+        #if not self._isRGB:
+        #    self.npImage = normalize_mri(data).astype(np.uint8)
+        #else:
+            #self.npImage = (255.0*(data - data.min())/(data.max()-data.min())).astype(np.uint8)
+        self.npImage = detect_modality_and_window(data)
         if reset_seg:
-            self.npSeg = np.zeros_like(self.npImage).astype('int')
+            shape = self.npImage.shape
+            self.npSeg = np.zeros((shape[0], shape[1], shape[2]) ).astype('int')
         elif seg_new is not None:
             self.npSeg = seg_new
         #self.npEdge = np.empty((0,3))

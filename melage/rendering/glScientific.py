@@ -6,17 +6,17 @@ sys.path.append('../')
 from melage.rendering import GLViewWidget, GLAxisItem, GLScatterPlotItem, GLGridItem, GLVolumeItem, GLPolygonItem
 from OpenGL.GL import *
 from collections import defaultdict
-from PyQt5.QtWidgets import QApplication, QWidget, QMenu, QAction, QSlider, QFileDialog
-from PyQt5.QtGui import QVector3D, QMatrix4x4
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QWidget, QMenu, QAction, QSlider, QFileDialog, QLabel
+from PyQt5.QtGui import QVector3D, QMatrix4x4, QPainter, QFont, QColor
+from PyQt5.QtCore import Qt, QRect
 import cv2
-from scipy.ndimage import gaussian_filter
-
-#from utils.polygontessellator import PolygonTessellator
+from PyQt5.QtWidgets import QToolBar, QToolButton, QVBoxLayout, QFrame, QHBoxLayout
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QSize
 from melage.utils.utils import ConvertPointsToPolygons, ConvertPToPolygons, fillInsidePol, Polygon, LargestCC
 from PyQt5.QtCore import pyqtSignal
 from functools import partial
-
+import time
 class glScientific(GLViewWidget):
     """
 
@@ -39,7 +39,8 @@ class glScientific(GLViewWidget):
         #self = gl.GLViewWidget()
         #self.installEventFilter()
         self.id = id
-        self._lastZ = 1
+        self.id = id
+        self._lastZ = 0.5  # Default to middle of the scene
         #self._image = None
         self._renderMode = 'Img'
         self._threshold = 0
@@ -85,6 +86,13 @@ class glScientific(GLViewWidget):
         #self.GLV.smooth = True
         self._UseScatter = False
 
+
+
+        self._seg_im = None
+
+        #self.opts['bgcolor'] = [0.5, 1, 0.0, 1]
+        self.opts['bgcolor'] = [0.05, 0.05, 0.05, 1]#[0.3, 0.3, 0.3, 1] # background color
+
         self._verticalSlider_1 = QSlider(self)
         self._verticalSlider_1.setOrientation(Qt.Vertical)
         self._verticalSlider_1.setObjectName("verticalSlider_6")
@@ -94,13 +102,100 @@ class glScientific(GLViewWidget):
         #self.label_1 = QLabel(self)
         #self.label_1.setAlignment(Qt.AlignCenter)
         #self.label_1.setObjectName("label_1")
-        #self._verticalSlider_1.valueChanged.connect(self.label_1.setNum)
+
+
+
+        self.initiate_actions()  # Make sure actions exist first
+        self.init_overlay_toolbar()  # <--- Add this line here
+
+        self._verticalSlider_1.valueChanged.connect(self.lbl_thresh.setNum)
         self._verticalSlider_1.valueChanged.connect(self.threshold_change)
 
-        self._seg_im = None
 
-        #self.opts['bgcolor'] = [0.5, 1, 0.0, 1]
-        self.opts['bgcolor'] = [0.05, 0.05, 0.05, 1]#[0.3, 0.3, 0.3, 1] # background color
+    def init_overlay_toolbar(self):
+        """
+        Creates a transparent overlay toolbar in the top-left corner.
+        """
+        # 1. Create a container Frame to hold buttons
+        # We parent it to 'self' so it stays on top of the OpenGL widget
+        self.overlay_frame = QFrame(self)
+        self.overlay_frame.setStyleSheet("""
+                QFrame {
+                    background-color: rgba(50, 50, 50, 150); /* Semi-transparent dark */
+                    border-radius: 5px;
+                    border: 1px solid rgba(100, 100, 100, 100);
+                }
+                QToolButton {
+                    background-color: transparent;
+                    color: white;
+                    border: none;
+                    font-weight: bold;
+                    padding: 4px;
+                }
+                QToolButton:hover {
+                    background-color: rgba(255, 255, 255, 50);
+                    border-radius: 3px;
+                }
+                QToolButton:checked {
+                    background-color: rgba(0, 200, 255, 100); /* Blue when active */
+                    border: 1px solid #00c8ff;
+                }
+            """)
+
+        # 2. Layout for the toolbar (Horizontal or Vertical)
+        layout = QHBoxLayout(self.overlay_frame)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
+
+        # 3. Create 'Draw' Button
+        # We assume self.draw_action is already defined in initiate_actions()
+        btn_draw = QToolButton()
+        btn_draw.setText("Draw / Cut")
+        # Optional: btn_draw.setIcon(QIcon("path/to/pencil.png"))
+        btn_draw.setDefaultAction(self.draw_action)  # Connects click state automatically
+        btn_draw.setCheckable(True)
+        layout.addWidget(btn_draw)
+
+        # 4. Create 'Clear' Button (to reset the polygon)
+        btn_clear = QToolButton()
+        btn_clear.setText("Reset")
+        btn_clear.clicked.connect(self.showTotal)  # Connect to your reset function
+        layout.addWidget(btn_clear)
+
+        # 5. (Optional) Add a 'Screenshot' Button
+        btn_snap = QToolButton()
+        btn_snap.setText("Snap")
+        btn_snap.clicked.connect(self.take_screenshot)
+        layout.addWidget(btn_snap)
+
+        # IMPORTANT: Change to Horizontal to fit the bar
+        self._verticalSlider_1.setOrientation(Qt.Horizontal)
+
+        # Fix width so it doesn't squash buttons (e.g., 100 pixels wide)
+        self._verticalSlider_1.setFixedWidth(100)
+
+        # Add a Label so users know what it is
+        self.lbl_thresh = QLabel("Thresh:")
+        self.lbl_thresh.setStyleSheet("color: white; border: none; font-size: 10px;")
+
+        layout.addWidget(self.lbl_thresh)
+        layout.addWidget(self._verticalSlider_1)
+
+        # 6. Position the Toolbar
+        # We resize it to fit its content
+        self.overlay_frame.adjustSize()
+        # Move it to Top-Left (x=10, y=10)
+        self.overlay_frame.move(10, 10)
+
+        self.overlay_frame.show()
+
+    # CRITICAL: Keep toolbar in place when window resizes
+    def resizeEvent(self, ev):
+        super(glScientific, self).resizeEvent(ev)
+        if hasattr(self, 'overlay_frame'):
+            # Keep it at 10,10 or move it relative to width if you prefer
+            self.overlay_frame.move(10, 10)
+
 
     def threshold_change(self, value):
         """
@@ -125,21 +220,45 @@ class glScientific(GLViewWidget):
         """
         if self._seg_im is None:
             return
-        filters = "png(*.png)"
+        filter = (
+            "Standard Screen Res (*.png);;"
+            "High Res (1000px) (*.png);;"
+            "High Res (2000px) (*.png);;"
+            "High Res (3000px) (*.png);;"
+        )
         opts = QFileDialog.DontUseNativeDialog
-        fileObj = QFileDialog.getSaveFileName(self, "Open File", self.source_dir, filters, options=opts)
-        if fileObj[0] == '':
+        fileObj, selected_filter = QFileDialog.getSaveFileName(self, "Open File", self.source_dir, filter, options=opts)
+        if fileObj == '':
             return
-        filename = fileObj[0] + '.png'
+        filename = fileObj + '.png'
         init_width, init_height = self.width(), self.height()
         maxhw = max(init_width, init_height)
         width, height = init_width, init_height
-        while maxhw <3000:
-            width, height = width*1.5, height*1.5
-            maxhw = max(width, height)
+
+        if "1000px" in selected_filter:
+            scale = 3000 / max(init_width, init_height)
+            width = int(init_width * scale)
+            height = int(init_width * scale)
+
+        elif "2000px" in selected_filter:
+            scale = 6000 / max(init_width, init_height)
+            width = int(init_width * scale)
+            height = int(init_width * scale)
+        elif "3000px" in selected_filter:
+            scale = 6000 / max(init_width, init_height)
+            width = int(init_width * scale)
+            height = int(init_width * scale)
+
         self.setFixedWidth(int(width))
         self.setFixedHeight(int(height))
-        maxhw = max(self.width(), self.height())
+
+        # Force the OS to redraw the window at the new size
+        # You might need to call this multiple times or use a small sleep
+        QApplication.processEvents()
+        self.makeCurrent()
+        self.paintGL()
+        glFinish()  # Wait for GPU to finish
+
         #self.setGeometry()
         self.removeItem('scatter_total')
         self.GLV.setData(self._seg_im, self._artistic)
@@ -155,6 +274,12 @@ class glScientific(GLViewWidget):
         imsave(filename, img)
         self.setFixedWidth(init_width)
         self.setFixedHeight(init_height)
+        QApplication.processEvents()
+        self.makeCurrent()
+        self.paintGL()
+        glFinish()  # Wait for GPU to finish
+
+
 
     def initiate_actions(self):
         """
@@ -200,11 +325,6 @@ class glScientific(GLViewWidget):
         self.draw_action.triggered.connect(self.draw_status)
 
 
-        #self.draw_art = QAction("Artistic")
-        #self.draw_art.setCheckable(True)
-        #self.draw_art.setChecked(False)
-        #self.draw_art.triggered.connect(self.draw_art_action)
-
         self.clear_action = QAction("Show Total")
         self.clear_action.triggered.connect(self.showTotal)
 
@@ -219,125 +339,171 @@ class glScientific(GLViewWidget):
         self._artistic = False
         self.update_3dview.emit(True, None)
 
-
     def remove_painting(self):
         """
-        Excluding 3D ares from demonstration
-        :return:
+        Optimized 'Carving': Removes 3D volume parts inside the drawn polygon.
+        Uses fast bounding-box depth reading + vectorized unprojection.
         """
-        def filledPoly(poly):
-            """
-            Fill inside polygons
-            Args:
-                poly:
-
-            Returns:
-
-            """
-            from matplotlib.path import Path
-
-            try:
-                coords = np.array(poly.exterior.coords)
-
-                p = Path(coords)
-                xmin, ymin, xmax, ymax = poly.bounds
-                x = np.arange(np.floor(xmin), np.ceil(xmax), 1)
-                y = np.arange(np.floor(ymin), np.ceil(ymax), 1)
-                points = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
-                ind_points = p.contains_points(points)
-                selected_points = points[ind_points]
-
-                return selected_points
-            except:
-                return []
-        def adjustVals(selected):
-            for i in [0,1,2]:
-                ind = selected[:,i]>=self.maxXYZ[i]
-                selected[ind, i] = self.maxXYZ[i]-1
-                ind = selected[:,i]<=0
-                selected[ind, i] = 1
-            return selected
-        def findIndices(vls):
-            pl = Polygon(vls)
-            if not pl.is_valid:
-                pls = ConvertPToPolygons(vls)
-                for ij, pl in enumerate(pls):
-                    if ij == 0:
-                        #pl = spline_points(pl)
-                        selected_points = filledPoly(pl)
-                    else:
-                        #pl = spline_points(pl)
-                        n_points = filledPoly(pl)
-                        selected_points = np.vstack([selected_points, n_points])
-            else:
-                #pl = spline_points(pl)
-                selected_points = filledPoly(pl)
-            return selected_points
-        if len(self.totalpolys[0])<5:
+        if len(self.totalpolys[0]) < 3:
             return
-        if 'vol_total' in self.items:
-            self.SubUpdateSegScatterItem()
+
+        # 1. Setup Polygon & Bounding Box
+        # Convert points to integer array for OpenCV
+        pts = np.array(self._sPoints, dtype=np.int32)
+
+        # Get Bounding Box (x, y, width, height)
+        bx, by, bw, bh = cv2.boundingRect(pts)
+        if bw <= 0 or bh <= 0: return
+
+        # 2. Optimized Depth Read (Bounding Box Only)
+        # We replace the full-screen 'self._z' with a tiny 'z_crop'
+        self.makeCurrent()
+
+        # Note: OpenGL Y is inverted (bottom-up) vs Qt (top-down)
+        gl_y_bottom = self.height() - (by + bh)
+
+        # Read only the depth inside the bounding box
+        z_crop_raw = glReadPixels(bx, gl_y_bottom, bw, bh, GL_DEPTH_COMPONENT, GL_FLOAT)
+        z_crop = np.frombuffer(z_crop_raw, dtype=np.float32)
+
+        # Find Z range (Depth bounds)
+        # Filter out 1.0 (background) and 0.0 (too close)
+        valid_z = z_crop[(z_crop > 0.0) & (z_crop < 1.0)]
+
+        if valid_z.size == 0:
+            # Fallback if clicking empty space: carve through whole volume
+            z_min, z_max = 0.0, 1.0
         else:
-            return
-        #points = self._compute_coordinates(self.mousePos)
-        if 'scatter_total' in self.items:
+            # Add a tiny buffer to ensure we cover the edges
+            z_min = valid_z.min() - 0.001
+            z_max = valid_z.max() + 0.001
 
-            self.removeItem('scatter_total')
-            self.GLV.setData(self._seg_im, self._artistic)
-            self.GLV.setDepthValue(20)
-            self.addItem(self.GLV, 'vol_total')
+        # 3. Create 2D Mask (Instant rasterization with OpenCV)
+        # This replaces the slow 'filledPoly' / matplotlib logic
+        mask_2d = np.zeros((self.height(), self.width()), dtype=np.uint8)
+        cv2.fillPoly(mask_2d, [pts], 1)
 
-        invM = np.linalg.inv(self.mvpProj.reshape((4, 4)).transpose())
+        # Get indices of all pixels inside the polygon
+        # ys, xs are global window coordinates
+        ys, xs = np.where(mask_2d > 0)
+        if len(xs) == 0: return
+
+        # 4. Vectorized Ray Casting (The Speedup)
+        # Instead of looping Z in python, we create a massive coordinate array
+
+        # How many Z-steps to take through the object?
+        # (Higher = cleaner cut, Lower = faster)
+        # 1. Find the center of the 2D bounding box (NDC)
+        # We only need one ray to estimate the depth distance
+        center_x_ndc = (2.0 * (bx + bw / 2.0) / self.width()) - 1.0
+        center_y_ndc = 1.0 - (2.0 * (by + bh / 2.0) / self.height())
+
+        # 2. Create Clip Coordinates for Near and Far points of this ray
+        # Point A at z_min, Point B at z_max
+        # Z in clip space = 2*z - 1
+        clip_near = np.array([center_x_ndc, center_y_ndc, 2.0 * z_min - 1.0, 1.0])
+        clip_far = np.array([center_x_ndc, center_y_ndc, 2.0 * z_max - 1.0, 1.0])
+
+        # 3. Unproject to World Space (Voxel Coordinates)
+        invM = np.linalg.inv(self.mvpProj.reshape((4, 4)).T)
+
+        def unproject_single(v, matrix):
+            w = np.dot(matrix, v)
+            if w[3] != 0: w /= w[3]
+            return w[:3]  # Return XYZ
+
+        world_near = unproject_single(clip_near, invM)
+        world_far = unproject_single(clip_far, invM)
+
+        # 4. Calculate Distance in Voxels
+        # Since your world coordinates map to voxels, this is the exact depth in voxels
+        voxel_dist = np.linalg.norm(world_far - world_near)
+
+        # 5. Set Steps Automatically
+        # Sampling rate of 1.5 to 2.0 is safe (Nyquist theorem-ish)
+        # Clamp to reasonable limits (e.g. at least 10 steps)
+        num_z_steps = int(max(10, voxel_dist * 2.0))
+        #num_z_steps = min(num_z_steps, 200)
+        print(num_z_steps)
+        z_vals = np.linspace(z_min, z_max, num_z_steps)
+
+        # Convert Pixels to Normalized Device Coordinates (NDC)
+        # X: 0..Width -> -1..1
+        ndc_xs = (2.0 * xs / self.width()) - 1.0
+        # Y: 0..Height -> 1..-1 (Flip Y)
+        ndc_ys = 1.0 - (2.0 * ys / self.height())
+
+        # Create the grid of points to unproject
+        # We repeat the (X,Y) for every Z step
+        all_xs = np.repeat(ndc_xs, num_z_steps)
+        all_ys = np.repeat(ndc_ys, num_z_steps)
+        # Tile Z values: z1, z2, z3... z1, z2, z3...
+        all_zs = np.tile(2.0 * z_vals - 1.0, len(xs))  # Clip space Z (-1..1)
+
+        # Stack into (4, N) matrix [x, y, z, w]
+        ones = np.ones_like(all_xs)
+        clip_coords = np.vstack([all_xs, all_ys, all_zs, ones])
+
+        # 5. Inverse Projection (Matrix Multiplication)
+        # Convert Clip Space -> World Space
+        invM = np.linalg.inv(self.mvpProj.reshape((4, 4)).T)
+        world_coords = np.dot(invM, clip_coords)
+
+        # Perspective Divide (XYZ / W)
+        # Avoid divide by zero
+        w_comp = world_coords[3, :]
+        w_comp[w_comp == 0] = 1.0
+        world_coords /= w_comp
+
+        # 6. Map World Coordinates to Voxel Indices
+        # Extract raw World X, Y, Z
+        wx = world_coords[0, :]
+        wy = world_coords[1, :]
+        wz = world_coords[2, :]
+
+        # Apply your specific coordinate transformations
+        # Based on your original code:
+        # selected[:, 2] = self.maxXYZ[0] - selected[:, 2] -> Voxel X from World Z
+        # selected[:, 0] = self.maxXYZ[2] - selected[:, 0] -> Voxel Z from World X
+        # selected[:, 1] -> Voxel Y from World Y
+
+        # Map to integers
+        vox_x = (self.maxXYZ[0] - wz).astype(np.int32)
+        vox_y = (wy).astype(np.int32)
+        vox_z = (self.maxXYZ[2] - wx).astype(np.int32)
+
+        # 7. Filter Valid Indices
         xmax, ymax, zmax = self.maxCoord
-        filled_polygon = np.array(self._sPoints)
-        filled_polygon = findIndices(filled_polygon)
-        filled_polygon = np.concatenate([filled_polygon, np.ones((len(filled_polygon), 2))], 1)
-        filled_polygon[:, 0] = 2 * filled_polygon[:,0] / self.width() - 1
-        filled_polygon[:, 1] = 1 - 2 * filled_polygon[:,1] / self.height()
-        filled_polygon[:, 3] = 1
-        filled_polygon[:, 2] = 2 * 1- 1
 
+        valid_mask = (
+                (vox_x >= 0) & (vox_x < xmax) &
+                (vox_y >= 0) & (vox_y < ymax) &
+                (vox_z >= 0) & (vox_z < zmax)
+        )
 
+        # Keep only valid voxel indices
+        vx = vox_x[valid_mask]
+        vy = vox_y[valid_mask]
+        vz = vox_z[valid_mask]
 
-        Tpoints = []
-        #self._z[self._z>0].min(), #self._z[self._z<1].max()
-        opt=1e-4
-        #round(self._z[self._z < 1].max() + 0.0001, 4)
-        for z in np.arange(0.9985- 0.0006, round(self._z[self._z < 1].max() + 0.0001, 4), 1e-6):
-            A = filled_polygon.copy()
-            A[:, 2] = 2 * z - 1
+        if vx.size > 0:
+            # 8. Update The Masks
+            # Update the boolean exclusion mask
+            # Note: Your logic used indices [0, 1, 2] which corresponds to our [vx, vy, vz]
+            self._excluded_inds[vx, vy, vz] = True
 
-            Tpoints = np.matmul(invM,
-                                A.T).T
-            Tpoints /= Tpoints[:, 3, None]
-            # Tpoints = Tpoints.astype('int')
+            # Recalculate Indices Mask (Optional, matches your logic)
+            # self._indices = ... (Update if needed based on _excluded_inds)
 
-            selected = Tpoints.astype('int')[:, :3]
+            # Zero out the image data
+            self._seg_im[self._excluded_inds, :] = 0
 
+            # 9. Upload to GPU
+            self.GLV.setData(self._seg_im, self._artistic)
+            self.GLV.update()
 
-            selected[:, 2] = self.maxXYZ[0] - selected[:, 2]
-            selected[:, 0] = self.maxXYZ[2] - selected[:, 0]
-
-            ind = 0
-            for j, xyzm in enumerate([zmax, ymax, xmax]):
-                ind += ((selected[:, j] < xyzm) * (selected[:, j] >= 0))
-            ind = ind >= 3
-            selected = selected[ind, :]
-            selected = selected[:, [2, 1, 0]]
-
-            self._excluded_inds[selected[:, 0], selected[:, 1], selected[:, 2]] = True
-
-
-        #from scipy.ndimage import binary_fill_holes
-        #self._excluded_inds = binary_fill_holes(self._excluded_inds)
-        self._indices = (self._indices.astype('int')- self._excluded_inds.astype('int'))>0
-        self._seg_im[self._excluded_inds, :] = 0
-
-        #print('removing')
+        # Cleanup
         self.clear_points()
-        self.GLV.setData(self._seg_im, self._artistic)
-        self.GLV.update()
-        return
 
 
     def clear_points(self):
@@ -352,19 +518,55 @@ class glScientific(GLViewWidget):
         self.GLPl.update_points(self.totalpolys)
         self.update()
 
-
     def paintGL(self, region=None, viewport=None, useItemNames=False):
         """
-        Paint GL
-        :param region:
-        :param viewport:
-        :param useItemNames:
-        :return:
+        Paint GL and overlay text info.
         """
-        super(glScientific, self).paintGL()
-        elev = self.opts['elevation'] #* np.pi/180.
-        azim = self.opts['azimuth'] #* np.pi/180.
-        #print(elev, azim)
+        # 1. Draw the 3D Scene (Super class handles the heavy lifting)
+        super(glScientific, self).paintGL(region, viewport, useItemNames)
+
+        # 2. Prepare Data to Display
+        elev = self.opts['elevation']
+        azim = self.opts['azimuth']
+        dist = self.opts['distance']
+
+        info_text = f"Elev: {elev:.1f}\nAzim: {azim:.1f}\nDist: {dist:.1f}"
+
+        # 3. Draw 2D Text Overlay
+        # We use QPainter directly on the widget surface
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.TextAntialiasing)
+
+        # Setup Font
+        font = QFont("Arial", 10)  # Size 10
+        font.setBold(True)
+        painter.setFont(font)
+
+        # Setup Color (e.g., Bright Yellow for visibility)
+        painter.setPen(QColor(255, 255, 0))
+        # Define proportions (e.g., box is 20% of width, 10% of height)
+        box_width = int(self.width() * 0.12)
+        box_height = int(self.height() * 0.06)
+
+        # Ensure minimum readable size (optional safety check)
+        box_width = max(box_width, 20)
+        box_height = max(box_height, 10)
+
+        # Define padding as 2% of width
+        padding_x = int(self.width() * 0.02)
+        padding_y = int(self.height() * 0.02)
+
+        # Calculate X and Y for Lower Right
+        # x = Width - BoxWidth - Padding
+        rect_x = self.width() - box_width - padding_x
+        # y = Height - BoxHeight - Padding
+        rect_y = self.height() - box_height - padding_y
+
+        rect = QRect(rect_x, rect_y, box_width, box_height)
+
+        painter.drawText(rect, Qt.AlignLeft | Qt.AlignTop, info_text)
+
+        painter.end()
 
     def _endIMage(self, x, y, z, tol=10): # to check if we are at the end of the image
         zmax, xmax, ymax = self.maxCoord
@@ -390,45 +592,73 @@ class glScientific(GLViewWidget):
             z = zmax
         return endIm, x, y, z
 
-    def mouseReleaseEvent(self, a0) -> None:
+    def mouseReleaseEvent(self, ev):
         """
-        Mouse events
-        :param a0:
-        :return:
+        Optimized Mouse Release:
+        1. Closes the polygon loop.
+        2. Executes the 'cut' (remove_painting) efficiently.
+        3. Swaps Scatter plot back to Volume rendering without double-uploading.
         """
+        # Flag to prevent double-uploading data
+        volume_data_updated = False
+
+        # --- 1. Polygon / Carving Logic ---
         if self._enabledPolygon:
-            if len(self._sPoints)==0:
+            # Need at least 3 points to make a polygon
+            if len(self._sPoints) < 3:
+                self._sPoints = []
+                #self._enabledPolygon = False
+                #self.draw_action.setChecked(False)
                 return
-            self.totalpolys[self._numPolys].append(self.totalpolys[self._numPolys][0])
+
+            # A. Close the loop (Connect last point to first)
+            # Assuming _numPolys corresponds to the current active polygon
+            first_point = self.totalpolys[self._numPolys][0]
+            self.totalpolys[self._numPolys].append(first_point)
             self._sPoints.append(self._sPoints[0])
 
-            if self.GLV._ax==0:
-                self.totalpolys_camer[self._numPolys] = ['sagittal', self.GLV._d]
-            elif self.GLV._ax == 1:
-                self.totalpolys_camer[self._numPolys] = ['coronal', self.GLV._d]
-            elif self.GLV._ax == 2:
-                self.totalpolys_camer[self._numPolys] = ['axial', self.GLV._d]
-            self._numPolys = 0
-            self.GLPl.update_points(self.totalpolys)
+            # B. Store Camera Meta-data (Cleaner dictionary lookup)
+            axis_map = {0: 'sagittal', 1: 'coronal', 2: 'axial'}
+            # Use getattr to be safe if _ax or _d are not initialized
+            axis_name = axis_map.get(getattr(self.GLV, '_ax', 0), 'sagittal')
+            direction = getattr(self.GLV, '_d', 1)
 
-            #polygonC = ConvertPointsToPolygons(self.totalpolys[self._numPolys], width=0)
-            #if polygonC.is_valid:
-            #    Mpl = ConvertPToPolygons(self.totalpolys[self._numPolys])
+            self.totalpolys_camer[self._numPolys] = [axis_name, direction]
+
+            # C. Perform the Cut (remove_painting)
             try:
+                # This function calculates the cut AND uploads to GPU
                 self.remove_painting()
+                volume_data_updated = True  # Mark that GPU has fresh data
             except Exception as e:
-                print(e)
+                print(f"Error in remove_painting: {e}")
+
+            # D. Cleanup / Reset State
+            self._numPolys = 0  # Reset index
+
+            # Update visual polygon item (if you want to keep the line visible)
+            if hasattr(self, 'GLPl'):
+                self.GLPl.update_points(self.totalpolys)
+
             self._sPoints = []
-            self._enabledPolygon = False
-            self.draw_action.setChecked(False)
+            #self._enabledPolygon = False
+            #self.draw_action.setChecked(False)
 
-
+        # --- 2. View Switching (Scatter -> Volume) ---
+        # If we were using a Scatter plot (for fast interaction), switch back to Volume
         if 'scatter_total' in self.items:
-
             self.removeItem('scatter_total')
-            self.GLV.setData(self._seg_im, self._artistic)
+
+            # OPTIMIZATION: Only upload data if remove_painting didn't just do it.
+            if not volume_data_updated:
+                self.GLV.setData(self._seg_im, self._artistic)
+
+            # Ensure Volume is visible and depth is correct
             self.GLV.setDepthValue(20)
             self.addItem(self.GLV, 'vol_total')
+
+            # Force visual refresh
+            self.update()
 
     def _custom_viewMatrix(self, distance):
         tr = QMatrix4x4()
@@ -463,88 +693,126 @@ class glScientific(GLViewWidget):
         return tr
 
     def _compute_coordinates(self, ev, z=None):
+        """
+        Convert 2D Mouse Position + Depth (Z) -> 3D World Coordinates.
+        """
+        # 1. Handle Z-Depth (Depth buffer value 0.0 to 1.0)
         if z is None:
-            self.showEvent(0)
+            # Fallback: Safe single-pixel read (Only if caller forgot to pass z)
+            self.makeCurrent()
             z = glReadPixels(ev.x(), self.height() - ev.y(), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
-        if z == 0:
-            return [0,0,0,0]
-        if z==1:
-            z=self._lastZ
-            #a = np.argwhere(self._z != 1)
-            #_y, _x = self.height() - ev.y(), ev.x()
-            #ind = np.abs(a-np.array([_y, _x])).sum(-1).argmin()
-            #z = self._z[a[ind][0], a[ind][1]]
-        self._lastZ = z
 
 
+        # 2. Background Handling
+        # If z is 1.0 (Background) or 0.0 (Near clip), use the last valid depth
+        # This allows drawing "in the air" near the object.
+        if z == 1.0 or z == 0.0:
+            z = self._lastZ
+        else:
+            # Update last valid depth for next time
+            self._lastZ = z
 
-        #per = np.array(self.m.copyDataTo()).reshape((4, 4)).transpose().flatten()
-        #zFar = 0.5 * per[14] * (1.0 - ((per[10] - 1.0) / (per[10] + 1.0)))
-        # zNear = zFar * (per[10] + 1.0) / (per[10] - 1.0)
+        # 3. Normalized Device Coordinates (NDC)
+        # Convert x,y from Pixels (0 to Width) to NDC (-1 to +1)
+        # OpenGL Y is bottom-up, Qt is top-down
+        w = self.width()
+        h = self.height()
 
-        # z = (2.0 * z) - 1.0
-        # z = (2.0 * zNear * zFar) / (zFar + zNear - (z * (zFar - zNear)))
+        ndc_x = (2.0 * ev.x() / w) - 1.0
+        ndc_y = 1.0 - (2.0 * ev.y() / h)
 
-        ndcx = 2 * self.mousePos.x() / self.width() - 1
-        ndcy = 1 - 2 * self.mousePos.y() / self.height()
-        a= [self.mousePos.x(), self.mousePos.y()]
+        # 4. Construct the Clip Space Vector
+        # OpenGL Range for Z is -1.0 to 1.0 in Clip Space (Mapped from 0..1 depth)
+        clip_z = 2.0 * z - 1.0
+        clip_coords = np.array([ndc_x, ndc_y, clip_z, 1.0])
 
-        #z=0.998
+        # 5. Unproject (Clip Space -> World Space)
+        # We use the Inverse ModelViewProjection Matrix
+        # Note: If self.mvpProj is a Qt Matrix, use .inverted()[0]
+        # If it is a numpy array, use np.linalg.inv
+        try:
+            if isinstance(self.mvpProj, np.ndarray):
+                inv_mvp = np.linalg.inv(self.mvpProj.reshape((4, 4)).T)
+            else:
+                # Assuming flattened list or similar structure
+                inv_mvp = np.linalg.inv(np.array(self.mvpProj).reshape((4, 4)).T)
 
-        invM = np.linalg.inv(self.mvpProj.reshape((4, 4)).transpose())
+            world_coords = np.dot(inv_mvp, clip_coords)
 
-        points = np.matmul(invM,
-                           np.array([ndcx, ndcy, 2 * z - 1, 1]))
-        points /= points[3]
-        return points,a
+        except np.linalg.LinAlgError:
+            return [0, 0, 0, 0], [ev.x(), ev.y()]
+
+        # 6. Perspective Divide (Homogeneous -> Cartesian)
+        if world_coords[3] != 0:
+            world_coords /= world_coords[3]
+
+        # Return 3D point (x,y,z,w) and original 2D mouse pos
+        return world_coords, [ev.x(), ev.y()]
 
     def mouseMoveEvent(self, ev):
-        #print(self.opts['azimuth'], self.opts['elevation'])
         if not hasattr(self, 'mousePos'):
             return
-        diff = ev.pos() - self.mousePos
-        self.mousePos = ev.pos()
+
+        # Current mouse position
+        curr_pos = ev.pos()
+        diff = curr_pos - self.mousePos
+        self.mousePos = curr_pos
+
         if self._enabledPolygon:
-
-            #self.SubUpdateSegScatterItem()
-
-            #z = self._z[self.height()-ev.y(), ev.x()]
-            z=1.0
-            points, _ = self._compute_coordinates(ev, z=z)
-            #points[0] -= 1
-            #points[-1] -= 1
-            # points[1] -= 1
-            #points[2] = self.maxXYZ[2] - points[2]
-            #points[0] = self.maxXYZ[2] - points[0]
-            p1, xo = self._compute_coordinates(ev, 1)
-
-            # self.points = []
-            x,y, z, _ = points
-            if z == 0:
+            # 1. Safety Check: Ensure we have a started polygon
+            if self._numPolys not in self.totalpolys:
                 return
+
+            # 2. OPTIMIZATION: Distance Threshold Check
+            # Only add a point if we moved at least 5 pixels from the last ADDED point.
+            # You need to store 'last_added_pos' in mousePressEvent initially.
+            if hasattr(self, 'last_added_pos'):
+                dist = (curr_pos - self.last_added_pos).manhattanLength()
+                if dist < 5:  # 5 pixel threshold (adjust for smoothness vs precision)
+                    return
+
+                    # Update the last added position
+            self.last_added_pos = curr_pos
+
+            # 3. Calculate 3D Coordinates
+            # Use z=0.0 (Near Plane) for the VISUAL polygon so it appears on top
+            # 1. Activate Context & Read "True" Surface Depth
+            #self.makeCurrent()
+            #y_gl = self.height() - ev.y()
+            #z_surface = glReadPixels(ev.x(), y_gl, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
+
+            # 2. Apply Bias (Move closer to camera)
+            # 0.0 is Near (Camera), 1.0 is Far (Background).
+            # Subtracting 0.005 moves the point slightly in front of the object.
+            # We use max(0, ...) to ensure we don't go behind the camera.
+            #z_visual = max(0.0, z_surface - 0.005)
+
+            # 3. Compute VISUAL points using the Biased Z
+            points, _ = self._compute_coordinates(ev, z=None)
+            p1, xo = self._compute_coordinates(ev, z=1)  # xo is raw coordinate for your cutter
+
+            x, y, z, _ = points
+            if z == 0: return
+
+            # 4. Boundary Check
             endIm = self._endIMage(x, y, z)
-
             if endIm[0]:
-                # update x and y
-                #return
-                x = endIm[1]
-                y = endIm[2]
-                z = endIm[3]
-            endIm2 = self._endIMage(p1[0], p1[2], p1[3])
-            self._sPoints.append(xo)
-            #if not endIm2[0]:
-            #    self._sPoints.append(p1)
-            self.totalpolys[self._numPolys].append([x, y, z])
-            if len(self.totalpolys[self._numPolys]) > 2:
-                self.GLPl.update_points(self.totalpolys)
-                self.addItem(self.GLPl, 'pol_total')
-                self.GLPl.setDepthValue(100)
-            #if 'scatter_total' in self.items:
-            #    self.removeItem('scatter_total')
-            #    self.GLV.setData(self._seg_im)
-            #    self.GLV.setDepthValue(0)
-            #    self.addItem(self.GLV, 'vol_total')
+                x, y, z = endIm[1], endIm[2], endIm[3]
 
+            # 5. Append Point (Lasso Logic)
+            self._sPoints.append(xo)
+            self.totalpolys[self._numPolys].append([x, y, z])
+
+            # 6. Update Visuals (Only if we have enough points)
+            if len(self.totalpolys[self._numPolys]) > 1:
+                self.GLPl.update_points(self.totalpolys)
+
+                # Check if item exists to avoid redundant addItem calls (Performance)
+                if 'pol_total' not in self.items:
+                    self.addItem(self.GLPl, 'pol_total')
+                    self.GLPl.setDepthValue(100)
+
+        # --- Navigation Logic (Standard) ---
         else:
             if ev.buttons() == Qt.LeftButton:
                 if (ev.modifiers() & Qt.ControlModifier):
@@ -556,7 +824,9 @@ class glScientific(GLViewWidget):
                     self.pan(diff.x(), 0, diff.y(), relative='view-upright')
                 else:
                     self.pan(diff.x(), diff.y(), 0, relative='view-upright')
-            self.point3dpos.emit([self.opts['elevation'], self.opts['azimuth'], self.opts['distance']],None)
+
+            self.update()
+
     def emit_viewport(self, points):
         self.point3dpos.emit(points, None)
 
@@ -577,38 +847,54 @@ class glScientific(GLViewWidget):
             return
         if 'vol_total' in self.items:
             self.SubUpdateSegScatterItem()
+            # --- OPTIMIZATION START ---
+            # 2. Activate Context & Read Depth
+            # We read the depth of the pixel user clicked on immediately.
+            # This captures the Z-value of the object *before* any scene updates occur.
+            self.makeCurrent()
+
+            # Note: OpenGL Y-axis is bottom-up, Qt is top-down. We flip Y.
+            # We use ev.x() and ev.y() for integer pixel coordinates.
+            y_gl = self.height() - ev.y()
+            z_val = glReadPixels(ev.x(), y_gl, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)[0][0]
+            self._z = z_val
+            # --- OPTIMIZATION END ---
         else:
             return
-        points, _ = self._compute_coordinates(ev)
+        # 3. Pass 'z_val' to compute_coordinates
+        # This prevents the function from trying to re-read the screen or call showEvent(0)
+        points, _ = self._compute_coordinates(ev, z=z_val)
 
         #points[1] -= 1
         #print(points)
 
         if self._enabledPolygon:
-            #self.addItem(self.GLPl, 'pol_total')
-            #self.points = []
-            #points[2] = self.maxXYZ[2] - points[2]
-            #points[0] = self.maxXYZ[2] - points[0]
-            p1, xo = self._compute_coordinates(ev, 1)
+            # Calculate 'p1' (Far plane, z=1) and 'xo' (Near plane/Start)
+            # We pass z=1 explicitely here too, which is efficient.
+            self.last_added_pos = ev.pos()
+            p1, xo = self._compute_coordinates(ev, z=1)
+
             self._sPoints = []
-            self.totalpolys[self._numPolys] =[]
-            if points[-2] == 0:
+            self.totalpolys[self._numPolys] = []
+
+            if points[-2] == 0:  # Check for W component or invalid div
                 return
-            #print(points)
-            x, y, z , _=points
+
+            x, y, z, _ = points
+
+            # Check bounds
             endIm = self._endIMage(x, y, z)
             if endIm[0]:
-                # update x and y
-                x = endIm[1]
-                y = endIm[2]
-                z = endIm[3]
-            endIm2 = self._endIMage(p1[0], p1[2], p1[3])
-            #if not endIm2[0]:
-            #    self._sPoints.append(p1)
+                x, y, z = endIm[1], endIm[2], endIm[3]
 
+            # Add points
             self._sPoints.append(xo)
             self.totalpolys[self._numPolys].append([x, y, z])
-            if len(self.totalpolys[self._numPolys])>1:
+            # ADD THIS: Add a duplicate "ghost" point for the mouse to drag
+            self._sPoints.append(xo)
+            self.totalpolys[self._numPolys].append([x, y, z])
+
+            if len(self.totalpolys[self._numPolys]) > 1:
                 self.GLPl.update_points(self.totalpolys)
 
 
@@ -655,7 +941,8 @@ class glScientific(GLViewWidget):
 
         self.removeItem('scatter_total')
         if self._seg_im is not None:
-            self.GLV.setData(self._seg_im.copy(), self._artistic)
+            #self.GLV.setData(self._seg_im.copy(), self._artistic)
+            self.GLV.setData(self._seg_im, self._artistic)
         else:
             self.GLV.data = None
         self.GLV.setDepthValue(20)
@@ -681,51 +968,42 @@ class glScientific(GLViewWidget):
 
     def draw_status(self, value):
         try:
+            self._enabledPolygon = value
+
             if not value:
+                # --- Disable Mode ---
                 self.removeItem('pol_total')
                 self.totalpolys = defaultdict(list)
-                totalpolys_camer = defaultdict(list)
-                self.GLPl.update_points(self.totalpolys)
-                self._enabledPolygon = value
+                # self.totalpolys_camer = defaultdict(list) # If needed
+                if hasattr(self, 'GLPl'):
+                    self.GLPl.update_points(self.totalpolys)
+
+                # Restore Depth if needed
+                self.GLV.setDepthValue(10)  # Restore to normal (e.g., 10 or 20)
+
             else:
-                self.GLV.setDepthValue(0)
-                self._enabledPolygon = value
-
-
-                """
-                
-                if self.GLV._ax==0: #sagittal
-                    if self.GLV._d==1:
-                        self.opts['elevation'] = 0
-                        self.opts['azimuth'] = 0
-                    else:
-                        self.opts['elevation'] = 0
-                        self.opts['azimuth'] = -180
-                elif self.GLV._ax==1:#coronal
-                    if self.GLV._d == 1:
-                        self.opts['elevation'] = 0
-                        self.opts['azimuth'] = 90
-                    else:
-                        self.opts['elevation'] = 0
-                        self.opts['azimuth'] = -90
-                elif self.GLV._ax==2:#axial
-                    if self.GLV._d == 1:
-                        self.opts['elevation'] = 90
-                        self.opts['azimuth'] = 0
-                    else:
-                        self.opts['elevation'] = -90
-                        self.opts['azimuth'] = 0
-                """
+                # --- Enable Mode ---
+                # 1. Update Visuals
                 self.SubUpdateSegScatterItem()
-                self.showEvent(0)
-                self._z = glReadPixels(0, 0, self.height(),self.width(), GL_DEPTH_COMPONENT, GL_FLOAT)
+
+                # 2. Ensure Volume is visible and depth is set for drawing on top
                 if 'scatter_total' in self.items:
                     self.removeItem('scatter_total')
-                    self.GLV.setData(self._seg_im, self._artistic)
-                    self.GLV.setDepthValue(0)
-                    self.addItem(self.GLV, 'vol_total')
+
+                self.GLV.setData(self._seg_im, self._artistic)
+                self.GLV.setDepthValue(0)  # Bring to front for drawing
+                self.GLPl.setDepthValue(100)
+                self.addItem(self.GLV, 'vol_total')
+
+                # 3. Force a clean update (Visual only)
+                self.update()
+
+                # NOTE: We removed glReadPixels from here.
+                # We will read the depth in mousePressEvent instead.
+
         except Exception as e:
-            print(e)
+            print(f"Error in draw_status: {e}")
+
     def axis_status(self, value):
         if not value:
             self.removeItem('ax')
@@ -747,6 +1025,8 @@ class glScientific(GLViewWidget):
 
 
     def im_seg_status(self, value):
+
+
         self.seg_action.setChecked(False)
         if value:
             self._renderMode = 'Seg'
@@ -813,14 +1093,50 @@ class glScientific(GLViewWidget):
         self.im_seg_action.setChecked(False)
         self._verticalSlider_1.setVisible(True)
         mask = _image<=(_image.max()*self._threshold/100)
-        if map_type=='original':
-            cm = np.repeat(_image[...,None], 4, -1)
-        else:
-            import matplotlib.pyplot as plt
-            cm = plt.get_cmap(map_type, lut=256)
-            cm = cm(_image / _image.max()) * 255.0
-            #if map_type!='gist_rainbow_r':
-            #    cm[...,3]=self._image
+        if _image.ndim==3:
+            if map_type=='original':
+                cm = np.repeat(_image[...,None], 4, -1)
+            else:
+                import matplotlib.pyplot as plt
+                cm = plt.get_cmap(map_type, lut=256)
+                cm = cm(_image / _image.max()) * 255.0
+                #if map_type!='gist_rainbow_r':
+                #    cm[...,3]=self._image
+        elif _image.ndim == 4:
+            cm = _image.copy()
+
+            # 1. Calculate 3D Intensity Map from 4D data
+            # We take the max across the last axis (channels) to see if ANY channel has data
+            intensity_map = _image.max(axis=-1)
+
+            # 2. Create the 3D Mask
+            # Check if the brightest channel in the voxel is below the threshold
+            threshold_val = intensity_map.max() * self._threshold / 100.0
+            mask = intensity_map <= threshold_val
+
+            # 3. Apply Coloring (Your logic)
+            # Note: Your original loop for map_type != 'original' might fail because
+            # cmap() returns 4 values (RGBA), but you are assigning it to 1 channel.
+            # Assuming standard behavior here:
+            if map_type != 'original':
+                # If you really need to recolor specific channels, do it here.
+                # Otherwise, 4D input is usually already colored (RGBA).
+                pass
+
+                # 4. Apply the Mask to the Alpha Channel
+            # Ensure cm has an alpha channel (4 channels)
+            if cm.shape[-1] == 4:
+                # Set Alpha to 0 (Transparent) where mask is True
+                cm[mask, 3] = 0.0
+            else:
+                # add one channel for alpha
+                alpha_channel = np.ones(cm.shape[:-1] + (1,), dtype=cm.dtype,) * 255
+                alpha_channel[mask] = 0.0
+                cm = np.concatenate([cm, alpha_channel], axis=-1)
+
+            # 5. Handle Exclusion (if you have the excluded_inds logic from previous steps)
+            if hasattr(self, '_excluded_inds') and self._excluded_inds is not None:
+                cm[self._excluded_inds, 3] = 0.0
         self.removeItem('vol_total')
 
         self._seg_im = cm
@@ -983,267 +1299,124 @@ class glScientific(GLViewWidget):
             #polygon[:, 2] = self.maxXYZ[2] - polygon[:, 2]
         return polygon
 
-
-    def updateSegSlice(self, imSeg, edges, currentWidnowName, sliceNum):
-        """
-        :param totalPs: keys of total points
-        :param changedIndice: indices of key name
-        :return:
-        """
-        minimum_area = 2
-        if currentWidnowName.lower() == 'coronal':
-            subim = imSeg[:,sliceNum,:]
-            d = np.where(subim > 0)
-            contours, hierarchy = cv2.findContours(image=subim.astype(np.uint8), mode=cv2.RETR_TREE,
-                                                   method=cv2.CHAIN_APPROX_NONE)
-            if len(contours)==0:
-                item = GLScatterPlotItem(pos=np.empty(shape=(0,3), dtype=np.int64), color=np.empty(shape=(0,4), dtype=np.float64), pxMode=True, size=5)
-                self.addItem(item, 'scatter_{}_{}'.format(currentWidnowName, sliceNum))
-                return
-            else:
-                cnts = []
-                i = 0
-                for contour in contours:
-                    if cv2.contourArea(contour)<minimum_area:
-                        continue
-                    cnt = contour.squeeze()
-                    val = subim[cnt[0, 1], cnt[0, 0]]
-                    if val > 150:
-                        val -= 150
-                        subc = subim[cnt[:, 1], cnt[:, 0]]
-                        if sum(subc>150)>0:
-                            subc[subc>150] = subc[subc>150] - 150
-                            subim[cnt[:, 1], cnt[:, 0]] = subc
-                    cnts.append([cnt, val])
-                    subim[cnt[:, 1], cnt[:, 0]] = 150+subim[cnt[0, 1], cnt[0, 0]]
-                    print(np.unique(subim))
-                    print(i)
-                    i+=1
-                    print('')
-            #cnt = contours[0].squeeze()
-
-            #subim[cnt[:, 1], cnt[:, 0]] = 150+subim[cnt[0, 1], cnt[0, 0]]
-            points = np.vstack((d[0], np.repeat(sliceNum,len(d[0])), d[1])).transpose([1,0])[:,[2,1,0]]
-            #cnts = np.vstack((cnt[:, 1], np.repeat(sliceNum, cnt.shape[0]), cnt[:, 0] )).transpose([1, 0])[:, [2, 1, 0]]
-        elif currentWidnowName.lower() == 'sagittal':
-            subim = imSeg[:,:,sliceNum]
-            d = np.where(subim > 0)
-            contours, hierarchy = cv2.findContours(image=subim.astype(np.uint8), mode=cv2.RETR_TREE,
-                                                   method=cv2.CHAIN_APPROX_NONE)
-            if len(contours)==0:
-                item = GLScatterPlotItem(pos=np.empty(shape=(0,3), dtype=np.int64), color=np.empty(shape=(0,4), dtype=np.float64), pxMode=True, size=5)
-                self.addItem(item, 'scatter_{}_{}'.format(currentWidnowName, sliceNum))
-                return
-            else:
-                cnts = []
-                for contour in contours:
-                    if cv2.contourArea(contour)<minimum_area:
-                        continue
-                    cnt = contour.squeeze()
-                    val = subim[cnt[0, 1], cnt[0, 0]]
-                    if val>150:
-                        val -= 150
-                        d = subim[cnt[:, 1], cnt[:, 0]]
-                        if sum(d>150)>0:
-                            d[d>150] = d[d>150] - 150
-                            subim[cnt[:, 1], cnt[:, 0]] = d
-                    cnts.append([cnt, val] )
-                    subim[cnt[:, 1], cnt[:, 0]] = 150+subim[cnt[0, 1], cnt[0, 0]]
-            points = np.vstack((d[0], d[1],np.repeat(sliceNum,len(d[0])))).transpose([1,0])[:,[2,1,0]]
-            #cnts = np.vstack((cnt[:, 1], cnt[:, 0], np.repeat(sliceNum, cnt.shape[0]))).transpose([1, 0])[:, [2, 1, 0]]
-        elif currentWidnowName.lower() == 'axial':
-            subim = imSeg[sliceNum,:,:]
-            d = np.where(subim > 0)
-            contours, hierarchy = cv2.findContours(image=subim.astype(np.uint8), mode=cv2.RETR_TREE,
-                                                   method=cv2.CHAIN_APPROX_NONE)
-            if len(contours)==0:
-                item = GLScatterPlotItem(pos=np.empty(shape=(0,3), dtype=np.int64), color=np.empty(shape=(0,4), dtype=np.float64), pxMode=True, size=5)
-                self.addItem(item, 'scatter_{}_{}'.format(currentWidnowName, sliceNum))
-                return
-            else:
-                cnts = []
-                for contour in contours:
-                    if cv2.contourArea(contour)<minimum_area:
-                        continue
-                    cnt = contour.squeeze()
-                    val = subim[cnt[0, 1], cnt[0, 0]]
-                    if val > 150:
-                        val -= 150
-                        d = subim[cnt[:, 1], cnt[:, 0]]
-                        if sum(d>150)>0:
-                            d[d>150] = d[d>150] - 150
-                            subim[cnt[:, 1], cnt[:, 0]] = d
-                    cnts.append([cnt, val])
-                    subim[cnt[:, 1], cnt[:, 0]] = 150+subim[cnt[0, 1], cnt[0, 0]]
-            #cnt = contours[0].squeeze()
-            #subim[cnt[:, 1], cnt[:, 0]] = 150+subim[cnt[0, 1], cnt[0, 0]]
-            points = np.vstack((np.repeat(sliceNum,len(d[0])),d[0], d[1])).transpose([1,0])[:,[2,1,0]]
-            #cnts = np.vstack((np.repeat(sliceNum, cnt.shape[0]), cnt[:, 1], cnt[:, 0] )).transpose([1, 0])[:, [2, 1, 0]]
+    def updateSegVolItem(self, imSeg=None, imOrg=None, currentWidnowName=None, sliceNum=None):
 
 
-        #d = np.where(imSeg>0)
-        #if d[0].shape[0]<=1:
-            #return
-        #points = np.vstack((d[0], d[1], d[2])).transpose([1, 0])[:,[2,1,0]]
+        if imSeg is None: return
 
-        points[:, 0] = self.maxXYZ[2] - points[:, 0]
-        points[:, 2] = self.maxXYZ[0] - points[:, 2]
-
-        #cnts[:, 0] = self.maxXYZ[2] - cnts[:, 0]
-        #cnts[:, 2] = self.maxXYZ[0] - cnts[:, 2]
-
-
-        """
-        if windowName == 'coronal':
-            points[:, 0] = self.maxXYZ[2] - points[:, 0]
-            points[:, 2] = self.maxXYZ[0] - points[:, 2]
-        elif windowName == 'sagittal':
-            points[:, 2] = self.maxXYZ[0] - points[:, 2]
-        elif windowName == 'axial':
-            points[:, 0] = self.maxXYZ[2] - points[:, 0]
-        """
-        colors = np.zeros((points.shape[0], 4))
-        #colors[:, 3] = imSeg[tuple(zip(d))].squeeze()
-        #colors[:, 2] = data[tuple(zip(d))].squeeze()
-        #colors[:, 1] = data[tuple(zip(d))].squeeze()
-        colorsInd =  subim[tuple(zip(d))].transpose().squeeze()
-        for cl in np.unique(colorsInd[colorsInd<=150]):
-            if cl == 0:
-                continue
-            ind = colorsInd == cl
-            colorval = self.colorsCombinations[int(cl)]
-            colors[ind,:] =colorval
-
-            ind_edge = colorsInd == cl+150
-            colorval_edge = (0.,0.,0.,1.0)
-            colors[ind_edge, :] = colorval_edge
-            for cnt0 in cnts:
-                cnt, cl = cnt0
-                subim[cnt[:, 1], cnt[:, 0]] = cl
-        #colors[:,0] = 255.0
-        #colors = colors/255.0
-        item = GLScatterPlotItem(pos=points, color = colors, pxMode=True, size=5)
-        self.addItem(item, 'scatter_{}_{}'.format(currentWidnowName, sliceNum))
-
-        return
-
-
-    def updateSegVolItem(self, imSeg = None, imOrg = None, currentWidnowName=None, sliceNum = None):
-        """
-        :param totalPs: keys of total points
-        :param changedIndice: indices of key name
-        :return:
-        """
-        self.removeItem('scatter_total')
-        d = np.where(imSeg>0)
-        if d[0].shape[0]<=1:
-            return
-        self.maxXYZ_current = [d[0].max(),d[1].max(),d[2].max()]
-
-        self.minXYZ_current = [d[0].min(),d[1].min(),d[2].min()]
-        if d[0].shape[0]<=1:
+        # 1. OPTIMIZATION: Fast Sparse Check
+        # If the segmentation is empty, don't allocate massive arrays
+        active_indices = np.where(imSeg > 0)
+        if active_indices[0].size <= 1:
             self.removeItem('scatter_total')
             return
 
+        # Update Bounds (Keep your existing logic)
+        self.maxXYZ_current = [active_indices[0].max(), active_indices[1].max(), active_indices[2].max()]
+        self.minXYZ_current = [active_indices[0].min(), active_indices[1].min(), active_indices[2].min()]
 
-        """
-        if windowName == 'coronal':
-            points[:, 0] = self.maxXYZ[2] - points[:, 0]
-            points[:, 2] = self.maxXYZ[0] - points[:, 2]
-        elif windowName == 'sagittal':
-            points[:, 2] = self.maxXYZ[0] - points[:, 2]
-        elif windowName == 'axial':
-            points[:, 0] = self.maxXYZ[2] - points[:, 0]
-        """
+        # 2. OPTIMIZATION: LUT Generation
+        max_idx = int(imSeg.max())
+        # Use uint8 for LUT immediately (saves 4x memory vs float32)
+        lut = np.zeros((max_idx + 1, 4), dtype=np.uint8)
+        show_all = 9876 in self.colorInds
 
-        #colors[:, 3] = imSeg[tuple(zip(d))].squeeze()
-        #colors[:, 2] = data[tuple(zip(d))].squeeze()
-        #colors[:, 1] = data[tuple(zip(d))].squeeze()
-        colorsInd =  imSeg[tuple(zip(d))].squeeze()
-        uq = np.unique(colorsInd)
-        if 9876 not in self.colorInds:  # len(self.colorsCombinations):
-            selected_ud = self.colorInds
+        for label, color in self.colorsCombinations.items():
+            if label > max_idx: continue
+            if show_all or (label in self.colorInds):
+                # Assume color is normalized 0-1, scale to 0-255 uint8
+                lut[int(label)] = (np.array(color) * 255).astype(np.uint8)
+
+        # 3. OPTIMIZATION: Apply LUT (Generate Segmentation Layer)
+        # This creates the RGBA volume for segmentation
+        seg_vol = lut[imSeg.astype(np.int32)]  # Shape: (H, W, D, 4) uint8
+
+        # 4. OPTIMIZATION: Blending Logic
+        # We avoid allocating a huge 'cm' array if possible
+        if self.im_seg_action.isChecked() and imOrg is not None:
+
+            # A. Create Output Volume (Pre-allocate)
+            # We use the segmentation volume as the base to save one allocation
+            final_vol = seg_vol  # Reference, not copy yet
+
+            # B. Define Masks
+            # Pixels where Segmentation exists
+            mask_seg = seg_vol[..., 3] > 0
+
+            # Pixels where Image (MRI/US) exists above threshold
+            # Assuming imOrg is uint8 (0-255)
+            # Calculate threshold once
+            thresh_val = imOrg.max() * self._threshold / 100
+            mask_img = imOrg > thresh_val
+
+            # C. EFFICIENT BLENDING
+            # We only blend where BOTH exist.
+            # Where only Image exists -> Just copy Image.
+            # Where only Seg exists -> Keep Seg.
+
+            # Case 1: Only Background Image (No Seg)
+            # Find pixels with Image BUT NO Segmentation
+            # We manually construct RGBA for these pixels in place
+            mask_only_img = mask_img & (~mask_seg)
+
+            if np.any(mask_only_img):
+                # Extract grayscale values
+                gray_vals = imOrg[mask_only_img]
+
+                # Apply Intensity scaling
+                alpha_vals = (gray_vals.astype(np.float32) / 255.0) * self.intensityImg
+                alpha_uint8 = (alpha_vals * 255).astype(np.uint8)
+
+                # Assign to final volume [R, G, B, A]
+                # Since it's grayscale, R=G=B=Value
+                final_vol[mask_only_img, 0] = gray_vals
+                final_vol[mask_only_img, 1] = gray_vals
+                final_vol[mask_only_img, 2] = gray_vals
+                final_vol[mask_only_img, 3] = alpha_uint8
+
+            # Case 2: Blend Intersection (Image + Seg)
+            mask_blend = mask_img & mask_seg
+
+            if np.any(mask_blend):
+                # This is the heavy part, but now we only run it on ~5% of pixels
+
+                # Get Source (Seg)
+                s_rgba = seg_vol[mask_blend].astype(np.float32) / 255.0
+                s_rgb = s_rgba[:, :3]
+                s_a = np.sqrt(s_rgba[:, 3])  # Non-linear boost
+
+                # Get Dest (Image)
+                d_val = imOrg[mask_blend].astype(np.float32) / 255.0
+                d_rgb = d_val[:, None]  # Broadcast grayscale to RGB
+                d_a = d_val * self.intensityImg
+
+                # Alpha Composite (Standard Over Operator)
+                out_a = s_a + d_a * (1 - s_a)
+                safe_a = np.clip(out_a, 1e-6, 1.0)  # Prevent div/0
+
+                term1 = s_rgb * s_a[:, None]
+                term2 = d_rgb * d_a[:, None] * (1 - s_a[:, None])
+
+                out_rgb = (term1 + term2) / safe_a[:, None]
+
+                # Write Back
+                blended_px = np.zeros((mask_blend.sum(), 4), dtype=np.uint8)
+                blended_px[:, :3] = np.clip(out_rgb * 255, 0, 255).astype(np.uint8)
+                blended_px[:, 3] = np.clip(out_a * 255, 0, 255).astype(np.uint8)
+
+                final_vol[mask_blend] = blended_px
+
+            self._seg_im = final_vol
+
         else:
-            selected_ud = uq
-        _seg_im = np.zeros((*imSeg.shape, 4))
-        indics = 0
-        for cl in uq:
-            if cl in selected_ud:
-                ind = imSeg == cl
-                indics += ind
-                try:
-                    colorval = self.colorsCombinations[int(cl)]
-                    _seg_im[ind, :] = colorval
-                except:
-                    print('Index {} does not have a representative color.'.format(int(cl)))
-        #colors[:,0] = 255.0
-        #colors = colors/255.0
-        #if self._indices is None:
-        self._indices = indics>self._threshold
-        self._rendered = 'seg'
-        self._verticalSlider_1.setVisible(False)
-        _seg_im *= 255
-        _seg_im[self._excluded_inds,:]=0
-        #im_or = np.repeat(imOrg[..., None], [4], axis=-1)
-        #im_or[indics<=0,:]=0
-        #a = self.intensitySeg * _seg_im + (1 - self.intensitySeg) * im_or
+            # Just return the colored segmentation
+            self._seg_im = seg_vol
 
-        if self.im_seg_action.isChecked():
-            cm = np.repeat(imOrg[..., None], 4, -1)
-            mask = imOrg <= (imOrg.max() * self._threshold / 100)
-
-            cm_rgb = cm[...,:3]/255.0
-            #cm_rgb[imSeg>0,:]=0 # remove segmented ROIs from the original image
-            cm_alpha = cm[...,3]/255.0
-
-            seg_rgb = _seg_im[...,:3]/255.0
-            seg_alpha = _seg_im[..., 3]/ 255.0
-
-            user_threshold = self.intensityImg
-            #cm_alpha *= user_threshold if user_threshold else 0.02
-            """
-            
-
-            # Calculate the gradient along each dimension (x, y, z)
-            gradients = np.gradient(cm[..., :3], axis=(0, 1, 2))
-
-            # Compute the gradient magnitude
-            gradient_magnitude = np.sqrt(sum(g ** 2 for g in gradients)).mean(axis=-1)
-
-            gradient_magnitude = gaussian_filter(gradient_magnitude, sigma=2)
-
-            # Normalize the gradient magnitude to [0, 1]
-            gradient_magnitude = (gradient_magnitude - gradient_magnitude.min()) / (
-                    gradient_magnitude.max() - gradient_magnitude.min()
-            )
-            gradient_magnitude*=0.5
-            # Adjust alpha based on the gradient magnitude
-            #cm_alpha *= (gradient_magnitude ** 2)  # Emphasize significant gradients more
-            """
-            cm_alpha*=self.intensityImg
-
-            #seg_alpha *= 1.3 # linear
-            seg_alpha = np.sqrt(seg_alpha) # non linear
-
-            composite_alpha = cm_alpha + seg_alpha *(1-cm_alpha)
-
-            composite_alpha_clipped = np.clip(composite_alpha, a_min=1e-10, a_max=None)
-            composite_rgb = (cm_rgb * cm_alpha[..., np.newaxis] + seg_rgb * seg_alpha[..., np.newaxis] * (
-                        1 - cm_alpha[..., np.newaxis])) / composite_alpha_clipped[..., np.newaxis]
-            composite_rgb[composite_alpha == 0] = 0
-            composite_alpha[composite_alpha == 0] = 1
-            _seg_im = np.concatenate((composite_rgb*255.0, composite_alpha[..., np.newaxis] * 255), axis=-1)
-            _seg_im[mask,:] = 0
-            #self._seg_im = _seg_im
-            #self.GLV.setData(_seg_im, self._artistic)
-
-        self._seg_im = _seg_im
-        self.GLV.setData(_seg_im, self._artistic)
-
+        # 5. Upload to Viewer
+        # Ensure artistic mode is handled
+        self.GLV.setData(self._seg_im, self._artistic)
         self.GLV.setDepthValue(20)
         self.addItem(self.GLV, 'vol_total')
-
-        return
 
 
 
@@ -1525,7 +1698,7 @@ class MainWindow0(QWidget, Ui_Main0):
         data = data.astype("float")  # Typecast to float
         #data = data[:, :, ::-1]
         self.v._renderMode = 'seg'
-        self.v._excluded_inds = np.zeros_like(data).astype('bool')
+        self.v._excluded_inds = np.zeros_like(data, dtype=bool)
         self.v._excluded_inds[:] = False
         self.v.createGridAxis(list(data.shape))
         self.v.paint(data)

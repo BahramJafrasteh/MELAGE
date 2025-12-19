@@ -9,7 +9,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 #from PyQt5.QtWidgets import QWidget
 from melage.mainwindow_widget import Ui_Main
 from melage.dialogs import activation_dialog
-from melage.config import settings
+from melage.config import settings, __VERSION__
 
 ## verifyClass
 class verifyClass(QtCore.QObject):
@@ -168,9 +168,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
         self.progressBarSaving.setValue(80)
 
         dic['versionInfo'] = defaultdict(list)
-        dic['versionInfo']['__version__'] = 'Neobrain_1.0.6'
+        dic['versionInfo']['__version__'] = __VERSION__
         dic['versionInfo']['dataTime'] = strftime("%Y_%m_%d_%H%M%S", gmtime())
-
+        dic["settings"] = {}
+        dic["settings"] = vars(settings).copy()
 
  #       with open(self._basefileSave+'.bn', 'w+') as f:
 #            f.write('0\n')
@@ -179,17 +180,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
 
 
         #fp = gzip.open('primes.data', 'wb')
-        from cryptography.fernet import Fernet
+        #from cryptography.fernet import Fernet
         with open(self._basefileSave+'.bn', 'wb') as output:
             pickle.dump(dic, output, pickle.HIGHEST_PROTOCOL)
 
-        f = Fernet(self._key_picke)
-        with open(self._basefileSave+'.bn', 'rb') as file:
+        #f = Fernet(self._key_picke)
+        #with open(self._basefileSave+'.bn', 'rb') as file:
             # read all file data
-            file_data = file.read()
-        encrypted_data = f.encrypt(file_data)
-        with open(self._basefileSave+'.bn', 'wb') as file:
-            file.write(encrypted_data)
+        #    file_data = file.read()
+        #encrypted_data = f.encrypt(file_data)
+        #with open(self._basefileSave+'.bn', 'wb') as file:
+        #    file.write(encrypted_data)
         self.progressBarSaving.setValue(100)
 
     def createPopupMenu(self): # overriding create popup menu
