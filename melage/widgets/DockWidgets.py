@@ -10,6 +10,9 @@ from melage.utils.utils import generate_color_scheme_info
 from PyQt5 import Qt
 import numpy as np
 import os
+from .ui_schema import *
+from .ui_builder import UIBuilder
+from .SideBar import VSCodeSidebar, CollapsibleBox
 colorNames =("#FFCC08","darkRed","red", "darkOrange", "orange", "#8b8b00","yellow",
              "darkGreen","green","darkCyan","cyan",
              "darkBlue","blue","magenta","darkMagenta", 'red')
@@ -27,7 +30,7 @@ class dockWidgets():
     This class has been implemented for dock widgets in MELAGE
     """
     def __init__(self):
-        pass
+        self.setAcceptDrops(True)
 
     # This function should be a method in your main class
     def style_row_by_checkstate(self, item):
@@ -54,159 +57,302 @@ class dockWidgets():
             if item_in_row:
                 item_in_row.setBackground(brush)
 
-
-
-
-    def createDockWidget(self, Main):
+    def _create_segDock(self, Main):
         """
-        Creating main attributes for the main widgets
-        :param Main:
-        :return:
+        Create the Intensity settings widget and add it to the Sidebar.
+        Refactored to use UIBuilder schema.
         """
-        ################################################### Segmentation Intensity ##############################################
-        self.dockSegmentationIntensity = QtWidgets.QDockWidget(Main)
-        self.dockSegmentationIntensity.setObjectName("dockSegmentationIntensity")
-        self.dockSegmentationIntensity.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 12))
-
-        # Create main content widget
-        self.content_segInt = QtWidgets.QWidget()
+        # 1. Create the container
+        self.content_segInt = QtWidgets.QWidget(Main)
         self.content_segInt.setObjectName("content_segInt")
 
-        # Create layout for main content widget
-        self.gridLayout_segIn = QtWidgets.QGridLayout(self.content_segInt)
-        self.gridLayout_segIn.setObjectName("gridLayout_segIn")
+        # 2. Setup Layout (Vertical)
+        layout = QtWidgets.QVBoxLayout(self.content_segInt)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)  # slightly increased spacing for better readability
 
-        # Create label and scroll bar
-        self.label_seg_intensity_title = QtWidgets.QLabel("Segmentation Intensity")
-        self.label_intensity_value = QtWidgets.QLabel("100")
-        self.label_intensity_value.setAlignment(QtCore.Qt.AlignCenter)
-        #self.gridLayout_segIn.addWidget(self.label_intensity_value, 0, 0, 1, 1)
-
-        self.scroll_intensity = QtWidgets.QScrollBar(QtCore.Qt.Horizontal)
-        self.scroll_intensity.setObjectName("scroll_intensity")
-        self.scroll_intensity.setRange(0, 100)
-        self.scroll_intensity.setValue(100)
-        self.scroll_intensity.setSingleStep(1)
-        #self.gridLayout_segIn.addWidget(self.scroll_intensity, 1, 0, 1, 1)
-        self.scroll_intensity.valueChanged.connect(self.label_intensity_value.setNum)
-
-
-        self.line_intensity = QtWidgets.QFrame()
-        self.line_intensity.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_intensity.setFrameShadow(QtWidgets.QFrame.Sunken)
-
-        # Create second label and scroll bar for image intensity
-        self.label_image_intensity_title = QtWidgets.QLabel("Image Intensity")
-
-        self.label_image_intensity_value = QtWidgets.QLabel("100")
-        self.label_image_intensity_value.setAlignment(QtCore.Qt.AlignCenter)
-
-        self.scroll_image_intensity = QtWidgets.QScrollBar(QtCore.Qt.Horizontal)
-        self.scroll_image_intensity.setObjectName("scroll_image_intensity")
-        self.scroll_image_intensity.setRange(0, 100)
-        self.scroll_image_intensity.setValue(100)
-        self.scroll_image_intensity.setSingleStep(1)
-        self.scroll_image_intensity.valueChanged.connect(self.label_image_intensity_value.setNum)
-
-        self.line_image_intensity = QtWidgets.QFrame()
-        self.line_image_intensity.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_image_intensity.setFrameShadow(QtWidgets.QFrame.Sunken)
+        # 3. Define the UI Schema
+        schema = [
+            Group(
+                id="group_segmentation",
+                title="Intensity Settings",
+                layout="vbox",
+                children=[
+            # --- Section 1: Segmentation Intensity ---
+            Slider(
+                id="scroll_intensity",  # Base ID
+                label="Segmentation Intensity",  # Title Text
+                label_id="label_seg_intensity_title",  # Title Variable Name
+                min_val=0,
+                max_val=100,
+                default=50
+            ),
 
 
-        # Group label and scroll bar in a horizontal layout
-        seg_group_layout = QtWidgets.QVBoxLayout()
-        seg_group_layout.addWidget(self.label_seg_intensity_title)
-        seg_group_layout.addWidget(self.label_intensity_value)
-        seg_group_layout.addWidget(self.scroll_intensity)
-        seg_group_layout.addWidget(self.line_intensity)
+            # --- Section 2: Image Intensity ---
+            Slider(
+                id="scroll_image_intensity",
+                label="Image Intensity",
+                label_id="label_image_intensity_value",
+                min_val=0,
+                max_val=100,
 
-        # Group second scroll bar and label in the same vertical layout
-        im_group_layout = QtWidgets.QVBoxLayout()
-        im_group_layout.addWidget(self.label_image_intensity_title)
-        im_group_layout.addWidget(self.label_image_intensity_value)
-        im_group_layout.addWidget(self.scroll_image_intensity)
-        im_group_layout.addWidget(self.line_image_intensity)
+                default=100
+            ),
+            ] ),
+            Separator(),
+            Group(
+                id="group_tolerance",
+                title="Tolerance Settings",
+                layout="vbox",
+                children=[
+                    Slider(
+                        id="scrol_rad_circle",  # Creates self.scrol_rad_circle
+                        label="Circle Radius",
+                        label_id="label_assigned_rad_circle",
+                        min_val=50, max_val=1000, default=50
+                    ),
+                    Slider(
+                        id="scrol_tol_rad_circle",  # Creates self.scrol_tol_rad_circle
+                        label="Tolerance Level",
+                        label_id="label_assigned_tol_rad_circle",
+                        min_val=0, max_val=100, default=0
+                    )
+                ]
+            ),
+        ]
 
-        # Add the horizontal layout to the main grid layout
-        self.gridLayout_segIn.addLayout(seg_group_layout, 0, 0, 1, 1)
-        self.gridLayout_segIn.addLayout(im_group_layout, 1, 0, 1, 1)
+        # 4. Build the UI
+        builder = UIBuilder(self.content_segInt)
+        builder.build(schema, layout, context=self)
 
-        # Set layout for main content widget
-        self.dockSegmentationIntensity.setWidget(self.content_segInt)
+        # 5. Push widgets to top
+        layout.addStretch()
 
-        # Add dock widget to main window
-        #Main.addDockWidget(QtCore.Qt.DockWidgetArea(1), self.dockSegmentationIntensity)
-        #self.dockSegmentationIntensity.setVisible(True)
-        #################################################################################################
+        # --- ALIASING FOR BACKWARD COMPATIBILITY ---
+        # The builder creates 'self.scrol_intensity' and 'self.label_intensity'
+        # Your old code used 'self.scroll_intensity' and 'self.label_intensity_value'
+        # We map them here so you don't have to change your logic elsewhere.
 
-        self.dockImageEnh = QtWidgets.QDockWidget(Main)
+        # Map Segmentation Intensity
+
+
+        # Map Image Intensity
+        #self.scroll_image_intensity = self.scrol_image_intensity
+        #self.label_image_intensity_value = self.label_image_intensity
+
+        # 6. Add to Sidebar
+        self.vscode_widget.add_tab(
+            self.content_segInt,
+            settings.RESOURCE_DIR + "/seg_intensity.png",
+            "Image Intensity"
+        )
+
+
+    def on_file_double_clicked(self, index):
+        file_path = self.file_model.filePath(index)
+
+        if self.file_model.isDir(index):
+            # Allow expanding/collapsing folders (default behavior usually works,
+            # but sometimes you might want custom logic here)
+            return
+
+        print(f"User selected file: {file_path}")
+        # Logic to load the image/file goes here
+        # e.g., self.loadImage(file_path)
+
+    def dragEnterEvent(self, event):
+        """
+        Called when a file is dragged OVER the widget.
+        """
+        # Check if the dragged object contains file paths (URLs)
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """
+        Called when the file is DROPPED.
+        """
+        urls = event.mimeData().urls()
+        if urls:
+            # Convert URL to local system path (e.g., /home/user/image.nii)
+            file_path = urls[0].toLocalFile()
+            if file_path[-3:]=='.bn':
+                self.loadProject(file_path)
+            else:
+                self.browse_view1([[file_path, "None"], 2], use_dialog=False)
+            print(f"Dropped file: {file_path}")
+
+            # Call your loading function here
+            # e.g., self.load_new_image(file_path)
+
+    def _dock_folder(self, Main):
+        # ==============================================================================
+        # TAB: File Explorer (With Navigation)
+        # ==============================================================================
+
+        self.page_explorer = QtWidgets.QWidget()
+        self.layout_explorer = QtWidgets.QVBoxLayout(self.page_explorer)
+        self.layout_explorer.setContentsMargins(0, 0, 0, 0)
+        self.layout_explorer.setSpacing(0)
+
+
+        if hasattr(settings, 'DEFAULT_USE_DIR') and os.path.exists(settings.DEFAULT_USE_DIR):
+            home_path = settings.DEFAULT_USE_DIR
+        else:
+            home_path = QtCore.QDir.homePath()  # Fallback
+
+        # --- 1. NAVIGATION BAR (The new part) ---
+        self.nav_bar = QtWidgets.QWidget()
+        self.nav_bar.setStyleSheet("background-color: #252526; border-bottom: 1px solid #3E3E42;")
+        self.nav_layout = QtWidgets.QHBoxLayout(self.nav_bar)
+        self.nav_layout.setContentsMargins(5, 5, 5, 5)
+        self.nav_layout.setSpacing(5)
+
+        # Button Style
+        nav_btn_style = """
+                QToolButton { border: none; color: #CCCCCC; font-weight: bold; }
+                QToolButton:hover { background-color: #3E3E42; border-radius: 3px; }
+            """
+
+        # "Home" Button (Go back to Desktop)
+        self.btn_home = QtWidgets.QToolButton()
+        self.btn_home.setText("🏠")  # Or use an icon
+        self.btn_home.setToolTip(f"Go to Default ({os.path.basename(home_path)})")
+        self.btn_home.setStyleSheet(nav_btn_style)
+
+        # "Up" Button (Go to parent folder)
+        self.btn_up = QtWidgets.QToolButton()
+        self.btn_up.setText("⬆")  # Or use an icon like 'icons/up_arrow.png'
+        self.btn_up.setToolTip("Up one level")
+        self.btn_up.setStyleSheet(nav_btn_style)
+
+        # Current Folder Label
+        self.lbl_current_path = QtWidgets.QLabel(os.path.basename(home_path))
+        self.lbl_current_path.setStyleSheet("color: #CCCCCC; font-size: 11px;")
+
+        self.nav_layout.addWidget(self.btn_home)
+        self.nav_layout.addWidget(self.btn_up)
+        self.nav_layout.addWidget(self.lbl_current_path)
+        self.nav_layout.addStretch()  # Push everything to left
+
+        self.layout_explorer.addWidget(self.nav_bar)
+
+
+
+        # --- 2. FILE SYSTEM MODEL ---
+        self.file_model = QtWidgets.QFileSystemModel()
+
+        # Set Root Path to "/" (or Drives on Windows) so the model knows about everything
+        # If we restrict this, we can't go up!
+        self.file_model.setRootPath("")
+
+        # Filters
+        filters = ["*.bn", "*.nii", "*.nii.gz"]
+        self.file_model.setNameFilters(filters)
+        self.file_model.setNameFilterDisables(False)
+
+        # --- 3. TREE VIEW ---
+        self.tree_explorer = QtWidgets.QTreeView()
+        self.tree_explorer.setModel(self.file_model)
+        start_index = self.file_model.index(home_path)
+        # Start at Desktop
+        #desktop_path = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DesktopLocation)
+        #start_index = self.file_model.index(desktop_path)
+        self.tree_explorer.setRootIndex(start_index)
+
+        # Tree Settings
+        self.tree_explorer.setDragEnabled(True)
+        self.tree_explorer.setDragDropMode(QtWidgets.QAbstractItemView.DragOnly)
+        self.tree_explorer.setHeaderHidden(True)
+        self.tree_explorer.setColumnHidden(1, True)
+        self.tree_explorer.setColumnHidden(2, True)
+        self.tree_explorer.setColumnHidden(3, True)
+        self.tree_explorer.setAnimated(True)
+        self.tree_explorer.setIndentation(20)
+        self.tree_explorer.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+        self.layout_explorer.addWidget(self.tree_explorer)
+
+        # Double click to open file
+        self.tree_explorer.doubleClicked.connect(self.on_file_double_clicked)
+
+        # --- 4. NAVIGATION LOGIC ---
+
+        def go_home():
+            """Reset view to Desktop"""
+            idx = self.file_model.index(home_path)
+            self.tree_explorer.setRootIndex(idx)
+            self.lbl_current_path.setText("Home")
+
+        def go_up():
+            """Move root index to parent directory"""
+            current_idx = self.tree_explorer.rootIndex()
+            parent_idx = self.file_model.parent(current_idx)
+
+            # Check if parent is valid (stops at Root Drive)
+            if parent_idx.isValid():
+                self.tree_explorer.setRootIndex(parent_idx)
+
+                # Update Label
+                path = self.file_model.filePath(parent_idx)
+                folder_name = QtCore.QDir(path).dirName()
+                # If empty (Root drive), show full path
+                self.lbl_current_path.setText(folder_name if folder_name else path)
+
+        def on_folder_entered(index):
+            """If user double clicks a FOLDER inside the tree, treat it as new root? (Optional)"""
+            # Usually VS Code Explorer just expands.
+            # But if you want "Drill down" behavior, uncomment this:
+            # if self.file_model.isDir(index):
+            #     self.tree_explorer.setRootIndex(index)
+            #     self.lbl_current_path.setText(self.file_model.fileName(index))
+            pass
+
+        # Connect Buttons
+        self.btn_home.clicked.connect(go_home)
+        self.btn_up.clicked.connect(go_up)
+
+        # Add to Sidebar
+        self.vscode_widget.add_tab(self.page_explorer,
+                                   settings.RESOURCE_DIR+ "/explorer.png", "Explorer")
+    def _create_main_dock(self, Main):
+        self.MainDock = QtWidgets.QDockWidget(Main)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.dockImageEnh.sizePolicy().hasHeightForWidth())
-        self.dockImageEnh.setSizePolicy(sizePolicy)
-        self.dockImageEnh.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
-        self.dockImageEnh.setObjectName("dockImageEnh")
+        sizePolicy.setHeightForWidth(self.MainDock.sizePolicy().hasHeightForWidth())
+
+        self.MainDock.setFeatures(QtWidgets.QDockWidget.NoDockWidgetFeatures)
+        self.MainDock.setSizePolicy(sizePolicy)
+        #self.MainDock.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
+        self.MainDock.setObjectName("MainDock")
         self.content_imageEnh = QtWidgets.QWidget()
         self.content_imageEnh.setObjectName("content_imageEnh")
 
+        self.content_imageEnh = QtWidgets.QWidget()
+        self.layout_imageEnh = QtWidgets.QVBoxLayout(self.content_imageEnh)
+        self.layout_imageEnh.setContentsMargins(0, 0, 0, 0)
 
-        self.Settings_widget = QtWidgets.QWidget()
-        self.Settings_widget.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
-
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
-        #sizePolicy.setHorizontalStretch(0)
-        #sizePolicy.setVerticalStretch(0)
-        #sizePolicy.setHeightForWidth(self.ImageEnh_view1.sizePolicy().hasHeightForWidth())
-        #self.ImageEnh_view1.setSizePolicy(sizePolicy)
-        self.Settings_widget.setObjectName("setting")
-        self.gridLayout_settings = QtWidgets.QGridLayout(self.Settings_widget)
-        self.gridLayout_settings.setObjectName("gridLayout_settings")
-
-
-
-
-        self.gridLayout_5 = QtWidgets.QGridLayout(self.content_imageEnh)
-        self.gridLayout_5.setObjectName("gridLayout_5")
-        self.main_toolbox = QtWidgets.QToolBox(self.content_imageEnh)
-        self.main_toolbox.setObjectName("main_toolbox")
-        self.main_toolbox.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
+        # Initialize VS Code Sidebar
+        self.vscode_widget = VSCodeSidebar(self.content_imageEnh)
+        self.vscode_widget.setObjectName("main_toolbox")
+        #self.vscode_widget.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
+        self.vscode_widget.setMinimumWidth(20)
+        self.layout_imageEnh.addWidget(self.vscode_widget)
+        self.MainDock.setWidget(self.content_imageEnh)
+        self.MainDock.setVisible(True)
+        Main.addDockWidget(QtCore.Qt.DockWidgetArea(1), self.MainDock)
 
 
-
-        #self.dockImageConf = QtWidgets.QDockWidget(Main)
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
-        #sizePolicy.setHorizontalStretch(0)
-        #sizePolicy.setVerticalStretch(0)
-        #sizePolicy.setHeightForWidth(self.dockImageConf.sizePolicy().hasHeightForWidth())
-        #self.dockImageConf.setSizePolicy(sizePolicy)
-        #self.dockImageConf.setMinimumSize(QtCore.QSize(200, 167))
-        #self.dockImageConf.setObjectName("dockImageConf")
-
-        #self.content_imageConf = QtWidgets.QWidget()
-        #self.content_imageConf.setObjectName("content_imageConf")
-        #self.gridLayout_imageConf = QtWidgets.QGridLayout(self.content_imageConf)
-        #self.gridLayout_imageConf.setObjectName("gridLayout_5")
-        #self.toolbox_imageConf = QtWidgets.QToolBox(self.content_imageConf)
-        #self.toolbox_imageConf.setObjectName("toolbox_imageConf")
-        #self.toolbox_imageConf.setMinimumSize(self.width() // 7, self.height()//2)
-        #self.gridLayout_imageConf.addWidget(self.toolbox_imageConf, 0, 0, 1, 1)
-
-
-        #########
-        ################ Widget MRI COLORS ####################################
-
-        self.page1_color = QtWidgets.QWidget()
-
+    def _create_dockColor(self, Main):
+        self.page1_color = QtWidgets.QWidget(Main)
         self.page1_color.setGeometry(QtCore.QRect(0, 0, self.width()//8, self.height()//2))
         self.page1_color.setObjectName("page")
         self.gridLayout_color = QtWidgets.QVBoxLayout(self.page1_color)
         self.gridLayout_color.setObjectName("gridLayout_view1")
-
-
-
-
-
         # controls
         self.line_text = QtWidgets.QLineEdit()
         self.line_text.setPlaceholderText('Search...')
@@ -242,6 +388,7 @@ class dockWidgets():
         self.gridLayout_color.addWidget(self.tree_colors)
 
 
+
         # signals
         self.tree_colors.doubleClicked.connect(self._double_clicked)
         self.line_text.textChanged.connect(partial(self.searchTreeChanged, 'color'))
@@ -254,737 +401,156 @@ class dockWidgets():
         self.tree_colors.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
 
+        # Add to Sidebar
+        self.vscode_widget.add_tab(self.page1_color,
+                                   settings.RESOURCE_DIR+"/palette.png", "Color Settings")
 
 
-
-        #self.gridLayout_color.addWidget(self.tree_colors, 1, 0, 1, 1)
-
-        self.main_toolbox.addItem(self.page1_color, "")
-        ###############
-
-
-
-
-
-
-
-
-
-
-
-
-        self.ImageEnh_view1 = QtWidgets.QWidget()
-        self.ImageEnh_view1.setGeometry(QtCore.QRect(0, 0, self.width()//8, self.height()//2))
-
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
-        #sizePolicy.setHorizontalStretch(0)
-        #sizePolicy.setVerticalStretch(0)
-        #sizePolicy.setHeightForWidth(self.ImageEnh_view1.sizePolicy().hasHeightForWidth())
-        #self.ImageEnh_view1.setSizePolicy(sizePolicy)
+    def _create_dock_imEnhance_view1(self, Main):
+        self.ImageEnh_view1 = QtWidgets.QWidget(Main)
         self.ImageEnh_view1.setObjectName("page")
-        self.gridLayout_view1 = QtWidgets.QGridLayout(self.ImageEnh_view1)
-        self.gridLayout_view1.setObjectName("gridLayout_view1")
-
-        self.line_5 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_5.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_5.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_5.setObjectName("line_5")
-        self.gridLayout_view1.addWidget(self.line_5, 0, 0, 1, 1)
-
-
-
-        self.lb_ft1_1 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft1_1.sizePolicy().hasHeightForWidth())
-        self.lb_ft1_1.setSizePolicy(sizePolicy)
-        self.lb_ft1_1.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
-        self.lb_ft1_1.setObjectName("lb_ft1_1")
-        self.gridLayout_view1.addWidget(self.lb_ft1_1, 1, 0, 1, 1)
-
-
-        self.lb_t1_1 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_1.sizePolicy().hasHeightForWidth())
-        self.lb_t1_1.setSizePolicy(sizePolicy)
-        self.lb_t1_1.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t1_1.setObjectName("lb_t1_1")
-        self.gridLayout_view1.addWidget(self.lb_t1_1, 2, 0, 1, 1)
-
-
-        self.hs_t1_1 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        self.hs_t1_1.setMinimum(-100)
-        self.hs_t1_1.setMaximum(100)
-        self.hs_t1_1.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_1.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_1.setObjectName("hs_t1_1")
-        self.gridLayout_view1.addWidget(self.hs_t1_1, 3, 0, 1, 1)
-
-
-
-        self.line_6 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_6.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_6.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_6.setObjectName("line_6")
-        self.gridLayout_view1.addWidget(self.line_6, 4, 0, 1, 1)
-
-
-        self.lb_ft1_2 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft1_2.sizePolicy().hasHeightForWidth())
-        self.lb_ft1_2.setSizePolicy(sizePolicy)
-        self.lb_ft1_2.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
-        self.lb_ft1_2.setObjectName("lb_ft1_2")
-        self.gridLayout_view1.addWidget(self.lb_ft1_2, 5, 0, 1, 1)
-
-
-
-        self.lb_t1_2 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_2.sizePolicy().hasHeightForWidth())
-        self.lb_t1_2.setSizePolicy(sizePolicy)
-        self.lb_t1_2.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t1_2.setObjectName("lb_t1_2")
-        self.gridLayout_view1.addWidget(self.lb_t1_2, 6, 0, 1, 1)
-
-
-        self.hs_t1_2 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        self.hs_t1_2.setMaximum(100)
-        self.hs_t1_2.setMinimum(-100)
-        self.hs_t1_2.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_2.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_2.setObjectName("hs_t1_2")
-        self.gridLayout_view1.addWidget(self.hs_t1_2, 7, 0, 1, 1)
-
-
-
-        self.line_7 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_7.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_7.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_7.setObjectName("line_7")
-        self.gridLayout_view1.addWidget(self.line_7, 8, 0, 1, 1)
-
-
-        self.lb_ft1_3 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft1_3.sizePolicy().hasHeightForWidth())
-        self.lb_ft1_3.setSizePolicy(sizePolicy)
-        self.lb_ft1_3.setObjectName("lb_ft1_3")
-        self.gridLayout_view1.addWidget(self.lb_ft1_3, 9, 0, 1, 1)
-
-
-
-        self.lb_t1_3 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_3.sizePolicy().hasHeightForWidth())
-        self.lb_t1_3.setSizePolicy(sizePolicy)
-        self.lb_t1_3.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t1_3.setObjectName("lb_t1_3")
-        self.gridLayout_view1.addWidget(self.lb_t1_3, 10, 0, 1, 1)
-
-
-
-        self.hs_t1_3 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        self.hs_t1_3.setMaximum(100)
-        self.hs_t1_3.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_3.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_3.setObjectName("hs_t1_3")
-        self.gridLayout_view1.addWidget(self.hs_t1_3, 11, 0, 1, 1)
-
-        self.line_8 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_8.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_8.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_8.setObjectName("line_8")
-        self.gridLayout_view1.addWidget(self.line_8, 12, 0, 1, 1)
-
-
-
-
-
-        self.lb_ft1_7 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft1_7.sizePolicy().hasHeightForWidth())
-        self.lb_ft1_7.setSizePolicy(sizePolicy)
-        self.lb_ft1_7.setObjectName("lb_ft1_7")
-        self.gridLayout_view1.addWidget(self.lb_ft1_7, 13, 0, 1, 1)
-
-
-        self.lb_t1_7 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_7.sizePolicy().hasHeightForWidth())
-        self.lb_t1_7.setSizePolicy(sizePolicy)
-        self.lb_t1_7.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t1_7.setObjectName("lb_t1_7")
-        self.gridLayout_view1.addWidget(self.lb_t1_7, 14, 0, 1, 1)
-
-
-
-        self.hs_t1_7 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.hs_t1_7.sizePolicy().hasHeightForWidth())
-        self.hs_t1_7.setSizePolicy(sizePolicy)
-        self.hs_t1_7.setMinimum(0)
-        self.hs_t1_7.setMaximum(100)
-        self.hs_t1_7.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_7.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_7.setObjectName("hs_t1_4")
-        self.gridLayout_view1.addWidget(self.hs_t1_7, 15, 0, 1, 1)
-
-
-        self.line_11 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_11")
-        self.gridLayout_view1.addWidget(self.line_11, 16, 0, 1, 1)
-
-
-
-        self.lb_ft1_4 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft1_4.sizePolicy().hasHeightForWidth())
-        self.lb_ft1_4.setSizePolicy(sizePolicy)
-        self.lb_ft1_4.setObjectName("lb_ft1_4")
-        self.gridLayout_view1.addWidget(self.lb_ft1_4, 17, 0, 1, 1)
-
-
-        self.lb_t1_4 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_4.sizePolicy().hasHeightForWidth())
-        self.lb_t1_4.setSizePolicy(sizePolicy)
-        self.lb_t1_4.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t1_4.setObjectName("lb_t1_4")
-        self.gridLayout_view1.addWidget(self.lb_t1_4, 18, 0, 1, 1)
-
-
-
-        self.hs_t1_4 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.hs_t1_4.sizePolicy().hasHeightForWidth())
-        self.hs_t1_4.setSizePolicy(sizePolicy)
-        self.hs_t1_4.setMinimum(0)
-        self.hs_t1_4.setMaximum(100)
-        self.hs_t1_4.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_4.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_4.setObjectName("hs_t1_4")
-        self.gridLayout_view1.addWidget(self.hs_t1_4, 19, 0, 1, 1)
-
-
-        self.line_11 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_11")
-        self.gridLayout_view1.addWidget(self.line_11, 20, 0, 1, 1)
-
-
-        self.lb_ft1_5 = QtWidgets.QLabel(self.ImageEnh_view1)
-        self.lb_ft1_5.setObjectName("lb_ft1_5")
-        self.gridLayout_view1.addWidget(self.lb_ft1_5, 21, 0, 1, 1)
-
-
-        ################### WIDGET COMBOX ROTATION ###########################
-
-        self.page1_rot_cor = QtWidgets.QComboBox(self.ImageEnh_view1)
-        cbstyle = """
-            QComboBox QAbstractItemView {border: 1px solid grey;
-            background: #03211c; 
-            selection-background-color: #03211c;} 
-            QComboBox {background: #03211c;margin-right: 1px;}
-            QComboBox::drop-down {
-        subcontrol-origin: margin;}
-            """
-        self.page1_rot_cor.setStyleSheet(cbstyle)
-        self.page1_rot_cor.setObjectName("dw2_cb")
-        self.page1_rot_cor.addItem("")
-        self.page1_rot_cor.addItem("")
-        self.page1_rot_cor.addItem("")
-
-
-        self.gridLayout_view1.addWidget(self.page1_rot_cor, 22, 0, 1, 1)
-
-
-        self.lb_t1_5 = QtWidgets.QLabel(self.ImageEnh_view1)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t1_5.sizePolicy().hasHeightForWidth())
-        self.lb_t1_5.setSizePolicy(sizePolicy)
-        self.lb_t1_5.setObjectName("lb_t1_5")
-        self.lb_t1_5.setAlignment(QtCore.Qt.AlignCenter)
-        self.gridLayout_view1.addWidget(self.lb_t1_5, 23, 0, 1, 1)
-
-
-        #self.hs_t1_5 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        self.hs_t1_5 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        #self.hs_t1_5.setPageStep(0.5)
-        self.hs_t1_5.setMinimum(-50)
-        self.hs_t1_5.setMaximum(50)
-        #self.hs_t1_5.setTickInterval(1)
-        self.hs_t1_5.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t1_5.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t1_5.setObjectName("hs_t1_5")
-        self.gridLayout_view1.addWidget(self.hs_t1_5, 24, 0, 1, 1)
-
-
-
-        #self.page1_rot_cor = QtWidgets.QCheckBox(self.ImageEnh_view1)
-        #self.page1_rot_cor.setObjectName("page1_rot_cor")
-
-
-
-
-
-
-        self.line_ = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_.setObjectName("line_")
-        self.gridLayout_view1.addWidget(self.line_, 25, 0, 1, 1)
-
-
-
-
-        self.page1_s2c = QtWidgets.QCheckBox(self.ImageEnh_view1)
-        self.page1_s2c.setObjectName("page1_s2c")
-        self.gridLayout_view1.addWidget(self.page1_s2c, 26, 0, 1, 1)
-
-
-
-
-
-        self.line_10 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_10.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_10.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_10.setObjectName("line_10")
-        self.gridLayout_view1.addWidget(self.line_10, 27, 0, 1, 1)
-
-        self.lb_ft1_6 = QtWidgets.QLabel(self.ImageEnh_view1)
-        self.lb_ft1_6.setObjectName("lb_ft1_6")
-        self.gridLayout_view1.addWidget(self.lb_ft1_6, 28, 0, 1, 1)
-
-        self.toggle1_1 = AnimatedToggle(
-            checked_color="#FFB000",
-            pulse_checked_color="#44FFB000"
-        )
-
-        self.toggle1_1.setObjectName('toggle1_1')
-
-        self.gridLayout_view1.addWidget(self.toggle1_1, 29, 0, 1, 1)
-
-
-        self.line_11 = QtWidgets.QFrame(self.ImageEnh_view1)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_10")
-        self.gridLayout_view1.addWidget(self.line_11, 30, 0, 1, 1)
-
-
-        #self.colorize = QtWidgets.QCheckBox(self.ImageEnh_view1)
-        #self.colorize.setObjectName("Colorize")
-        #self.gridLayout_view1.addWidget(self.colorize, 31, 0, 1, 1)
-
-
-
-        # self.hs_t1_5 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        #self.hs_t1_8 = QtWidgets.QScrollBar(self.ImageEnh_view1)
-        #self.hs_t1_8.setPageStep(0.5)
-        #self.hs_t1_8.setMinimum(2)
-        #self.hs_t1_8.setMaximum(50)
-        #self.hs_t1_8.setValue(0)
-
-        # self.hs_t1_5.setTickInterval(1)
-        #self.hs_t1_8.setOrientation(QtCore.Qt.Horizontal)
-        # self.hs_t1_5.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        #self.hs_t1_8.setObjectName("hs_t1_8")
-        #self.gridLayout_view1.addWidget(self.hs_t1_8, 33, 0, 1, 1)
-
-
-
-        self.main_toolbox.addItem(self.ImageEnh_view1, "")
-
-
-        ########### PAGE 1 MRI ################
-
-        self.page1_mri = QtWidgets.QWidget()
-        #palet = QtGui.QPalette()
-        #palet.setColor(QtGui.QPalette.Window, QtCore.Qt.blue)
-        #self.page1_mri.setStyleSheet("background-color: black")
-        #self.page1_mri.setAutoFillBackground(True);
-        #self.page1_mri.setPalette(palet)
-        self.page1_mri.setGeometry(QtCore.QRect(0, 0, self.width()//8, self.height()//2))
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        #sizePolicy.setHorizontalStretch(0)
-        #sizePolicy.setVerticalStretch(0)
-        #sizePolicy.setHeightForWidth(self.page1_mri.sizePolicy().hasHeightForWidth())
-        #self.page1_mri.setSizePolicy(sizePolicy)
+        layout = QtWidgets.QGridLayout(self.ImageEnh_view1)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+        schema = [
+            # --- Group 1: Essential Visuals ---
+            Group(
+                id="grp_basics",
+                title="Color & Contrast",
+                layout="vbox",
+                children=[
+                    Slider(id="t1_1", label="Brightness", label_id="lb_ft1_1", min_val=-100, max_val=100),
+                    Slider(id="t1_2", label="Contrast", label_id="lb_ft1_2", min_val=-100, max_val=100),
+                    Slider(id="t1_3", label="Opacity", label_id="lb_ft1_3", min_val=0, max_val=100),
+                ]
+            ),
+
+            # --- Group 2: Image Filters ---
+            Group(
+                id="grp_filters",
+                title="Filters & Quality",
+                layout="vbox",
+                children=[
+                    Slider(id="t1_7", label="Sharpness", label_id="lb_ft1_7", min_val=0, max_val=100),
+                    Slider(id="t1_4", label="Smoothing", label_id="lb_ft1_4", min_val=0, max_val=100),
+                ]
+            ),
+
+            # --- Group 3: Geometry (Rotation) ---
+            Group(
+                id="grp_geo",
+                title="Geometry & Correction",
+                layout="vbox",
+                children=[
+                    Label("Correction Mode", id="lb_ft1_5"),
+                    Combo(id="page1_rot_cor", options=["", "Option 1", "Option 2"]),
+
+                    # Small separator inside the group if needed
+                    Separator(),
+
+                    Slider(id="t1_5", label="Rotation Fine Tune", label_id="lb_t1_5", min_val=-25, max_val=25),
+
+
+                ]
+            ),
+
+            # --- Group 4: Advanced ---
+            # Using HBox to keep the toggle compact
+            Group(
+                id="grp_adv",
+                title="Advanced Settings",
+                layout="hbox",
+                children=[
+                    Label("Advanced Mode", id="lb_ft1_6"),
+                    Toggle(id="toggle1_1", text="Toggle")
+                ]
+            )
+        ]
+
+        # Build and inject variables into 'self'
+        builder = UIBuilder(self.ImageEnh_view1)
+        builder.build(schema, layout, context=self)
+
+        self.ImageEnh_view1.setVisible(True)
+        self.box_view1 = CollapsibleBox("View 1 Enhancement", self.ImageEnh_view1)
+        self.layout_enh_container.addWidget(self.box_view1)
+        self.enhancement_sections.append(self.box_view1)
+
+
+    def _create_dock_imEnhance_vew2(self, Main):
+        self.page1_mri = QtWidgets.QWidget(Main)
         self.page1_mri.setObjectName("page")
-        self.gridLayout_8 = QtWidgets.QGridLayout(self.page1_mri)
-        self.gridLayout_8.setObjectName("gridLayout_view1")
-
-        self.line_5 = QtWidgets.QFrame(self.page1_mri)
-        self.line_5.setStyleSheet('background-color: rgb(50,50,50)')
-        self.line_5.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_5.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_5.setObjectName("line_5")
-        self.gridLayout_8.addWidget(self.line_5, 0, 0, 1, 1)
-
-        self.lb_ft2_1 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft2_1.sizePolicy().hasHeightForWidth())
-        self.lb_ft2_1.setSizePolicy(sizePolicy)
-        self.lb_ft2_1.setAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.lb_ft2_1.setObjectName("lb_ft2_1")
-        self.gridLayout_8.addWidget(self.lb_ft2_1, 1, 0, 1, 1)
-
-        self.lb_t2_1 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_1.sizePolicy().hasHeightForWidth())
-        self.lb_t2_1.setSizePolicy(sizePolicy)
-        self.lb_t2_1.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t2_1.setObjectName("lb_t2_1")
-        self.gridLayout_8.addWidget(self.lb_t2_1, 2, 0, 1, 1)
-
-        self.hs_t2_1 = QtWidgets.QScrollBar(self.page1_mri)
-        self.hs_t2_1.setMinimum(-100)
-        self.hs_t2_1.setMaximum(100)
-        self.hs_t2_1.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_1.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_1.setObjectName("hs_t2_1")
-        self.gridLayout_8.addWidget(self.hs_t2_1, 3, 0, 1, 1)
-
-        self.line_6 = QtWidgets.QFrame(self.page1_mri)
-        self.line_6.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_6.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_6.setObjectName("line_6")
-        self.gridLayout_8.addWidget(self.line_6, 4, 0, 1, 1)
-
-        self.lb_ft2_2 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft2_2.sizePolicy().hasHeightForWidth())
-        self.lb_ft2_2.setSizePolicy(sizePolicy)
-        self.lb_ft2_2.setAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.lb_ft2_2.setObjectName("lb_ft2_2")
-        self.gridLayout_8.addWidget(self.lb_ft2_2, 5, 0, 1, 1)
-
-        self.lb_t2_2 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_2.sizePolicy().hasHeightForWidth())
-        self.lb_t2_2.setSizePolicy(sizePolicy)
-        self.lb_t2_2.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t2_2.setObjectName("lb_t2_2")
-        self.gridLayout_8.addWidget(self.lb_t2_2, 6, 0, 1, 1)
-
-        self.hs_t2_2 = QtWidgets.QScrollBar(self.page1_mri)
-        self.hs_t2_2.setMaximum(100)
-        self.hs_t2_2.setMinimum(-100)
-        self.hs_t2_2.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_2.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_2.setObjectName("hs_t2_2")
-        self.gridLayout_8.addWidget(self.hs_t2_2, 7, 0, 1, 1)
-
-        self.line_7 = QtWidgets.QFrame(self.page1_mri)
-        self.line_7.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_7.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_7.setObjectName("line_7")
-        self.gridLayout_8.addWidget(self.line_7, 8, 0, 1, 1)
-
-        self.lb_ft2_3 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft2_3.sizePolicy().hasHeightForWidth())
-        self.lb_ft2_3.setSizePolicy(sizePolicy)
-        self.lb_ft2_3.setObjectName("lb_ft2_3")
-        self.gridLayout_8.addWidget(self.lb_ft2_3, 9, 0, 1, 1)
-
-        self.lb_t2_3 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_3.sizePolicy().hasHeightForWidth())
-        self.lb_t2_3.setSizePolicy(sizePolicy)
-        self.lb_t2_3.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t2_3.setObjectName("lb_t2_3")
-        self.gridLayout_8.addWidget(self.lb_t2_3, 10, 0, 1, 1)
-
-        self.hs_t2_3 = QtWidgets.QScrollBar(self.page1_mri)
-        self.hs_t2_3.setMaximum(100)
-        self.hs_t2_3.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_3.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_3.setObjectName("hs_t2_3")
-        self.gridLayout_8.addWidget(self.hs_t2_3, 11, 0, 1, 1)
-
-        self.line_8 = QtWidgets.QFrame(self.page1_mri)
-        self.line_8.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_8.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_8.setObjectName("line_8")
-        self.gridLayout_8.addWidget(self.line_8, 12, 0, 1, 1)
-
-
-
-
-
-
-
-        self.lb_ft2_7 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft2_7.sizePolicy().hasHeightForWidth())
-        self.lb_ft2_7.setSizePolicy(sizePolicy)
-        self.lb_ft2_7.setObjectName("lb_ft2_7")
-        self.gridLayout_8.addWidget(self.lb_ft2_7, 13, 0, 1, 1)
-
-
-        self.lb_t2_7 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_7.sizePolicy().hasHeightForWidth())
-        self.lb_t2_7.setSizePolicy(sizePolicy)
-        self.lb_t2_7.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t2_7.setObjectName("lb_t2_7")
-        self.gridLayout_8.addWidget(self.lb_t2_7, 14, 0, 1, 1)
-
-
-
-        self.hs_t2_7 = QtWidgets.QScrollBar(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.hs_t2_7.sizePolicy().hasHeightForWidth())
-        self.hs_t2_7.setSizePolicy(sizePolicy)
-        self.hs_t2_7.setMinimum(0)
-        self.hs_t2_7.setMaximum(100)
-        self.hs_t2_7.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_7.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_7.setObjectName("hs_t2_7")
-        self.gridLayout_8.addWidget(self.hs_t2_7, 15, 0, 1, 1)
-
-
-        self.line_11 = QtWidgets.QFrame(self.page1_mri)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_11")
-        self.gridLayout_8.addWidget(self.line_11, 16, 0, 1, 1)
-
-
-
-
-
-
-
-        self.lb_ft2_4 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_ft2_4.sizePolicy().hasHeightForWidth())
-        self.lb_ft2_4.setSizePolicy(sizePolicy)
-        self.lb_ft2_4.setObjectName("lb_ft2_4")
-        self.gridLayout_8.addWidget(self.lb_ft2_4, 17, 0, 1, 1)
-
-        self.lb_t2_4 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_4.sizePolicy().hasHeightForWidth())
-        self.lb_t2_4.setSizePolicy(sizePolicy)
-        self.lb_t2_4.setAlignment(QtCore.Qt.AlignCenter)
-        self.lb_t2_4.setObjectName("lb_t2_4")
-        self.gridLayout_8.addWidget(self.lb_t2_4, 18, 0, 1, 1)
-
-        self.hs_t2_4 = QtWidgets.QScrollBar(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.hs_t2_4.sizePolicy().hasHeightForWidth())
-        self.hs_t2_4.setSizePolicy(sizePolicy)
-        self.hs_t2_4.setMinimum(0)
-        self.hs_t2_4.setMaximum(100)
-        self.hs_t2_4.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_4.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_4.setObjectName("hs_t2_4")
-        self.gridLayout_8.addWidget(self.hs_t2_4, 19, 0, 1, 1)
-
-        self.line_11 = QtWidgets.QFrame(self.page1_mri)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_11")
-        self.gridLayout_8.addWidget(self.line_11, 20, 0, 1, 1)
-
-        self.lb_ft2_5 = QtWidgets.QLabel(self.page1_mri)
-        self.lb_ft2_5.setObjectName("lb_ft2_5")
-        self.gridLayout_8.addWidget(self.lb_ft2_5, 21, 0, 1, 1)
-
-
-        self.page2_rot_cor = QtWidgets.QComboBox(self.page1_mri)
-        cbstyle = """
-            QComboBox QAbstractItemView {border: 1px solid grey;
-            background: white; 
-            selection-background-color: #03211c;} 
-            QComboBox {background: #03211c;margin-right: 1px;}
-            QComboBox::drop-down {
-        subcontrol-origin: margin;}
-            """
-        self.page2_rot_cor.setStyleSheet(cbstyle)
-        self.page2_rot_cor.setObjectName("page2_rot_cor")
-        self.page2_rot_cor.addItem("")
-        self.page2_rot_cor.addItem("")
-        self.page2_rot_cor.addItem("")
-
-
-        self.gridLayout_8.addWidget(self.page2_rot_cor, 22, 0, 1, 1)
-
-        self.lb_t2_5 = QtWidgets.QLabel(self.page1_mri)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.lb_t2_5.sizePolicy().hasHeightForWidth())
-        self.lb_t2_5.setSizePolicy(sizePolicy)
-        self.lb_t2_5.setObjectName("lb_t2_5")
-        self.lb_t2_5.setAlignment(QtCore.Qt.AlignCenter)
-        self.gridLayout_8.addWidget(self.lb_t2_5, 23, 0, 1, 1)
-
-        #self.hs_t2_5 = QtWidgets.QScrollBar(self.page1_mri)
-        self.hs_t2_5 = QtWidgets.QScrollBar(self.page1_mri)
-        self.hs_t2_5.setMinimum(-25)
-        self.hs_t2_5.setMaximum(25)
-        #self.hs_t2_5.setTickInterval(1)
-        self.hs_t2_5.setOrientation(QtCore.Qt.Horizontal)
-        #self.hs_t2_5.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.hs_t2_5.setObjectName("hs_t2_5")
-        self.gridLayout_8.addWidget(self.hs_t2_5, 24, 0, 1, 1)
-
-        #self.page2_rot_cor = QtWidgets.QCheckBox(self.page1_mri)
-        #self.page2_rot_cor.setObjectName("page2_rot_cor")
-
-
-
-        line_ = QtWidgets.QFrame(self.page1_mri)
-        line_.setFrameShape(QtWidgets.QFrame.HLine)
-        line_.setFrameShadow(QtWidgets.QFrame.Sunken)
-        line_.setObjectName("line_")
-        self.gridLayout_8.addWidget(line_, 25, 0, 1, 1)
-
-
-        self.page2_s2c = QtWidgets.QCheckBox(self.page1_mri)
-        self.page2_s2c.setObjectName("page2_s2c")
-        self.gridLayout_8.addWidget(self.page2_s2c, 26, 0, 1, 1)
-
-        self.line_10 = QtWidgets.QFrame(self.page1_mri)
-        self.line_10.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_10.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_10.setObjectName("line_10")
-        self.gridLayout_8.addWidget(self.line_10, 27, 0, 1, 1)
-
-        self.lb_ft2_6 = QtWidgets.QLabel(self.page1_mri)
-        self.lb_ft2_6.setObjectName("lb_ft2_6")
-        self.gridLayout_8.addWidget(self.lb_ft2_6, 28, 0, 1, 1)
-
-        self.toggle2_1 = AnimatedToggle(
-            checked_color="#FFB000",
-            pulse_checked_color="#44FFB000"
-        )
-
-        self.toggle2_1.setObjectName('toggle2_1')
-
-        self.gridLayout_8.addWidget(self.toggle2_1, 29, 0, 1, 1)
-
-        self.line_11 = QtWidgets.QFrame(self.page1_mri)
-        self.line_11.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_11.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.line_11.setObjectName("line_10")
-        self.gridLayout_8.addWidget(self.line_11, 30, 0, 1, 1)
-
-
-
-
-        self.main_toolbox.addItem(self.page1_mri, "")
-
-
-
-
-
-        self.gridLayout_5.addWidget(self.main_toolbox, 0, 0, 1, 1)
-        self.dockImageEnh.setWidget(self.content_imageEnh)
-        Main.addDockWidget(QtCore.Qt.DockWidgetArea(1), self.dockImageEnh)
-        self.dockImageEnh.setVisible(True)
-
-
-
+        layout = QtWidgets.QGridLayout(self.page1_mri)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+
+        schema = [
+            # --- Group 1: Essential Visuals ---
+            Group(
+                id="grp_basics",
+                title="Color & Contrast",
+                layout="vbox",
+                children=[
+                    Slider(id="t2_1", label="Brightness", label_id="lb_ft2_1", min_val=-100, max_val=100),
+                    Slider(id="t2_2", label="Contrast", label_id="lb_ft2_2", min_val=-100, max_val=100),
+                    Slider(id="t2_3", label="Opacity", label_id="lb_ft2_3", min_val=0, max_val=100),
+                ]
+            ),
+
+            # --- Group 2: Image Filters ---
+            Group(
+                id="grp_filters",
+                title="Filters & Quality",
+                layout="vbox",
+                children=[
+                    Slider(id="t2_7", label="Sharpness", label_id="lb_ft2_7", min_val=0, max_val=100),
+                    Slider(id="t2_4", label="Smoothing", label_id="lb_ft2_4", min_val=0, max_val=100),
+                ]
+            ),
+
+            # --- Group 3: Geometry (Rotation) ---
+            Group(
+                id="grp_geo",
+                title="Geometry & Correction",
+                layout="vbox",
+                children=[
+                    Label("Correction Mode", id="lb_ft2_5"),
+                    Combo(id="page2_rot_cor", options=["", "Option 1", "Option 2"]),
+
+                    # Small separator inside the group if needed
+                    Separator(),
+
+                    Slider(id="t2_5", label="Rotation Fine Tune", label_id="lb_t2_5", min_val=-25, max_val=25),
+
+                ]
+            ),
+
+            # --- Group 4: Advanced ---
+            # Using HBox to keep the toggle compact
+            Group(
+                id="grp_adv",
+                title="Advanced Settings",
+                layout="hbox",
+                children=[
+                    Label("Advanced Mode", id="lb_ft2_6"),
+                    Toggle(id="toggle2_1", text="Toggle")
+                ]
+            )
+        ]
+
+        # Build and inject variables into 'self'
+        builder = UIBuilder(self.page1_mri)
+        builder.build(schema, layout, context=self)
 
         self.page1_mri.setVisible(True)
-        self.ImageEnh_view1.setVisible(True)
-
-        self.hs_t1_1.valueChanged.connect(self.lb_t1_1.setNum)
-        self.hs_t1_2.valueChanged.connect(self.lb_t1_2.setNum)
-        self.hs_t1_3.valueChanged.connect(self.lb_t1_3.setNum)
-        self.hs_t1_4.valueChanged.connect(self.lb_t1_4.setNum)
-        self.hs_t1_5.valueChanged.connect(self.lb_t1_5.setNum)
-        self.hs_t1_7.valueChanged.connect(self.lb_t1_7.setNum)
-        #self.hs_t1_8.valueChanged.connect(self.lb_t1_8.setNum)
-
-
-        self.hs_t2_1.valueChanged.connect(self.lb_t2_1.setNum)
-        self.hs_t2_2.valueChanged.connect(self.lb_t2_2.setNum)
-        self.hs_t2_3.valueChanged.connect(self.lb_t2_3.setNum)
-        self.hs_t2_4.valueChanged.connect(self.lb_t2_4.setNum)
-        self.hs_t2_5.valueChanged.connect(self.lb_t2_5.setNum)
-        #self.hs_t2_8.valueChanged.connect(self.lb_t2_8.setNum)
-        self.hs_t2_7.valueChanged.connect(self.lb_t2_7.setNum)
-
-        ################ NEW WIDGET ####################################
+        self.box_view2 = CollapsibleBox("View 2 Enhancement", self.page1_mri)
+        self.layout_enh_container.addWidget(self.box_view2)
+        self.enhancement_sections.append(self.box_view2)
 
 
 
-        #self.dw2_cb = QtWidgets.QComboBox(self.dockWidgetContents_2)
-        cbstyle = """
-        QComboBox QAbstractItemView {border: 1px solid grey;
-        background: white; 
-        selection-background-color: blue;} 
-        QComboBox {background: #03211c;margin-right: 1px;}
-        QComboBox::drop-down {
-    subcontrol-origin: margin;}
-        """
-        #self.dw2_cb.setStyleSheet(cbstyle)
-        #self.dw2_cb.setObjectName("dw2_cb")
-
-
-        #size = self.dw2_cb.style().pixelMetric(QtWidgets.QStyle.PM_SmallIconSize)
-        #pixmp = QtGui.QPixmap(size, size)
-        #color_name, color_index_rgb, _ = read_txt_color(settings.RESOURCE_DIR+"/color/LUT_albert.txt", from_one=True)
-        #set_new_color_scheme(self, color_name, color_index_rgb)
-
+    def _some_intial_steps(self):
         self.color_name, self.color_index_rgb, _ = read_txt_color(settings.RESOURCE_DIR+"/color/Simple.txt", mode= '', from_one=True)
         #update_color_scheme(self, None, dialog=False, update_widget=False)
         from collections import defaultdict
@@ -1002,8 +568,6 @@ class dockWidgets():
         #self.populate_tree(tags, model.invisibleRootItem())
         set_new_color_scheme(self)
 
-
-
         #self.tree_colors.model().sourceModel().itemChanged.connect(self.Upper_changeColorPen)
         self.tree_colors.clicked.connect(self.on_row_clicked)
         # In your setup method, after populating the model...
@@ -1020,27 +584,12 @@ class dockWidgets():
             if item:
                 # Call the function with only the item
                 self.style_row_by_checkstate(item)
-        #####
 
-
-        """
-        
-        self.colorsCombinations = defaultdict(list)
-        for i in range(16):
-            pixmp.fill(QtGui.QColor(colorNames[i]))
-            if i == 14:
-                self.colorsCombinations[i+1] = (1,1,1,1)
-            else:
-                self.colorsCombinations[i + 1] = QtGui.QColor(colorNames[i]).getRgbF()
-            self.dw2_cb.setItemData(i, pixmp, QtCore.Qt.DecorationRole)
-        """
-
-
-        ################### WIDGET 3 #############################
-        self.dockWidget_3 = QtWidgets.QDockWidget(Main)
-        self.dockWidget_3.setObjectName("dockWidget_3")
-        #self.dockWidget_3.setWindowState(QtCore.Qt.WindowMinimized)
-        #self.dockWidget_3.setFloating(True)
+    def _dock_progress_bar(self, Main):
+        self.dock_progressbar = QtWidgets.QDockWidget(Main)
+        self.dock_progressbar.setObjectName("dock_progressbar")
+        #self.dock_progressbar.setWindowState(QtCore.Qt.WindowMinimized)
+        #self.dock_progressbar.setFloating(True)
         self.dockWidgetContents_3 = QtWidgets.QWidget()
         self.dockWidgetContents_3.setObjectName("dockWidgetContents_3")
         self.formLayout_3 = QtWidgets.QFormLayout(self.dockWidgetContents_3)
@@ -1052,15 +601,14 @@ class dockWidgets():
         self.progressBarSaving.setObjectName("progressBar")
 
         #self.progressBarSaving.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
-        #self.dockWidget_3.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
+        #self.dock_progressbar.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
         self.formLayout_3.setWidget(0, QtWidgets.QFormLayout.SpanningRole, self.progressBarSaving)
-        self.dockWidget_3.setWidget(self.dockWidgetContents_3)
-        Main.addDockWidget(QtCore.Qt.DockWidgetArea(8), self.dockWidget_3)
-        self.dockWidget_3.setVisible(False)
+        self.dock_progressbar.setWidget(self.dockWidgetContents_3)
+        Main.addDockWidget(QtCore.Qt.DockWidgetArea(8), self.dock_progressbar)
+        self.dock_progressbar.setVisible(False)
 
 
-
-        ################### WIDGET 4 #############################
+    def _unknown_dock(self, Main):
         self.dockWidget_4 = QtWidgets.QDockWidget(Main)
         self.dockWidget_4.setObjectName("dockWidget_4")
         self.dockWidgetContents_4 = QtWidgets.QWidget()
@@ -1111,17 +659,13 @@ class dockWidgets():
         self.dw4_s1.valueChanged.connect(self.dw4lb1.setNum)
 
 
-        ################### WIDGET 5 (track based) #############################
+    def _tract_dock(self, Main):
         self.dockWidget_5 = QtWidgets.QDockWidget(Main)
         self.dockWidget_5.setObjectName("dockWidget_5")
         self.dockWidgetContents_5 = QtWidgets.QWidget()
         self.dockWidgetContents_5.setObjectName("dockWidgetContents_5")
         self.formLayout_5 = QtWidgets.QFormLayout(self.dockWidgetContents_5)
         self.formLayout_5.setObjectName("formLayout_5")
-
-
-
-
 
         self.dw5_flb1 = QtWidgets.QLabel(self.dockWidgetContents_5)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -1198,105 +742,83 @@ class dockWidgets():
         self.dockWidget_5.setVisible(False)
         self.dw5_s1.valueChanged.connect(self.dw5lb1.setNum)
         self.dw5_s2.valueChanged.connect(self.dw5lb2.setNum)
+        self.dockWidget_5.setWindowTitle(_translate("Main", "Tracking Distance"))
+        self.dw5_flb1.setText(_translate("Main", "Track Distance"))
+        self.dw5_flb2.setText(_translate("Main", "Track Width"))
 
-        ################### WIDGET Color Intensity #############################
+    def _setting_radius_dock(self, Main):
+        self.Settings_widget = QtWidgets.QWidget(Main)
+        self.Settings_widget.setObjectName("setting")
+        self.Settings_widget.setMinimumSize(QtCore.QSize(self.width() // 8, self.height() // 2))
 
-        #self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.SpanningRole, self.dw2_cb)
-        self.dw2_flb1 = QtWidgets.QLabel(self.Settings_widget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Minimum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.dw2_flb1.sizePolicy().hasHeightForWidth())
-        self.dw2_flb1.setSizePolicy(sizePolicy)
-        self.dw2_flb1.setAlignment(QtCore.Qt.AlignCenter)
-        self.dw2_flb1.setObjectName("dw2_flb1")
-        self.gridLayout_settings.addWidget(self.dw2_flb1, 0, 0, 1, 1)
+        # Main layout is Vertical
+        layout = QtWidgets.QVBoxLayout(self.Settings_widget)
+        layout.setSpacing(10)
 
-        #self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.LabelRole, self.dw2_flb1)
-        self.dw2lb1 = QtWidgets.QLabel(self.Settings_widget)
-        self.dw2lb1.setAlignment(QtCore.Qt.AlignCenter)
-        self.dw2lb1.setObjectName("dw2lb1")
-        self.gridLayout_settings.addWidget(self.dw2lb1, 1, 0, 1, 1)
-        #self.formLayout_2.setWidget(4, QtWidgets.QFormLayout.SpanningRole, self.dw2lb1)
-        self.dw2_s1 = QtWidgets.QScrollBar(self.Settings_widget)
-        self.dw2_s1.setOrientation(QtCore.Qt.Horizontal)
-        #self.dw2_s1.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.dw2_s1.setObjectName("dw2_s1")
-        self.dw2_s1.setRange(1,600)
-        self.dw2_s1.setSingleStep(1)
-        #self.formLayout_2.setWidget(5, QtWidgets.QFormLayout.SpanningRole, self.dw2_s1)
-        self.gridLayout_settings.addWidget(self.dw2_s1, 2, 0, 1, 1)
+        # Define the UI Structure
+        schema = [
+            # --- Group 1: Radius ---
 
 
-        self.dw2lb2 = QtWidgets.QLabel(self.Settings_widget)
-        self.dw2lb2.setAlignment(QtCore.Qt.AlignCenter)
-        self.dw2lb2.setObjectName("dw2lb2")
-        self.gridLayout_settings.addWidget(self.dw2lb2, 3, 0, 1, 1)
-        #self.formLayout_2.setWidget(6, QtWidgets.QFormLayout.SpanningRole, self.dw2lb2)
+            Separator(),
 
-        self.dw2_s2 = QtWidgets.QScrollBar(self.Settings_widget)
-        self.dw2_s2.setOrientation(QtCore.Qt.Horizontal)
-        #self.dw2_s1.setTickPosition(QtWidgets.QScrollBar.TicksBothSides)
-        self.dw2_s2.setObjectName("dw2_s1")
-        self.dw2_s2.setRange(0,10)
-        self.dw2_s2.setSingleStep(1)
-        #self.formLayout_2.setWidget(7, QtWidgets.QFormLayout.SpanningRole, self.dw2_s2)
-        self.gridLayout_settings.addWidget(self.dw2_s2, 4, 0, 1, 1)
+            # --- Group 2: Tolerance ---
+            # (Example: Wrapping it in a GroupBox to show off the builder)
+            Group(
+                id="group_tolerance",
+                title="Tolerance Settings",
+                layout="vbox",
+                children=[
+                    Slider(
+                        id="scrol_rad_circle",  # Creates self.scrol_rad_circle
+                        label="Circle Radius",
+                        label_id="label_assigned_rad_circle",
+                        min_val=50, max_val=1000, default=50
+                    ),
+                    Slider(
+                        id="scrol_tol_rad_circle",  # Creates self.scrol_tol_rad_circle
+                        label="Tolerance Level",
+                        label_id="label_assigned_tol_rad_circle",
+                        min_val=0, max_val=100, default=0
+                    )
+                ]
+            ),
 
+            Separator(),
 
-        self.dw2_l1 = QtWidgets.QFrame(self.Settings_widget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Minimum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.dw2_l1.sizePolicy().hasHeightForWidth())
-        self.dw2_l1.setSizePolicy(sizePolicy)
-        self.dw2_l1.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
-        self.dw2_l1.setFrameShape(QtWidgets.QFrame.HLine)
-        self.dw2_l1.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.dw2_l1.setObjectName("dw2_l1")
-        #self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.SpanningRole, self.dw2_l1)
-        self.gridLayout_settings.addWidget(self.dw2_l1, 5, 0, 1, 1)
-        self.dw2_l2 = QtWidgets.QFrame(self.Settings_widget)
-        self.dw2_l2.setMinimumSize(QtCore.QSize(self.width()//8, self.height() // 2))
-        self.dw2_l2.setFrameShape(QtWidgets.QFrame.HLine)
-        self.dw2_l2.setFrameShadow(QtWidgets.QFrame.Sunken)
-        self.dw2_l2.setObjectName("dw2_l2")
-        self.gridLayout_settings.addWidget(self.dw2_l2, 6, 0, 1, 1)
-        #self.formLayout_2.setWidget(8, QtWidgets.QFormLayout.SpanningRole, self.dw2_l2)
+            # --- Example of Side-by-Side (HBox) for future reference ---
+            # HBox(children=[
+            #     Label("Left"),
+            #     Label("Right")
+            # ])
+        ]
 
+        # Build and Inject Variables into 'self'
+        builder = UIBuilder(self.Settings_widget)
+        builder.build(schema, layout, context=self)
 
+        # Add spacing at the bottom to push widgets up
+        layout.addStretch()
 
-        self.dw2_s1.valueChanged.connect(self.dw2lb1.setNum)
-        self.dw2_s2.valueChanged.connect(self.dw2lb2.setNum)
-
-        #self.dwIntensitylS1.valueChanged.connect(self.dwIntensitylb1.setNum)
-
-        #self.formLayout_4.addWidget(self.line4_11, 29, 0, 1, 1)
-        #self.formLayout_intensity.setWidget(3, QtWidgets.QFormLayout.SpanningRole, self.lineInten_11)
-        #self.formLayout_intensity.setWidget(1, QtWidgets.QFormLayout.SpanningRole, self.dwIntensitylS1)
-
-        #self.formLayout_intensity.setWidget(0, QtWidgets.QFormLayout.SpanningRole, self.dwIntensitylb1)
-        #self.formLayout_intensity.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.dwintensity_flb1)
-
-        #self.dockWidget_colorintensity.setWidget(self.dockWidgetContents_intensity)
-        #Main.addDockWidget(QtCore.Qt.DockWidgetArea(1), self.dockWidget_colorintensity)
-        #self.dockWidget_colorintensity.setVisible(True)
+        # Add to Sidebar
+        self.vscode_widget.add_tab(
+            self.Settings_widget,
+            settings.RESOURCE_DIR + "/seg_settings.png",
+            "Settings"
+        )
 
 
-
-
-        ############################# WIDGET TABLE ######################################
-
-        self.dock_widget_table = QtWidgets.QDockWidget(Main)
+    def _table_link_doc(self, Main):
+        self.dock_widget_table = QtWidgets.QWidget(Main)
         self.dock_widget_table.setObjectName("dock_widget_table")
         self.dock_widget_table.setVisible(False)
 
         dock_widget_content_table = QtWidgets.QWidget()
 
         dock_widget_content_table.setObjectName("dock_widget_content_table")
-        gridLayout_6 = QtWidgets.QGridLayout(dock_widget_content_table)
-        gridLayout_6.setObjectName("gridLayout_6")
-        #self.table_widget = QtWidgets.QTableWidget(dock_widget_content_table)
+        gridLayout_table = QtWidgets.QGridLayout(dock_widget_content_table)
+        gridLayout_table.setObjectName("gridLayout_table")
+        # self.table_widget = QtWidgets.QTableWidget(dock_widget_content_table)
         self.table_widget = QtWidgets.QTableWidget(dock_widget_content_table)
         self.table_widget.setRowCount(25)
         self.table_widget.setColumnCount(2)
@@ -1317,7 +839,7 @@ class dockWidgets():
         self.table_widget.setHorizontalHeaderItem(5, item)
         item = QtWidgets.QTableWidgetItem()
         self.table_widget.setItem(0, 0, item)
-        gridLayout_6.addWidget(self.table_widget, 0, 1, 1, 1)
+
         splitter_2 = QtWidgets.QSplitter(dock_widget_content_table)
         splitter_2.setOrientation(QtCore.Qt.Horizontal)
 
@@ -1327,16 +849,8 @@ class dockWidgets():
         self.table_link.setObjectName("table_link")
         self.table_link.setCheckable(True)
 
-
-        gridLayout_6.addWidget(splitter_2, 1, 1, 1, 1)
-        self.dock_widget_table.setWidget(dock_widget_content_table)
-        Main.addDockWidget(QtCore.Qt.DockWidgetArea(2), self.dock_widget_table)
-
-
-
         _translate = QtCore.QCoreApplication.translate
         self.dock_widget_table.setWindowTitle(_translate("Main", "Table Link"))
-
 
         item = self.table_widget.horizontalHeaderItem(0)
         item.setText(_translate("Main", "XYZ_eco"))
@@ -1349,7 +863,18 @@ class dockWidgets():
         self.table_link.setText(_translate("Main", "Link"))
         self.table_update.setText(_translate("Main", "Update"))
 
-        ############################# WIDGET TABLE Measure ######################################
+
+        self.table_update.clicked.connect(self.linkMRIECO)
+        self.table_link.clicked.connect(self.linkBoth)
+
+        gridLayout_table.addWidget(self.table_widget, 0, 1, 1, 1)
+        gridLayout_table.addWidget(splitter_2, 1, 1, 1, 1)
+        #self.dock_widget_table.setWidget(dock_widget_content_table)
+        #Main.addDockWidget(QtCore.Qt.DockWidgetArea(2), self.dock_widget_table)
+        self.vscode_widget.add_tab(dock_widget_content_table, settings.RESOURCE_DIR+"/table.png", "Tables")
+
+
+    def _table_measure(self, Main):
 
         self.dock_widget_measure = QtWidgets.QDockWidget(Main)
         self.dock_widget_measure.setObjectName("dock_widget_table")
@@ -1377,26 +902,25 @@ class dockWidgets():
         splitter_2.setOrientation(QtCore.Qt.Horizontal)
 
 
-        gridLayout_6.addWidget(splitter_2, 1, 1, 1, 1)
+        gridLayout_view1.addWidget(splitter_2, 1, 1, 1, 1)
 
         self.dock_widget_measure.setWidget(dock_widget_content_table)
-        self.main_toolbox.addItem(self.dock_widget_measure, "")
+
         #Main.addDockWidget(QtCore.Qt.DockWidgetArea(2), self.dock_widget_measure)
 
         _translate = QtCore.QCoreApplication.translate
         self.dock_widget_measure.setWindowTitle(_translate("Main", "Table Measure"))
 
 
-        __sortingEnabled = self.table_widget.isSortingEnabled()
+        #__sortingEnabled = self.table_widget.isSortingEnabled()
         self.table_widget_measure.setSortingEnabled(True)
-        self.table_widget_measure.setSortingEnabled(__sortingEnabled)
+        #self.table_widget_measure.setSortingEnabled(__sortingEnabled)
 
-        ################################
+        self.vscode_widget.add_tab(self.table_widget_measure, settings.RESOURCE_DIR+"/table_measure.png",
+                                   "Table Measure")
 
-        ################# WIDGET_IMAGE############
-        #########
-        ################ Widget MRI COLORS ####################################
 
+    def _batchImages_dock(self, Main):
         self.page1_images = QtWidgets.QWidget()
 
         self.page1_images.setGeometry(QtCore.QRect(0, 0, self.width()//8, self.height()//2))
@@ -1462,48 +986,87 @@ class dockWidgets():
 
         #self.gridLayout_color.addWidget(self.tree_colors, 1, 0, 1, 1)
 
-        self.main_toolbox.addItem(self.page1_images, "")
-        #self.toolbox_imageConf.addItem(self.page1_images, "")
+        self.vscode_widget.add_tab(self.page1_images, settings.RESOURCE_DIR+ "/batch.png", "Batch Images")
 
-        #self.main_toolbox.addItem(self.dockWidget_2, "")
-        self.main_toolbox.addItem(self.Settings_widget, "")
+    def _dock_enhancement(self, Main):
+        self.scroll_enhancement = QtWidgets.QScrollArea()
+        self.scroll_enhancement.setWidgetResizable(True)
+        self.scroll_enhancement.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.scroll_enhancement.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)  # Only vertical scroll
 
-        self.dockSegmentationIntensity.setWidget(self.content_segInt)
-        Main.addDockWidget(QtCore.Qt.DockWidgetArea(1), self.dockSegmentationIntensity)
-        self.dockSegmentationIntensity.setVisible(True)
+        self.page_enhancement_container = QtWidgets.QWidget()
+        self.layout_enh_container = QtWidgets.QVBoxLayout(self.page_enhancement_container)
+        self.layout_enh_container.setContentsMargins(0, 0, 0, 0)
+        self.layout_enh_container.setSpacing(1)  # Small gap between sections
+        self.layout_enh_container.setAlignment(QtCore.Qt.AlignTop)
+        self.enhancement_sections = []
+
+        # --- HELPER: The Mutual Exclusion Logic ---
 
 
-        ##################################
+        self._create_dock_imEnhance_view1(Main)
+
+        self._create_dock_imEnhance_vew2(Main)
+
+        def on_box_toggled(is_checked, sender_box):
+            # If a box was just OPENED (is_checked=True)
+            if is_checked:
+                # Loop through all known sections
+                for box in self.enhancement_sections:
+                    # Close everyone else
+                    if box != sender_box:
+                        box.collapse()
+
+        self.box_view1.toggled.connect(lambda c: on_box_toggled(c, self.box_view1))
+        self.box_view2.toggled.connect(lambda c: on_box_toggled(c, self.box_view2))
+
+        self.scroll_enhancement.setWidget(self.page_enhancement_container)
+
+        # IMPORTANT: Add a spacer at the bottom so the boxes push to the top
+        self.layout_enh_container.addStretch()
+        self.box_view1.expand()
+        self.vscode_widget.add_tab(
+            self.scroll_enhancement,
+            settings.RESOURCE_DIR+"/imageEnh.png",  # Use a generic "Image" icon
+            "Image Enhancement"
+        )
+
+    def createDockWidget(self, Main):
+        """
+        Creating main attributes for the main widgets
+        :param Main:
+        :return:
+        """
+        _translate = QtCore.QCoreApplication.translate
+        self._create_main_dock(Main)
+        #self._table_link_doc(Main)
+        self._create_dockColor(Main)
+        self._create_segDock(Main)
+        #self._setting_radius_dock(Main)
+        self._dock_enhancement(Main)
+        self._some_intial_steps()
+        self._dock_progress_bar(Main)
+        self._dock_folder(Main)
+        self._table_measure(Main)
+        self._batchImages_dock(Main)
 
 
-        # Extra
-        self.dockImageEnh.setWindowTitle(_translate("Main", "Image Enhancement"))
-        #self.dockImageConf.setWindowTitle(_translate("Main", "Settings"))
+        #self.MainDock.setWindowTitle(_translate("Main", "Main Windows"))
+        self.dock_progressbar.setWindowTitle(_translate("Main", "Progress Bar"))
 
-
-        self.dockWidget_3.setWindowTitle(_translate("Main", "Progress Bar"))
-        self.dockWidget_4.setWindowTitle(_translate("Main", "Thresholding net"))
-        self.dockWidget_5.setWindowTitle(_translate("Main", "Tracking Distance"))
-        self.dockSegmentationIntensity.setWindowTitle(_translate("Main", "Color intensity"))
+        #self.dockSegmentationIntensity.setWindowTitle(_translate("Main", "Color intensity"))
         self.lb_t1_4.setText(_translate("Main", "0"))
         self.lb_t1_3.setText(_translate("Main", "0"))
         self.lb_ft1_1.setText(_translate("Main", "Brightness"))
-        self.dw5_flb1.setText(_translate("Main", "Track Distance"))
-        self.dw5_flb2.setText(_translate("Main", "Track Width"))
+
+
         self.lb_t1_2.setText(_translate("Main", "0"))
         self.lb_ft1_2.setText(_translate("Main", "Contrast"))
         self.lb_ft1_3.setText(_translate("Main", "BandPass R1"))
         self.lb_ft1_4.setText(_translate("Main", "Sobel"))
         self.lb_ft1_5.setText(_translate("Main", "Rotate"))
-
         self.lb_t1_1.setText(_translate("Main", "0"))
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.ImageEnh_view1), _translate("Main", "View 1"))
 
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.dock_widget_measure), _translate("Main", "Tables"))
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.page1_color), _translate("Main", "Color"))
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.page1_images), _translate("Main", "Images"))
-
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.Settings_widget), _translate("Main", "Settings"))
         self.lb_ft2_1.setText(_translate("Main", "Brightness"))
         self.lb_t2_1.setText(_translate("Main", "0"))
         self.lb_ft2_2.setText(_translate("Main", "Contrast"))
@@ -1513,38 +1076,27 @@ class dockWidgets():
         self.lb_ft2_4.setText(_translate("Main", "Sobel"))
         self.lb_ft2_5.setText(_translate("Main", "Rotate"))
         self.lb_t2_4.setText(_translate("Main", "0"))
-        self.page2_s2c.setText(_translate("Main", "Sagittal2Coronal"))
-        self.page1_s2c.setText(_translate("Main", "Sagittal2Coronal"))
-        #self.page1_rot_cor.setText(_translate("Main", "Coronal Rotation"))
-        #self.page2_rot_cor.setText(_translate("Main", "Coronal Rotation"))
-        #self.colorize.setText(_translate("Main", "Colorize"))
-        #self.colorize_MRI.setText(_translate("Main", "Colorize"))
-        self.main_toolbox.setItemText(self.main_toolbox.indexOf(self.page1_mri), _translate("Main", "View 2"))
+
 
         self.toggle1_1.setText(_translate("Main", "Toggle"))
         self.lb_ft1_6.setText(_translate("Main", "Hamming"))
         self.lb_ft2_6.setText(_translate("Main", "Hamming"))
-
-
         self.lb_ft1_7.setText(_translate("Main", "BandPass R2"))
         self.lb_t1_7.setText(_translate("Main", "0"))
         self.lb_ft2_7.setText(_translate("Main", "BandPass R2"))
         self.lb_t2_7.setText(_translate("Main", "0"))
 
-
-        ################# WIDGET 2 ############################
-
         self.page1_rot_cor.setItemText(0, _translate("Main", "Coronal"))
         self.page1_rot_cor.setItemText(1, _translate("Main", "Sagittal"))
         self.page1_rot_cor.setItemText(2, _translate("Main", "Axial"))
-
         self.page2_rot_cor.setItemText(0, _translate("Main", "Coronal"))
         self.page2_rot_cor.setItemText(1, _translate("Main", "Sagittal"))
         self.page2_rot_cor.setItemText(2, _translate("Main", "Axial"))
 
 
-        self.dw2_flb1.setText(_translate("Main", "Marker Size"))
-        self.dw2lb1.setText(_translate("Main", "0"))
+        self.label_assigned_rad_circle.setText(_translate("Main", "Effect strength"))
+        self.label_assigned_tol_rad_circle.setText(_translate("Main", "Tolerance AutoSeg"))
+        #self.label_rad_circle.setText(_translate("Main", "0"))
 
 
     def ShowContextMenu_table1(self, pos):
@@ -1595,7 +1147,7 @@ class dockWidgets():
         :return:
         """
         def dialog():
-            from melage.widgets.helpers.fileDialog_widget import QFileDialogPreview
+            from melage.dialogs.helpers import QFileDialogPreview
             opts = QtWidgets.QFileDialog.DontUseNativeDialog
             dialg = QFileDialogPreview(self, "Open File", self.source_dir, self._filters, options=opts,
                                        index=self._last_index_select_image_mri,
@@ -1827,14 +1379,14 @@ class dockWidgets():
                 return
             if action==import_action:
                 from PyQt5.QtWidgets import QFileDialog
-                filters = "TXT(*.txt)"
+                filters = "LUT(*.txt *.lut)"
                 opts = QFileDialog.DontUseNativeDialog
-                fileObj = QFileDialog.getOpenFileName(self, "Open COLOR File", self.source_dir, filters, options=opts)
+                fileObj = QFileDialog.getOpenFileName(self, "Open COLOR File", settings.DEFAULT_USE_DIR, filters, options=opts)
                 filen = fileObj[0]
                 if filen=='':
                     return
             elif action == export_action:
-                filters = "TXT (*.txt)"
+                filters = "LUT(*.txt *.lut)"
                 opts = QtWidgets.QFileDialog.DontUseNativeDialog
                 try:
                     filename = self._filesave_dialog(filters, opts)
@@ -1883,11 +1435,17 @@ class dockWidgets():
                 ind_avail += list(np.unique(self.readImMRI.npSeg))
             except:
                 pass
+            if 0 in ind_avail:
+                ind_avail.remove(0)
+
             color_vec = possible_color_index_rgb[:, 0].astype('int')
             list_avail = list(set(color_vec) & set(ind_avail))
             mask_color = np.isin(color_vec, list_avail)
+            if mask_color.sum()==0:
+                mask_color[0] = True
             possible_color_index_rgb = possible_color_index_rgb[mask_color, :]
             possible_color_name = list(np.array(possible_color_name)[mask_color])
+
             uq = []
             set_not_in_new_list = set(uq) - (set(possible_color_index_rgb[:, 0].astype('int')))
             set_kept_new_list = set_not_in_new_list - (
@@ -1983,25 +1541,28 @@ class dockWidgets():
                 r = cls[0]
                 self.color_name[r] = new
 
-    def reset_page1_eco(self):
-        self.hs_t1_1.setValue(0)
-        self.hs_t1_2.setValue(0)
-        self.hs_t1_3.setValue(0)
-        self.hs_t1_4.setValue(0)
-        self.hs_t1_5.setValue(0)
-        self.hs_t1_7.setValue(0)
-        self.page1_s2c.setChecked(False)
-        self.toggle1_1.setChecked(False)
+    def reset_view_pages(self, index=0):
+        if index==0:
+            self.t1_1.setValue(0)
+            self.t1_2.setValue(0)
+            self.t1_3.setValue(0)
+            self.t1_4.setValue(0)
+            self.t1_5.setValue(0)
+            self.t1_7.setValue(0)
 
-    def reset_page1_mri(self):
-        self.hs_t2_1.setValue(0)
-        self.hs_t2_2.setValue(0)
-        self.hs_t2_3.setValue(0)
-        self.hs_t2_4.setValue(0)
-        self.hs_t2_5.setValue(0)
-        self.hs_t2_7.setValue(0)
-        self.page2_s2c.setChecked(False)
-        self.toggle2_1.setChecked(False)
+            self.toggle1_1.setChecked(False)
+        elif index==1:
+            self.t2_1.setValue(0)
+            self.t2_2.setValue(0)
+            self.t2_3.setValue(0)
+            self.t2_4.setValue(0)
+            self.t2_5.setValue(0)
+            self.t2_7.setValue(0)
+
+            self.toggle2_1.setChecked(False)
+
+
+
 
 
     def _double_clicked(self, item):

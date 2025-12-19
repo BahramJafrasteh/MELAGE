@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "1.0.0"
+version = "2.0.0"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -16,7 +16,7 @@ keywords = ["neuroimaging", "MRI", "ultrasound", "segmentation", "visualization"
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: Apache Software License", 
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",

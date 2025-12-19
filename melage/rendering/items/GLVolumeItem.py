@@ -181,46 +181,37 @@ class GLVolumeItem(GLGraphicsItem):
         self._needUpload = False
 
     def paint(self):
-
         if self.data is None:
             return
 
         if self._needUpload:
             self.upload_data()
 
-        glEnable(GL_COLOR_MATERIAL)
-        glShadeModel(GL_SMOOTH)  # Use GL_FLAT for flat shading or GL_SMOOTH for smooth shading
-
-        glDisable(GL_LIGHTING)
-        glDisable(GL_LIGHT0)
-        glColor4f(1, 1, 1, self.intensitySeg)
+        # Render State
         glEnable(GL_DEPTH_TEST)
-        # glEnable(GL_CULL_FACE)
-        # glCullFace(GL_FRONT)
-        glDepthFunc(GL_LEQUAL)
         glEnable(GL_BLEND)
-        glBlendEquation(GL_FUNC_ADD);
-
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
         glEnable(GL_TEXTURE_3D)
-
         glBindTexture(GL_TEXTURE_3D, self.texture)
 
+        glDisable(GL_LIGHTING)
+        glColor4f(1, 1, 1, self.intensitySeg)  # Master Opacity
+
+        # Calculate View
         view = self.view()
         center = QtGui.QVector3D(*[x / 2. for x in self.data.shape[:3]])
         cam = self.mapFromParent(view.cameraPosition()) - center
-        # print "center", center, "cam", view.cameraPosition(), self.mapFromParent(view.cameraPosition()), "diff", cam
-        cam = np.array([cam.x(), cam.y(), cam.z()])
-        self._ax = np.argmax(abs(cam))
-        self._d = 1 if cam[self._ax] > 0 else -1
-        glCallList(self.lists[(self._ax, self._d)])  ## draw axes
+        cam_arr = np.array([cam.x(), cam.y(), cam.z()])
+
+        # Determine Major Axis
+        self._ax = np.argmax(abs(cam_arr))
+        self._d = 1 if cam_arr[self._ax] > 0 else -1
+
+        # Draw
+        if (self._ax, self._d) in self.lists:
+            glCallList(self.lists[(self._ax, self._d)])
 
         glDisable(GL_TEXTURE_3D)
-
-        glClear(GL_DEPTH_BUFFER_BIT)
-        if len(self.program) > 0:
-            glUseProgram(0)
 
 
     def drawVolume(self, ax, d):
@@ -277,4 +268,3 @@ class GLVolumeItem(GLGraphicsItem):
                 glVertex3f(*vp[i])
 
         glEnd()
-

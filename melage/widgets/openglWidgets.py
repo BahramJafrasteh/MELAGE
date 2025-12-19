@@ -4,6 +4,10 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from melage.rendering.DisplayIm import GLWidget
 from melage.rendering.glScientific import glScientific
+from melage.utils.utils import update_color_scheme
+from .ui_schema import *
+from functools import partial
+from .ui_builder import UIBuilder
 class openglWidgets():
     """
     Maing OPENGL WIDGETS
@@ -11,8 +15,57 @@ class openglWidgets():
     def __init__(self):
         pass
 
-
     def create_mutual_view(self, colorsCombinations):
+        """
+        Creates the 6-view grid (Eco + MRI) using the UIBuilder schema.
+        Matches the 'Full Size' layout of the original code.
+        """
+        self.mutulaViewTab = QtWidgets.QWidget()
+        self.mutulaViewTab.setObjectName("tab1")  # ID matches your old code
+
+        # 1. Setup Grid with Zero Margins (Matches your old code)
+        self.gridLayout = QtWidgets.QGridLayout(self.mutulaViewTab)
+        self.gridLayout.setObjectName("gridLayout")
+        self.gridLayout.setSpacing(0)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+
+
+
+
+        # 2. Define the Schema (2 Rows x 3 Cols)
+        # Row 0: ECO (Coronal, Sagittal, Axial) -> IDs 1, 2, 3
+        # Row 1: MRI (Coronal, Sagittal, Axial) -> IDs 4, 5, 6
+        schema = [
+
+            # --- Row 0: ECO ---
+            MedicalView(id=1, window_name="coronal", img_type="eco", colors=colorsCombinations),
+            MedicalView(id=2, window_name="sagittal", img_type="eco", colors=colorsCombinations),
+            MedicalView(id=3, window_name="axial", img_type="eco", colors=colorsCombinations),
+
+            # --- Row 1: MRI ---
+            MedicalView(id=4, window_name="coronal", img_type="mri", colors=colorsCombinations),
+            MedicalView(id=5, window_name="sagittal", img_type="mri", colors=colorsCombinations),
+            MedicalView(id=6, window_name="axial", img_type="mri", colors=colorsCombinations),
+
+        ]
+
+        # 3. Build it
+        builder = UIBuilder(self.mutulaViewTab)
+        builder.build(schema, self.gridLayout, context=self)
+
+        # 4. Re-connect Signals (Since we replaced the manual loop)
+        for i in range(1, 7):
+            try:
+                slider = getattr(self, f"horizontalSlider_{i}")
+                # Connect the cut_limit signal
+                slider.cut_limit.connect(lambda val, vid=i: self._cutIM(val, vid))
+            except AttributeError:
+                pass  # Handle case where widget creation might have failed
+        #self.create_vertical_mutualview()
+
+        #self.create_horizontal_mutualview()
+
+    def create_mutual_view0(self, colorsCombinations):
         """
         Initializes the 6 views (3 ECO, 3 MRI) and their controllers.
         """
@@ -39,6 +92,9 @@ class openglWidgets():
         # Loop to create all widgets dynamically
         for view_id, window_name, img_type in view_configs:
             self._init_single_view(colorsCombinations, view_id, window_name, img_type)
+
+
+
 
         # Now that widgets exist, build the layout
         self.create_vertical_mutualview()
@@ -131,7 +187,7 @@ class openglWidgets():
         return layout
 
     def create_horizontal_mutualview(self):
-        self.clear_layout(self.gridLayout)
+        #self.clear_layout(self.gridLayout)
 
         # 1. Configure widgets for Horizontal orientation
         # (Sliders become wide, labels align left/center)
@@ -181,7 +237,7 @@ class openglWidgets():
         self.setup_layout_expansion()
 
     def create_vertical_mutualview(self):
-        self.clear_layout(self.gridLayout)
+        #self.clear_layout(self.gridLayout)
 
         # 1. Configure widgets for Vertical Mode
         # (Sliders become tall/thin, Labels align correctly)
@@ -327,6 +383,7 @@ class openglWidgets():
                 QtWidgets.QSizePolicy.Expanding
             )
 
+
     def _make_control_group(self, label, slider, is_left):
         """Creates the tight QHBoxLayout for controls."""
         layout = QtWidgets.QHBoxLayout()
@@ -350,138 +407,43 @@ class openglWidgets():
             layout.setAlignment(QtCore.Qt.AlignLeft)
 
         return layout
-    def createOpenGLWidgets(self, centralwidget, colorsCombinations):
-        """
-        Creating main opengl widgets with its characteristics
-        :param centralwidget:
-        :param colorsCombinations:
-        :return:
-        """
-        self.gridLayout_main = QtWidgets.QGridLayout(centralwidget)
-        self.gridLayout_main.setObjectName("gridLayout_main")
-        self.tabWidget = QtWidgets.QTabWidget(centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.tabWidget.sizePolicy().hasHeightForWidth())
-        self.tabWidget.setSizePolicy(sizePolicy)
-        self.tabWidget.setMinimumSize(QtCore.QSize(100, 100))
-        self.tabWidget.setObjectName("tabWidget")
-
-        #self.create_horizontal_mutual_view(colorsCombinations)
-        self.create_mutual_view(colorsCombinations)
-
-        self.create_horizontal_mutualview()
 
 
-        self.tabWidget.addTab(self.mutulaViewTab, "fdfdfdfdf")
 
-        self.reservedTab = QtWidgets.QWidget()
-        self.reservedTab.setObjectName("tab_2")
 
-        self.gridLayout_3 = QtWidgets.QGridLayout(self.reservedTab)
-        self.gridLayout_3.setObjectName("gridLayout_3")
-        self.openGLWidget_10 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'axial', type='3d', id=10)
-        self.openGLWidget_10.setObjectName("openGLWidget_10")
-        self.openGLWidget_10.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_10.setEnabled(True)
-        self.openGLWidget_10.setVisible(False)
-        self.gridLayout_3.addWidget(self.openGLWidget_10, 3, 2, 1, 1)
-        self.openGLWidget_9 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'axial', type='eco', id=9)
-        self.openGLWidget_9.setObjectName("openGLWidget_9")
-        self.openGLWidget_9.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_9.setEnabled(True)
-        self.openGLWidget_9.setVisible(False)
-        self.gridLayout_3.addWidget(self.openGLWidget_9, 3, 0, 1, 1)
-        self.horizontalSlider_9 = QtWidgets.QSlider(self.reservedTab)
-        self.horizontalSlider_9.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_9.setObjectName("horizontalSlider_9")
-        self.gridLayout_3.addWidget(self.horizontalSlider_9, 4, 0, 1, 1)
-        self.label_8 = QtWidgets.QLabel(self.reservedTab)
-
-        self.label_8.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_8.setObjectName("label_8")
-        self.gridLayout_3.addWidget(self.label_8, 0, 2, 1, 1)
-        self.horizontalSlider_10 = QtWidgets.QSlider(self.reservedTab)
-        self.horizontalSlider_10.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_10.setObjectName("horizontalSlider_10")
-        self.gridLayout_3.addWidget(self.horizontalSlider_10, 4, 2, 1, 1)
-        self.label_7 = QtWidgets.QLabel(self.reservedTab)
-
-        self.label_7.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_7.setObjectName("label_7")
-        self.gridLayout_3.addWidget(self.label_7, 0, 0, 1, 1)
-        self.openGLWidget_7 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'coronal', type='eco', id=7)
-        self.openGLWidget_7.setObjectName("openGLWidget_7")
-        self.openGLWidget_7.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_7.setEnabled(True)
-        self.openGLWidget_7.setVisible(False)
-        self.gridLayout_3.addWidget(self.openGLWidget_7, 2, 0, 1, 1)
-        self.horizontalSlider_7 = QtWidgets.QSlider(self.reservedTab)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.horizontalSlider_7.sizePolicy().hasHeightForWidth())
-        self.horizontalSlider_7.setSizePolicy(sizePolicy)
-        self.horizontalSlider_7.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_7.setObjectName("horizontalSlider_7")
-        self.gridLayout_3.addWidget(self.horizontalSlider_7, 1, 0, 1, 1)
-        self.openGLWidget_8 = GLWidget(colorsCombinations,self.mutulaViewTab,imdata = None, currentWidnowName = 'sagittal', type='eco', id=8)
-        self.openGLWidget_8.setObjectName("openGLWidget_8")
-        self.openGLWidget_8.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_8.setEnabled(True)
-        self.openGLWidget_8.setVisible(False)
-        self.gridLayout_3.addWidget(self.openGLWidget_8, 2, 2, 1, 1)
-        self.horizontalSlider_8 = QtWidgets.QSlider(self.reservedTab)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.horizontalSlider_8.sizePolicy().hasHeightForWidth())
-        self.horizontalSlider_8.setSizePolicy(sizePolicy)
-        self.horizontalSlider_8.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_8.setObjectName("horizontalSlider_8")
-        self.gridLayout_3.addWidget(self.horizontalSlider_8, 1, 2, 1, 1)
-        self.label_9 = QtWidgets.QLabel(self.reservedTab)
-
-        self.label_9.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_9.setObjectName("label_9")
-        self.gridLayout_3.addWidget(self.label_9, 5, 0, 1, 1)
-        self.label_10 = QtWidgets.QLabel(self.reservedTab)
-
-        self.label_10.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_10.setObjectName("label_10")
-        self.gridLayout_3.addWidget(self.label_10, 5, 2, 1, 1)
-        self.tabWidget.addTab(self.reservedTab, "")
-
-        ################# LEFT SIDE ######################################
+    def create_view1_tab(self, colorsCombinations):
         self.segmentationTab = QtWidgets.QWidget()
         self.segmentationTab.setObjectName("segmentationTab")
         self.gridLayout_seg = QtWidgets.QGridLayout(self.segmentationTab)
         self.gridLayout_seg.setObjectName("gridLayout_seg")
-        self.splitter_main = QtWidgets.QSplitter(self.segmentationTab)
-        self.splitter_main.setOrientation(QtCore.Qt.Horizontal)
-        self.splitter_main.setObjectName("splitter_main")
-        self.splitter_left = QtWidgets.QSplitter(self.splitter_main)
-        self.splitter_left.setOrientation(QtCore.Qt.Vertical)
-        self.splitter_left.setObjectName("splitter_left")
+        self.splitter_main_view1 = QtWidgets.QSplitter(self.segmentationTab)
+        self.splitter_main_view1.setOrientation(QtCore.Qt.Horizontal)
+        self.splitter_main_view1.setObjectName("splitter_main")
+        self.splitter_left_view1 = QtWidgets.QSplitter(self.splitter_main_view1)
+        self.splitter_left_view1.setOrientation(QtCore.Qt.Vertical)
+        self.splitter_left_view1.setObjectName("splitter_left")
 
 
 
-        width_3d, height_3d = self.width()//3, int(self.height()/1.2)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
 
-        self.openGLWidget_11 = GLWidget(colorsCombinations,self.splitter_left, imdata=None, currentWidnowName='coronal', type='eco', id=11)
+        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.openGLWidget_11 = GLWidget(colorsCombinations,self.splitter_left_view1, imdata=None, currentWidnowName='coronal', type='eco', id=11)
 
 
-        self.openGLWidget_11.setSizePolicy(sizePolicy)
-        self.openGLWidget_11.setMaximumSize(QtCore.QSize(self.width(), self.height()))
-        self.openGLWidget_11.setObjectName("openGLWidget_11")
 
-        self.splitter_slider = QtWidgets.QSplitter(self.splitter_left)
+
+
+        #self.openGLWidget_11.setSizePolicy(sizePolicy)
+        #self.openGLWidget_11.setMaximumSize(QtCore.QSize(self.width(), self.height()))
+        #self.openGLWidget_11.setObjectName("openGLWidget_11")
+
+        self.splitter_slider = QtWidgets.QSplitter(self.splitter_left_view1)
         self.splitter_slider.setOrientation(QtCore.Qt.Vertical)
         self.splitter_slider.setObjectName("splitter_slider")
         self.label_11 = QtWidgets.QLabel(self.splitter_slider)
-
+        self.splitter_slider.setMinimumHeight(40)
+        self.splitter_slider.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHeightForWidth(self.label_11.sizePolicy().hasHeightForWidth())
         self.label_11.setSizePolicy(sizePolicy)
         self.label_11.setMinimumSize(QtCore.QSize(10, 10))
@@ -489,13 +451,9 @@ class openglWidgets():
         self.label_11.setAlignment(QtCore.Qt.AlignCenter)
         self.label_11.setObjectName("label_11")
 
-        self.horizontalSlider_11 = QtWidgets.QScrollBar(self.splitter_slider)
-        self.horizontalSlider_11.setSizePolicy(sizePolicy)
-        self.horizontalSlider_11.setMaximumSize(QtCore.QSize(self.width(), self.height()//44))
-        self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_11.setObjectName("horizontalSlider_11")
 
-        self.splitterRadioButton = QtWidgets.QSplitter(self.splitter_left)
+
+        self.splitterRadioButton = QtWidgets.QSplitter(self.splitter_left_view1)
         self.splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
         self.splitterRadioButton.setObjectName("splitterRadioButton")
         self.splitterRadioButton.setSizePolicy(sizePolicy)
@@ -538,8 +496,9 @@ class openglWidgets():
         self.radioButton_3.setObjectName("radioButton_3")
 
 
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        splitter_right = QtWidgets.QSplitter(self.splitter_main)
+        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
+
+        splitter_right = QtWidgets.QSplitter(self.splitter_main_view1)
         splitter_right.setOrientation(QtCore.Qt.Vertical)
         splitter_right.setObjectName("splitter_right")
         self.openGLWidget_14 = glScientific(colorsCombinations,splitter_right, id=0)
@@ -547,7 +506,9 @@ class openglWidgets():
         self.openGLWidget_14.setObjectName("openGLWidget_14")
         self.openGLWidget_14.setFocusPolicy(Qt.StrongFocus)
         self.openGLWidget_14.setSizePolicy(sizePolicy)
-        self.openGLWidget_14.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height()//3))
+        width_3d, height_3d = self.width()//3, int(self.height()/1.2)
+        #self.openGLWidget_14.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height()//3))
+        self.splitter_main_view1.setSizes([int(self.width() * 0.7), int(self.width() * 0.3)])
         self.openGLWidget_11.setFocusPolicy(Qt.StrongFocus)
 
 
@@ -568,28 +529,71 @@ class openglWidgets():
         self.verticalLayout.addWidget(self.label_points)
         spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout.addItem(spacerItem)
-        self.gridLayout_seg.addWidget(self.splitter_main, 0, 0, 1, 1)
+        self.gridLayout_seg.addWidget(self.splitter_main_view1, 0, 0, 1, 1)
+
+
+
+        # 1. Create a Container Widget to hold Button + Slider
+        self.slider_container = QtWidgets.QWidget(self.splitter_slider)
+        self.slider_container.setObjectName("slider_container")
+
+        # 2. Create Horizontal Layout (No margins so it fits tight)
+        layout_hbox = QtWidgets.QHBoxLayout(self.slider_container)
+        layout_hbox.setContentsMargins(0, 0, 0, 0)
+        layout_hbox.setSpacing(5)
+
+        # 3. Create the Small Play Button
+        self.btn_play_view1 = QtWidgets.QPushButton(self.slider_container)
+        self.btn_play_view1.setObjectName("btn_play")
+        # Use standard Play Icon
+        self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        # Make it small and square (e.g., 25x25 pixels)
+        self.btn_play_view1.setFixedSize(25, 25)
+        self.btn_play_view1.setToolTip("Play/Pause Video")
+        self.btn_play_view1.clicked.connect(partial(self.toggle_video_playback, 0))
+
+        # 4. Create the Slider (Parent is now the container, not the splitter)
+        self.horizontalSlider_11 = QtWidgets.QScrollBar(self.slider_container)
+        self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_11.setObjectName("horizontalSlider_11")
+
+        # Apply your existing sizing policies to the slider
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.horizontalSlider_11.setSizePolicy(sizePolicy)
+        self.horizontalSlider_11.setMaximumSize(QtCore.QSize(16777215, self.height() // 44))
+
+        # 5. Add them to the Horizontal Layout
+        layout_hbox.addWidget(self.btn_play_view1)
+        layout_hbox.addWidget(self.horizontalSlider_11)
+
+        # 6. Initialize Timer
+        self.video_timer_view1 = QtCore.QTimer(self)
+        self.video_timer_view1.timeout.connect(partial(self.advance_video_frame, 0))
+
+        # Default: Hide button (it will show only when video loads)
+        self.btn_play_view1.setVisible(False)
+
 
         self.tabWidget.addTab(self.segmentationTab, "")
 
-
-        ########################################## MRI TAB #########################################
-        ################# LEFT SIDE ######################################
+    def create_view2_tab(self, colorsCombinations):
         self.MRISegTab = QtWidgets.QWidget()
         self.MRISegTab.setObjectName("segmentationTab")
         self.gridLayout_seg_2 = QtWidgets.QGridLayout(self.MRISegTab)
         self.gridLayout_seg_2.setObjectName("gridLayout_seg")
-        splitter_main = QtWidgets.QSplitter(self.MRISegTab)
-        splitter_main.setOrientation(QtCore.Qt.Horizontal)
-        splitter_main.setObjectName("splitter_main")
-        splitter_left = QtWidgets.QSplitter(splitter_main)
-        splitter_left.setOrientation(QtCore.Qt.Vertical)
-        splitter_left.setObjectName("splitter_left")
+        self.splitter_main_view2 = QtWidgets.QSplitter(self.MRISegTab)
+        self.splitter_main_view2.setOrientation(QtCore.Qt.Horizontal)
+        self.splitter_main_view2.setObjectName("splitter_main")
+        self.splitter_left_view2 = QtWidgets.QSplitter(self.splitter_main_view2)
+        self.splitter_left_view2.setOrientation(QtCore.Qt.Vertical)
+        self.splitter_left_view2.setObjectName("splitter_left")
+
 
         width_3d, height_3d = self.width() // 3, int(self.height() // 1.2)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
-        self.openGLWidget_12 = GLWidget(colorsCombinations, splitter_left, imdata=None, currentWidnowName='coronal',
+        self.openGLWidget_12 = GLWidget(colorsCombinations, self.splitter_left_view2, imdata=None, currentWidnowName='coronal',
                                         type='mri', id=12)
 
         self.openGLWidget_12.setSizePolicy(sizePolicy)
@@ -597,10 +601,10 @@ class openglWidgets():
         self.openGLWidget_12.setObjectName("openGLWidget_11")
         self.openGLWidget_12.setFocusPolicy(Qt.StrongFocus)
 
-        splitter_slider = QtWidgets.QSplitter(splitter_left)
-        splitter_slider.setOrientation(QtCore.Qt.Vertical)
-        splitter_slider.setObjectName("splitter_slider")
-        self.label_12 = QtWidgets.QLabel(splitter_slider)
+        self.splitter_slider_view2 = QtWidgets.QSplitter(self.splitter_left_view2)
+        self.splitter_slider_view2.setOrientation(QtCore.Qt.Vertical)
+        self.splitter_slider_view2.setObjectName("splitter_slider")
+        self.label_12 = QtWidgets.QLabel(self.splitter_slider_view2)
 
         sizePolicy.setHeightForWidth(self.label_12.sizePolicy().hasHeightForWidth())
         self.label_12.setSizePolicy(sizePolicy)
@@ -609,13 +613,61 @@ class openglWidgets():
         self.label_12.setAlignment(QtCore.Qt.AlignCenter)
         self.label_12.setObjectName("label_11")
 
-        self.horizontalSlider_12 = QtWidgets.QScrollBar(splitter_slider)
-        self.horizontalSlider_12.setSizePolicy(sizePolicy)
-        self.horizontalSlider_12.setMaximumSize(QtCore.QSize(self.width(), self.height() // 44))
+        #self.horizontalSlider_12 = QtWidgets.QScrollBar(self.splitter_slider_view2)
+        #self.horizontalSlider_12.setSizePolicy(sizePolicy)
+        #self.horizontalSlider_12.setMaximumSize(QtCore.QSize(self.width(), self.height() // 44))
+        #self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
+        #self.horizontalSlider_12.setObjectName("horizontalSlider_11")
+        
+        
+        
+        # 1. Create a Container Widget to hold Button + Slider
+        self.slider_container_view2 = QtWidgets.QWidget(self.splitter_slider_view2)
+        self.slider_container_view2.setObjectName("slider_container")
+
+        # 2. Create Horizontal Layout (No margins so it fits tight)
+        layout_hbox = QtWidgets.QHBoxLayout(self.slider_container_view2)
+        layout_hbox.setContentsMargins(0, 0, 0, 0)
+        layout_hbox.setSpacing(5)
+
+        # 3. Create the Small Play Button
+        self.btn_play_view2 = QtWidgets.QPushButton(self.slider_container_view2)
+        self.btn_play_view2.setObjectName("btn_play")
+        # Use standard Play Icon
+        self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        # Make it small and square (e.g., 25x25 pixels)
+        self.btn_play_view2.setFixedSize(25, 25)
+        self.btn_play_view2.setToolTip("Play/Pause Video")
+        self.btn_play_view2.clicked.connect(partial(self.toggle_video_playback, 1))
+
+
+        # 4. Create the Slider (Parent is now the container, not the splitter)
+        self.horizontalSlider_12 = QtWidgets.QScrollBar(self.slider_container_view2)
         self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
         self.horizontalSlider_12.setObjectName("horizontalSlider_11")
 
-        splitterRadioButton = QtWidgets.QSplitter(splitter_left)
+        # Apply your existing sizing policies to the slider
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.horizontalSlider_12.setSizePolicy(sizePolicy)
+        self.horizontalSlider_12.setMaximumSize(QtCore.QSize(16777215, self.height() // 44))
+
+        # 5. Add them to the Horizontal Layout
+        layout_hbox.addWidget(self.btn_play_view2)
+        layout_hbox.addWidget(self.horizontalSlider_12)
+
+        # 6. Initialize Timer
+        self.video_timer_view2 = QtCore.QTimer(self)
+        self.video_timer_view2.timeout.connect(partial(self.advance_video_frame, 1))
+
+        # Default: Hide button (it will show only when video loads)
+        self.btn_play_view2.setVisible(False)
+        
+        
+        
+        
+        
+
+        splitterRadioButton = QtWidgets.QSplitter(self.splitter_left_view2)
         splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
         splitterRadioButton.setObjectName("splitterRadioButton")
         splitterRadioButton.setSizePolicy(sizePolicy)
@@ -655,7 +707,7 @@ class openglWidgets():
         self.radioButton_21_3.setObjectName("radioButton_3")
 
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        splitter_right = QtWidgets.QSplitter(splitter_main)
+        splitter_right = QtWidgets.QSplitter(self.splitter_main_view2)
         splitter_right.setOrientation(QtCore.Qt.Vertical)
         splitter_right.setObjectName("splitter_right")
         self.openGLWidget_24 = glScientific(colorsCombinations, splitter_right, id=1)
@@ -681,10 +733,48 @@ class openglWidgets():
         self.verticalLayout_2.addWidget(self.label_points_2)
         spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_2.addItem(spacerItem)
-        self.gridLayout_seg_2.addWidget(splitter_main, 0, 0, 1, 1)
+        self.gridLayout_seg_2.addWidget(self.splitter_main_view2, 0, 0, 1, 1)
 
         self.tabWidget.addTab(self.MRISegTab, "")
 
+
+
+    def createOpenGLWidgets(self, centralwidget, colorsCombinations):
+        """
+        Creating main opengl widgets with its characteristics
+        :param centralwidget:
+        :param colorsCombinations:
+        :return:
+        """
+        self.gridLayout_main = QtWidgets.QGridLayout(centralwidget)
+        self.gridLayout_main.setObjectName("gridLayout_main")
+        self.tabWidget = QtWidgets.QTabWidget(centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.tabWidget.sizePolicy().hasHeightForWidth())
+        self.tabWidget.setSizePolicy(sizePolicy)
+        self.tabWidget.setMinimumSize(QtCore.QSize(100, 100))
+        self.tabWidget.setObjectName("tabWidget")
+
+        #self.create_horizontal_mutual_view(colorsCombinations)
+        self.create_mutual_view(colorsCombinations)
+
+        self.create_horizontal_mutualview()
+
+
+        self.tabWidget.addTab(self.mutulaViewTab, "fdfdfdfdf")
+
+
+        #self.tabWidget.addTab(self.reservedTab, "")
+
+        ################# LEFT SIDE ######################################
+
+        self.create_view1_tab(colorsCombinations)
+
+        ########################################## MRI TAB #########################################
+        ################# LEFT SIDE ######################################
+        self.create_view2_tab(colorsCombinations)
 
 
 
@@ -709,10 +799,7 @@ class openglWidgets():
         self.openGLWidget_1.NewPoints.connect(
             lambda totalPs, chInd: self.openGLWidget_3.subpaintGL(totalPs, chInd))
 
-
-
-
-
+        update_color_scheme(self, None, dialog=False, update_widget=False)
         #self.tabWidget.addTab(self.tab, "")
         #self.gridLayout_main.addWidget(self.tabWidget, 0, 0, 1, 1)
 
@@ -723,15 +810,34 @@ class openglWidgets():
         self.horizontalSlider_4.valueChanged.connect(self.label_4.setNum)
         self.horizontalSlider_5.valueChanged.connect(self.label_5.setNum)
         self.horizontalSlider_6.valueChanged.connect(self.label_6.setNum)
-        self.horizontalSlider_7.valueChanged.connect(self.label_7.setNum)
-        self.horizontalSlider_8.valueChanged.connect(self.label_8.setNum)
-        self.horizontalSlider_9.valueChanged.connect(self.label_9.setNum)
-        self.horizontalSlider_10.valueChanged.connect(self.label_10.setNum)
+        #self.horizontalSlider_7.valueChanged.connect(self.label_7.setNum)
+        #self.horizontalSlider_8.valueChanged.connect(self.label_8.setNum)
+        #self.horizontalSlider_9.valueChanged.connect(self.label_9.setNum)
+        #self.horizontalSlider_10.valueChanged.connect(self.label_10.setNum)
         self.horizontalSlider_11.valueChanged.connect(self.label_11.setNum)
         self.horizontalSlider_12.valueChanged.connect(self.label_12.setNum)
         #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
 
+        try:
 
+            sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
+            sizePolicy.setHorizontalStretch(0)
+            sizePolicy.setVerticalStretch(0)
+            sizePolicy.setHeightForWidth(self.label_2.sizePolicy().hasHeightForWidth())
+            self.label_1.setSizePolicy(sizePolicy)
+            self.label_2.setSizePolicy(sizePolicy)
+            self.label_3.setSizePolicy(sizePolicy)
+            self.label_4.setSizePolicy(sizePolicy)
+            self.label_5.setSizePolicy(sizePolicy)
+            self.label_6.setSizePolicy(sizePolicy)
+            #self.label_7.setSizePolicy(sizePolicy)
+            #self.label_8.setSizePolicy(sizePolicy)
+            #self.label_9.setSizePolicy(sizePolicy)
+            #self.label_10.setSizePolicy(sizePolicy)
+            self.label_11.setSizePolicy(sizePolicy)
+            self.label_12.setSizePolicy(sizePolicy)
+        except AttributeError:
+            print("Warning: Labels not found. Skipping label size policy setup.")
         self.openGLWidget_11.setVisible(False)
         self.openGLWidget_12.setVisible(False)
         for i in [0,1,2,3,4,5,6,7,8,9,10,11]:
@@ -742,3 +848,6 @@ class openglWidgets():
                 ats.clicked.connect(self.save_changes_auto)
             except:
                 pass
+
+
+
