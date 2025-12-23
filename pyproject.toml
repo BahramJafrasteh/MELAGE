@@ -44,7 +44,7 @@ dependencies = [
     "scikit-image",           # Basic image processing
     "scikit-learn",           # Basic ML
     "shapely",
-    
+    "SimpleITK",
 ]
 
 
@@ -64,8 +64,6 @@ bet = [
 # (ANTs is the #1 cause of install failures on Windows)
 processing = [
     "antspyx",
-    "SimpleITK",
-    
     "vtk"        # Very heavy, keep optional if you only use it for specific tools
 ]
 reports = [
