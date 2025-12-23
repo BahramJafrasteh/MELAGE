@@ -150,33 +150,7 @@ class ShaderProgram(object):
                     else:
                         glUniform1fv(loc, len(data), data)
                     
-                ### bind buffer data to program blocks
-                #if len(self.blockData) > 0:
-                    #bindPoint = 1
-                    #for blockName, data in self.blockData.items():
-                        ### Program should have a uniform block declared:
-                        ### 
-                        ### layout (std140) uniform blockName {
-                        ###     vec4 diffuse;
-                        ### };
-                        
-                        ### pick any-old binding point. (there are a limited number of these per-program
-                        #bindPoint = 1
-                        
-                        ### get the block index for a uniform variable in the shader
-                        #blockIndex = glGetUniformBlockIndex(self.program(), blockName)
-                        
-                        ### give the shader block a binding point
-                        #glUniformBlockBinding(self.program(), blockIndex, bindPoint)
-                        
-                        ### create a buffer
-                        #buf = glGenBuffers(1)
-                        #glBindBuffer(GL_UNIFORM_BUFFER, buf)
-                        #glBufferData(GL_UNIFORM_BUFFER, size, data, GL_DYNAMIC_DRAW)
-                        ### also possible to use glBufferSubData to fill parts of the buffer
-                        
-                        ### bind buffer to the same binding point
-                        #glBindBufferBase(GL_UNIFORM_BUFFER, bindPoint, buf)
+
             except:
                 glUseProgram(0)
                 raise
@@ -191,12 +165,5 @@ class ShaderProgram(object):
         """Return the location integer for a uniform variable in this program"""
         return glGetUniformLocation(self.program(), name.encode('utf_8'))
 
-    #def uniformBlockInfo(self, blockName):
-        #blockIndex = glGetUniformBlockIndex(self.program(), blockName)
-        #count = glGetActiveUniformBlockiv(self.program(), blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS)
-        #indices = []
-        #for i in range(count):
-            #indices.append(glGetActiveUniformBlockiv(self.program(), blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES))
-        
 
 initShaders()

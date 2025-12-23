@@ -8,6 +8,8 @@ from melage.utils.utils import update_color_scheme
 from .ui_schema import *
 from functools import partial
 from .ui_builder import UIBuilder
+from melage.dialogs.helpers import custom_qscrollbar
+
 class openglWidgets():
     """
     Maing OPENGL WIDGETS
@@ -105,7 +107,7 @@ class openglWidgets():
         Helper to initialize one set of (OpenGL + Slider + Label).
         Sets attributes like self.openGLWidget_1, self.horizontalSlider_1, etc.
         """
-        from melage.dialogs.helpers import custom_qscrollbar
+
 
         # 1. Create OpenGL Widget
         gl_widget = GLWidget(

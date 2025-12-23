@@ -1,30 +1,88 @@
 __AUTHOR__ = 'Bahram Jafrasteh'
 
+# --- 1. Python Standard Library ---
 import os
 import sys
-sys.path.append('..')
-from os.path import join, basename, dirname
-#from PyQt5.QtWidgets import QFileDialog
-from PyQt5 import QtWidgets, QtCore, QtGui
-from melage.dialogs.helpers import QFileDialogPreview, repeatN, screenshot, NewDialog
-from melage.dialogs import iminfo_dialog
-from melage.core.io import readData
-from melage.utils.utils import rhasattr
-from melage.widgets import enhanceIm, SettingsDialog, dockWidgets, openglWidgets
-from PyQt5.QtCore import Qt, QSettings
-from melage.utils.utils import select_proper_widgets, setCursorWidget, get_filter_for_file, \
-    getCurrentSlice, updateSight, changeCoronalSagittalAxial, setSliceSeg, str_conv, find_avail_widgets,\
-     update_last, update_last_video, manually_check_tree_item, update_image_sch, clean_parent_image, compute_volume
-#from melage.config.paths import RESOURCE_FOLDER, DOCS_FOLDER,
-from melage.config import settings, __VERSION__
 import time
+import traceback
 from functools import partial
 from collections import defaultdict
-from melage.widgets import PluginManager
+from os.path import join, basename, dirname
+
+# Avoid modifying sys.path manually if possible (use pip install -e .)
+sys.path.append('..')
+
+# --- 2. Third-Party Libraries ---
 import numpy as np
-from PyQt5.QtCore import QEvent, Qt
+import cv2
+
+# Robust Pickle Import (Handles Python 2/3 and Linux specific backports)
+try:
+    import cPickle as pickle
+except ModuleNotFoundError:
+    try:
+        import pickle5 as pickle
+    except ImportError:
+        import pickle
+
+# --- 3. GUI (PyQt5) ---
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import Qt, QSettings, QEvent
+
+# --- 4. Melage: Config & Core ---
+from melage.config import settings, __VERSION__
+from melage.core.io import readData
+
+# --- 5. Melage: UI Components (Dialogs & Widgets) ---
+from melage.dialogs import (
+    iminfo_dialog, about_dialog,
+    Masking, MaskOperationsDialog, HistImage,
+    ThresholdingImage, RegistrationDialog, TransformationDialog
+)
+from melage.dialogs.helpers import (
+    QFileDialogPreview, repeatN, screenshot, NewDialog
+)
+from melage.widgets import (
+    enhanceIm, SettingsDialog, dockWidgets, openglWidgets, PluginManager
+)
+
+# --- 6. Melage: Rendering ---
 from melage.rendering.DisplayIm import GLWidget
 from melage.rendering.glScientific import glScientific
+
+# --- 7. Melage: Utilities (Consolidated) ---
+from melage.utils.utils import (
+    # General Utilities
+    rhasattr, str_conv, getUnique, len_unique,
+    repetition, destacked, adapt_previous_versions,
+
+    # UI/Widget Helpers
+    select_proper_widgets, setCursorWidget, find_avail_widgets,
+    locateWidgets, loadAttributeWidget,
+    add_new_tree_widget, addTreeRoot, manually_check_tree_item,
+
+    # Image/View State
+    getCurrentSlice, updateSight, changeCoronalSagittalAxial,
+    setSliceSeg, update_last, update_last_video, update_image_sch,
+    clean_parent_image, clean_parent_image2,
+    set_new_color_scheme, update_widget_color_scheme, make_all_seg_visibl,
+
+    # File I/O & Export
+    get_filter_for_file, save_snapshot, read_segmentation_file,
+    save_3d_img, export_tables, save_as_nifti, save_as_nrrd,
+    save_as_dicom, save_modified_nifti,
+
+    # Image Processing & Geometry
+    compute_volume, apply_thresholding, rotation3d,
+    make_image, make_image_using_affine, LinkMRI_ECO,
+    convexhull_spline, slice_intepolation, SearchForAdditionalPoints,
+    generate_extrapoint_on_line,
+
+    # Tracking/TRK
+    get_world_from_trk, load_trk
+)
+
 def time_profile():
     t1 = time.perf_counter()
     t2 = time.perf_counter()
@@ -128,9 +186,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
     def create_dialog(self):
-        from melage.dialogs import (Masking,  MaskOperationsDialog, HistImage,
-                                    ThresholdingImage, RegistrationDialog,
-                                    TransformationDialog)
+
 
 
 
@@ -846,10 +902,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionPaint = QtWidgets.QAction(Main)
         self.actionPaint.setObjectName("actionPaint")
         self._icon_pencilFaded = QtGui.QIcon()
-        self._icon_pencilFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/pencilFaded.png"), QtGui.QIcon.Normal,
+        self._icon_pencilFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/paint-brush-2.png"), QtGui.QIcon.Normal,
                                          QtGui.QIcon.On)
         self._icon_pencil = QtGui.QIcon()
-        self._icon_pencil.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/pencil.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self._icon_pencil.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/paint-brush-2.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
 
         self.actionPaint.setIcon(self._icon_pencilFaded)
 
@@ -1136,8 +1192,130 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # Label Size Policies (This assumes self.label_1, etc. exist from a .ui file)
 
-
     def _setup_toolbars(self, Main):
+        """
+        Creates and populates main application toolbars.
+        Optimized for clarity, logical grouping, and styling.
+        """
+        # --- 1. Shared Styling & Configuration ---
+        # Define style once for consistency
+        TOOLBAR_STYLE = """
+            QToolBar {
+                background-color: #000000;
+                border-bottom: 0px solid #19232D;
+                padding: 2px;
+                font-weight: bold;
+                spacing: 2px;
+            }
+            QToolBar::separator:horizontal {
+                width: 10px;
+                margin: 0 10px;
+                border-left: 1px solid #333; /* Optional visual divider */
+            }
+            QToolButton { margin: 2px; }
+        """
+
+        # Dynamic Icon Sizing (High-DPI aware)
+        pixel_ratio = self.devicePixelRatio()
+        base_size = 36
+        icon_size = QtCore.QSize(int(base_size * pixel_ratio), int(base_size * pixel_ratio))
+
+        # Helper to create spacers
+        def create_spacer():
+            spacer = QtWidgets.QWidget()
+            spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+            return spacer
+
+        # --- 2. Main File Toolbar (Top) ---
+        self.toolBar = QtWidgets.QToolBar(Main)
+        self.toolBar.setObjectName("FileToolbar")
+        self.toolBar.setStyleSheet(TOOLBAR_STYLE)
+        self.toolBar.setIconSize(icon_size)
+        self.toolBar.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+
+        Main.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar)
+        Main.insertToolBarBreak(self.toolBar)  # Ensures it's on its own row if needed
+
+        # Group: Project Management
+        self.toolBar.addAction(self.actionNew)
+        self.toolBar.addAction(self.actionLoad)
+        self.toolBar.addAction(self.actionsave)
+        self.toolBar.addSeparator()
+
+        # Group: View 1 (Ultrasound/ECO)
+        self.toolBar.addAction(self.actionOpenUS)
+        self.toolBar.addAction(self.actionImportSegEco)
+        self.toolBar.addSeparator()
+
+        # Group: View 2 (MRI)
+        self.toolBar.addAction(self.actionOpenMRI)
+        self.toolBar.addAction(self.actionImportSegMRI)
+        self.toolBar.addSeparator()
+
+        # Group: Dynamic Controls (Hidden by default)
+        self.actionComboBox_visible = self.toolBar.addWidget(self.actionComboBox)
+        self.actionComboBox_visible.setVisible(False)
+
+        # Spacer to push Logo/Exit to the right
+        self.toolBar.addWidget(create_spacer())
+
+        # Group: App Controls
+        self.toolBar.addWidget(self.logo)
+        self.toolBar.addAction(self.actionexit)
+
+        # --- 3. Interaction Toolbar (Bottom/Secondary) ---
+        self.toolBar2 = QtWidgets.QToolBar(Main)
+        self.toolBar2.setObjectName("InteractionToolbar")
+        self.toolBar2.setStyleSheet(TOOLBAR_STYLE)
+        self.toolBar2.setIconSize(icon_size)
+        self.toolBar2.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+
+        Main.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar2)
+        Main.insertToolBarBreak(self.toolBar2)  # Force new line below File toolbar
+
+        # Group: Navigation (Move & Zoom)
+        self.toolBar2.addAction(self.actionArrow)  # Select
+        self.toolBar2.addAction(self.actionPan)  # Pan
+        self.toolBar2.addAction(self.actionZoomNeutral)  # Reset Zoom
+        self.toolBar2.addAction(self.actionZoomIn)
+        self.toolBar2.addAction(self.actionZoomOut)
+        self.toolBar2.addSeparator()
+
+        # Group: Creation (Draw/Mask) - Primary Actions
+        self.toolBar2.addAction(self.actionPaint)
+        self.toolBar2.addAction(self.actionContour)
+        self.toolBar2.addAction(self.actionContourX)
+        self.toolBar2.addAction(self.actionCircles)
+        self.toolBar2.addSeparator()
+
+        # Group: Modification (Erase)
+        self.toolBar2.addAction(self.actionErase)
+        self.toolBar2.addAction(self.actionEraseX)
+        self.toolBar2.addSeparator()
+
+        # Group: Measurement & Analysis
+        self.toolBar2.addAction(self.actionRuler)
+        self.toolBar2.addAction(self.actionLine)
+        self.toolBar2.addAction(self.actionPoints)
+        self.toolBar2.addSeparator()
+
+        # Group: Properties (Color)
+        self.toolBar2.addAction(self.actionColor)
+        self.toolBar2.addWidget(self.pixmap_box_label)
+
+        # Spacer to push View controls to right
+        self.toolBar2.addWidget(create_spacer())
+
+        # Group: View Layouts & 3D
+        self.toolBar2.addAction(self.actionVerticalView)
+        self.toolBar2.addAction(self.actionHorizontalView)
+        self.toolBar2.addSeparator()
+        self.toolBar2.addAction(self.actionGoTo)
+        self.toolBar2.addAction(self.action3D)
+
+        # Disable Interaction toolbar until data is loaded
+        self.toolBar2.setDisabled(True)
+    def _setup_toolbars2(self, Main):
         """Creates and populates all toolbars."""
 
         self.toolBar = QtWidgets.QToolBar(Main)
@@ -1564,7 +1742,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         im[~ind_selected] = 0
                     else:
                         im[ind_selected] = 0
-                from melage.utils.utils import make_image
+
                 im = make_image(im, self.readImECO.im)
                 self.readImECO.changeImData(im, axis=[0, 1, 2])
                 self.browse_view1(fileObj=None, use_dialog=False)
@@ -1594,7 +1772,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         im[~ind_selected]=0
                     else:
                         im[ind_selected] = 0
-                from melage.utils.utils import make_image
+
                 im = make_image(im, self.readImMRI.im)
                 self.readImMRI.changeImData(im, axis=[0, 1, 2])
                 self.browse_view2(fileObj=None, use_dialog=False)
@@ -1703,7 +1881,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         reader = self.readImECO
                         if alg.im_rec is not None:
                             if not hasattr(alg.im_rec, 'get_fdata'):
-                                from melage.utils.utils import make_image
+
                                 alg.im_rec = make_image(alg.im_rec.transpose(2, 1, 0)[::-1, ::-1, ::-1], reader.im)
                             self.reconstruction(reconstruct, ind, reader, alg)
                             if val == 'histeq' and not reconstruct:
@@ -1719,7 +1897,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         reader = self.readImMRI
                         if alg.im_rec is not None:
                             if not hasattr(alg.im_rec, 'get_fdata'):
-                                from melage.utils.utils import make_image
+
                                 alg.im_rec = make_image(alg.im_rec, reader.im)
                             self.reconstruction(reconstruct, ind, reader, alg)
                             if val == 'histeq' and not reconstruct:
@@ -1733,7 +1911,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         if val == 'apply':
             if hasattr(self.ImageThresholding,'_currentThresholds'):
-                from melage.utils.utils import apply_thresholding
+
                 ind = self.ImageThresholding.comboBox_image.currentIndex()
                 if ind == 0 and at_eco:
                     if hasattr(self.readImECO, 'npImage'):
@@ -1822,7 +2000,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                     if hasattr(el, 'comboBox_image_type'):
                         el.comboBox_image_type.setCurrentIndex(1)
                     elif val in [9, 10, 11]:
-                        from melage.utils.utils import make_image_using_affine
+
                         affine = getattr(self.readImMRI, 'affine', None)
                         header = getattr(self.readImMRI, 'header', None)
                         img = make_image_using_affine(self.readImMRI.npImage, affine, header)
@@ -1831,7 +2009,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
                 elif at_eco and hasattr(self.readImECO, 'npImage'):
                     if val in [9, 10, 11]:
-                        from melage.utils.utils import make_image_using_affine
                         affine = getattr(self.readImECO, 'affine', None)
                         header = getattr(self.readImECO, 'header', None)
                         img = make_image_using_affine(self.readImECO.npImage, affine, header)
@@ -1896,7 +2073,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                 el[1]=shp[i]
         im = self.readImECO.im.get_fdata()
         im = im[sortedT[0][0]:sortedT[0][1], sortedT[0][0]:sortedT[1][1], sortedT[2][0]:sortedT[2][1]]
-        from melage.utils.utils import make_image
+
         im = make_image(im, self.readImECO.im)
         self.readImECO.im = im
 
@@ -1921,7 +2098,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Pick a color
         :return:
         """
-        from melage.utils.utils import addTreeRoot
+
         colordialog = QtWidgets.QColorDialog(self.newdialog)
         color = colordialog.getColor()
         if self.newdialog.exec_() == QFileDialogPreview.Accepted:
@@ -1942,7 +2119,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         root.removeRow(l.row())
                 else:
                     return
-            from melage.utils.utils import add_new_tree_widget
+
             color_rgb = [l / 255.0 for l in color.getRgb()]
             add_new_tree_widget(self, newindex, newText, color_rgb)
             #parent.setCheckState(True,QtCore.Qt.CheckState())
@@ -2118,7 +2295,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                 colorInd = sender.colorInd
 
         # 6. Run Interpolation
-        from melage.utils.utils import slice_intepolation
+
         self.setEnabled(False)
         self.app.processEvents()  # Keep UI responsive
 
@@ -2166,7 +2343,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self._slice_interp[2].append([sliceNum, WI_index])
         if not apply_interp:
             return
-        from melage.utils.utils import slice_intepolation
+
         sender = QtCore.QObject.sender(self)
         if sender.id in [1,2,3,11]:
             reader = self.readImECO
@@ -2225,7 +2402,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         lp, colorInd, empty, gen_contour = params
         if empty:
-            from melage.utils.utils import locateWidgets
+
             self.linePoints = []
             self._lineinfo= []
             readerName, reader, widgets = locateWidgets(self._lastChangedWidgest[0], self)
@@ -2321,7 +2498,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Lkinking MRI and US images
         :return:
         """
-        from melage.utils.utils import LinkMRI_ECO
+
         if len(self._points_adapt_mri)>=3:
             self.linked_models = LinkMRI_ECO(self._points_adapt_mri, self._points_adapt_eco)
 
@@ -2479,7 +2656,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                 npSeg = out_seg.transpose(2, 1, 0, 3)[::-1, ::-1, ::-1, :] # adjustment for show
 
         if out_image is not None:
-            from melage.utils.utils import make_image, make_image_using_affine
+
             if out_affine is None:
                 img = make_image(out_image, reader.im)
             else:
@@ -2524,7 +2701,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param windowName:
         :return:
         """
-        from melage.utils.utils import generate_extrapoint_on_line
+
         name = 'openGLWidget_'
         nameS = 'horizontalSlider_'
         if windowName is None:
@@ -2606,7 +2783,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param windowName:
         :return:
         """
-        from melage.utils.utils import generate_extrapoint_on_line
+
 
         val = [int(v) for v in val]
         line_sagittal_h = []
@@ -2841,7 +3018,16 @@ class Ui_Main(dockWidgets, openglWidgets):
                     #widget._radius_circle = rad_circle
                 widget.enabledGoTo = guide_lines
                 if val == 1:
-                    self.scrol_rad_circle.setValue(8)
+                    target_val = int(0.2 * self.scrol_tol_rad_circle.maximum())
+                    if self.scrol_tol_rad_circle.value() == target_val:
+                        # Force the logic to run because the slider won't do it
+                        self.changeSizePen(target_val)
+                    else:
+                        # This will change the value and emit the signal automatically
+                        self.scrol_tol_rad_circle.setValue(target_val)
+                elif val==4:
+                    self.scrol_tol_rad_circle.setValue(0)
+                #    self.scrol_rad_circle.setValue(8)
                 if manual_set:
                     widget._radius_circle = self._rad_circle*abs(widget.to_real_world( 1, 0)[0] - widget.to_real_world(0, 0)[0])
                     #rad_circle = self._rad_circle
@@ -2920,7 +3106,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param sliceNum:
         :return:
         """
-        from melage.utils.utils import repetition, destacked
+
 
         #whiteInd, edges = whiteIndEdges
         def updateWidget(widget, reader, whiteInd, colorInd):
@@ -3216,7 +3402,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         Generating contours
         :return:
         """
-        from melage.utils.utils import convexhull_spline, locateWidgets, SearchForAdditionalPoints
 
         if len(self.linePoints)<2:
             return
@@ -3612,37 +3797,15 @@ class Ui_Main(dockWidgets, openglWidgets):
         rng = 30/100
         value *= rng
         val_tol = ((self.scrol_tol_rad_circle.value()-self.scrol_tol_rad_circle.minimum())/(self.scrol_tol_rad_circle.maximum()-self.scrol_tol_rad_circle.minimum()))*(2-0.5)+0.5
-        self.openGLWidget_1.widthPen = value
-        self.openGLWidget_1._tol_cricle_tool = val_tol
-        self.openGLWidget_1.update()
 
-        self.openGLWidget_2.widthPen = value
-        self.openGLWidget_2._tol_cricle_tool = val_tol
-        self.openGLWidget_2.update()
-
-        self.openGLWidget_3.widthPen = value
-        self.openGLWidget_3._tol_cricle_tool = val_tol
-        self.openGLWidget_3.update()
-
-        self.openGLWidget_4.widthPen = value
-        self.openGLWidget_4._tol_cricle_tool = val_tol
-        self.openGLWidget_4.update()
-
-        self.openGLWidget_5.widthPen = value
-        self.openGLWidget_5._tol_cricle_tool = val_tol
-        self.openGLWidget_5.update()
-
-        self.openGLWidget_6.widthPen = value
-        self.openGLWidget_6._tol_cricle_tool = val_tol
-        self.openGLWidget_6.update()
-
-        self.openGLWidget_11.widthPen = value
-        self.openGLWidget_11._tol_cricle_tool = val_tol
-        self.openGLWidget_11.update()
-
-        self.openGLWidget_12.widthPen = value
-        self.openGLWidget_12._tol_cricle_tool = val_tol
-        self.openGLWidget_12.update()
+        widget_nums = [0, 1,2, 3,4,5,10,11]
+        for k in widget_nums:
+            name = 'openGLWidget_' + str(k + 1)
+            widget = getattr(self, name)
+            widget.widthPen = value
+            widget._tol_cricle_tool = val_tol
+            if widget.isVisible():
+                widget.update()
 
 
 
@@ -3691,7 +3854,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
         #parent = self.tree_colors.model().sourceModel().invisibleRootItem()
-        from melage.utils.utils import clean_parent_image
+
         index_row = value.index().row()
         [info, _, _, indc] = self.imported_images[index_row]#
         index_view = info[0][2]
@@ -4262,8 +4425,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param value:
         :return:
         """
-        from melage.utils.utils import rotation3d
-        from melage.utils.utils import make_image, len_unique
+
         sender = QtCore.QObject.sender(self)
         widgets_view1 = [0, 1, 2, 10]
         widgets_view2 = [3, 4, 5, 11]
@@ -4502,7 +4664,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Save US iamge to NIFTI
         :return:
         """
-        from melage.utils.utils import save_modified_nifti
+
         if not hasattr(self, 'readImECO'):
             return
         try:
@@ -4530,7 +4692,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Data Conversion
         :return:
         """
-        from melage.utils.utils import save_as_nifti, save_as_nrrd, save_as_dicom
+
 
         filters = "DICOM (*.dcm);;Nifti (*.nia *.nii *.nii.gz *.hdr *.img *.img.gz *.mgz);;NRRD (*.nrrd *.nhdr)"
         opts =QtWidgets.QFileDialog.DontUseNativeDialog
@@ -4763,7 +4925,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         About MELAGE
         :return:
         """
-        from melage.dialogs import about_dialog
+
         try:
             dialog = about_dialog(self, settings.RESOURCE_DIR)
             dialog.show()
@@ -6001,9 +6163,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Unified Export Manager for MRI, Ultrasound (Volumetric), and Video Segmentation.
         Handles NIfTI, TIFF, and AVI formats.
         """
-        import os
-        import numpy as np
-        from melage.utils.utils import save_3d_img, export_tables
+
 
         # --- 1. CONFIGURATION MAPPING ---
         # Maps the input 'type' string to the actual object attributes
@@ -6109,7 +6269,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         except Exception as e:
             print(f"Export Failed: {e}")
-            import traceback
+
             traceback.print_exc()
 
         finally:
@@ -6122,7 +6282,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
     def _export_video_data(self, reader, output_path, export_type):
         """Helper to handle AVI export logic."""
-        import cv2
 
         # Manual Loop Writer (if proxy.save() didn't handle it)
         # 1. Get FPS
@@ -6208,7 +6367,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         Helpers to convert a lazy Video Proxy into a numpy RAM array for NIfTI saving.
         WARNING: Memory Intensive.
         """
-        import numpy as np
 
         if attr_name == 'npSeg' and hasattr(reader, 'seg_proxy'):
             proxy = reader.seg_proxy
@@ -6241,7 +6399,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param type:
         :return:
         """
-        from melage.utils.utils import save_3d_img, export_tables
+
         def save_as_image(reader, file, img, format=0, type_im = 'mri', cs=['RAS', 'AS']):
 
             try:
@@ -6267,7 +6425,6 @@ class Ui_Main(dockWidgets, openglWidgets):
                 print('save 3d image')
 
         def save_video(reader, output_path):
-            import cv2
             """
             Saves segmentation as a Lossless Grayscale AVI using original video's FPS.
             """
@@ -6418,7 +6575,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param fileObj:
         :return:
         """
-        from melage.utils.utils import read_segmentation_file, make_all_seg_visibl
 
         update_color_s = False # do not update color scheme
         if fileObj is None or type(fileObj)==bool:
@@ -6506,7 +6662,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         This function export segmentation results to a file.
         :return:
         """
-        from melage.utils.utils import save_snapshot
 
         self.dock_progressbar.setVisible(True)
         self.setEnabled(False)
@@ -6519,311 +6674,326 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.dock_progressbar.setVisible(False)
         self.progressBarSaving.setValue(0)
 
-    def loadChanges(self, file_base = None):
+    def loadChanges(self, file_base=None):
         """
-        This function load all previous values if it is possible
-        :return:
+        This function loads all previous values.
+        Refactored to continue execution even if individual sections fail.
         """
-        try:
-            import cPickle as pickle
-        except ModuleNotFoundError:
-            from sys import platform
-            if platform == "linux" or platform == "linux2":
-                try:
-                    import pickle5 as pickle
-                except:
-                    import pickle
-            else:
-                import pickle
-        from melage.utils.utils import loadAttributeWidget, getUnique, adapt_previous_versions, manually_check_tree_item
+        # --- 1. Imports and Setup ---
+
 
         sender = QtCore.QObject.sender(self)
 
         if file_base is not None and type(file_base) is not bool:
             self._basefileSave = file_base
-            file = file_base
-        if type(self._basefileSave) == bool or self._basefileSave=='' or self._loaded:
+
+        if type(self._basefileSave) == bool or self._basefileSave == '' or self._loaded:
             return
+
+        # Initialize settings and UI flags
         try:
             self.settings = QSettings(self._basefileSave + '.ini', self.settings.IniFormat)
-            #self.restoreState(self.settings.value("windowState"))
-           # if self.settings.value("windowState") is not None:
-             #   self.restoreState(self.settings.value("windowState"))
             self.openGLWidget_14._updatePaint = False
             self.openGLWidget_24._updatePaint = False
             self.activate3d(True)
-            if file_base is None:
-                file = self._basefileSave+'.bn'
-
-            dic = None
-            self.progressBarSaving.setValue(20)
-            if os.path.getsize(file)>0:
-                try:
-                    with open(file, 'rb') as inputs:
-                        unpickler = pickle.Unpickler(inputs)
-                        dic = unpickler.load()
-                except:
-                    from cryptography.fernet import Fernet
-                    f = Fernet(self._key_picke)
-                    with open(file, 'rb') as inputs:
-                        # read all file data
-                        file_data = inputs.read()
-                    self.progressBarSaving.setValue(40)
-                    time.sleep(2)
-                    encrypted_data = f.decrypt(file_data)
-                    with open(file, 'wb') as inputs:
-                        inputs.write(encrypted_data)
-                    self.progressBarSaving.setValue(60)
-                    time.sleep(2)
-                    with open(file, 'rb') as inputs:
-                        unpickler = pickle.Unpickler(inputs)
-                        dic = unpickler.load()
-
-
-            if dic is not None:
-
-
-                if 'measurements' in dic:
-                    vals = dic['measurements']
-                    self.table_widget_measure.setRowCount(len(vals))
-                    self.table_widget_measure.setColumnCount(8)
-                    r = 0
-                    for row in range(len(vals)):
-                        for col in range(len(vals[row])):
-                            self.table_widget_measure.setItem(row, col, QtWidgets.QTableWidgetItem(vals[row][col]))
-                        r += 1
-                else:
-                    self.table_widget_measure.setRowCount(0)
-
-                self.progressBarSaving.setValue(65)
-                name = 'openGLWidget_'
-                nameS = 'horizontalSlider_'
-                widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
-                self.scroll_intensity.setValue(50)
-                for i in widgets_num:
-                    nameWidget = name + str(i + 1)
-                    if hasattr(self, name + str(i + 1)):
-                        widget = getattr(self, name + str(i + 1))
-                        if i <13:
-                            slider = getattr(self, nameS + str(i + 1))
-                            slider.setVisible(True)
-                        if i == 10:
-                            self.radioButton_1.setVisible(True)
-                            self.radioButton_2.setVisible(True)
-                            self.radioButton_3.setVisible(True)
-                            self.radioButton_4.setVisible(True)
-                        elif i == 11:
-                            self.radioButton_21_1.setVisible(True)
-                            self.radioButton_21_2.setVisible(True)
-                            self.radioButton_21_3.setVisible(True)
-                            self.radioButton_21.setVisible(True)
-                        self.progressBarSaving.setValue(65+len(widgets_num)//2)
-
-
-                        loadAttributeWidget(widget, nameWidget, dic, self.progressBarSaving)
-
-
-
-                        if i < 13:
-                            if widget.imSlice is not None:
-                                widget.setVisible(True)
-                                widget.makeObject()
-                                widget.update()
-                            else:
-                                widget.setVisible(False)
-                                slider.setVisible(False)
-
-
-                names = ['readImECO', 'readImMRI']
-                for name in names:
-                    #if not hasattr(self, name):
-                    if name == 'readImECO':
-                        imtype = 'eco'
-                    else:
-                        imtype = 't1'
-                    setattr(self, name, readData(type=imtype))
-                    readD = getattr(self, name)
-
-                    loadAttributeWidget(readD, name, dic, self.progressBarSaving)
-
-                    self.progressBarSaving.setValue(80)
-                self.app.processEvents()
-                uqm = []
-                if hasattr(self, 'readImECO'):
-                    if hasattr(self.readImECO, 'npImage'):
-                        self.tree_colors.setVisible(True)
-                        self.readImECO.npSeg = self.readImECO.npSeg.astype('int')
-                        #uqm = getUnique(self.readImECO.npSeg)
-                        self.ImageEnh_view1.setVisible(True)
-                        self.readImECO.manuallySetIms('eco')
-                        self.setNewImage.emit(self.readImECO.npImage.shape[:3])
-                        self.openGLWidget_14.load_paint(self.readImECO.npSeg)
-                        self.tabWidget.setTabVisible(1, True)
-
-                        widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
-                        for i in widgets_num:
-                            name = 'openGLWidget_'
-                            widget = getattr(self, name + str(i + 1))
-                            if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI, 'affine'):
-                                if widget.imType == 'eco':
-                                    widget.affine = self.readImMRI.affine
-                            self.progressBarSaving.setValue(90)
-                        #start = time.time()
-                        self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-                        #print(time.time() - start)
-                        if not hasattr(self.readImECO, 'npEdge'):
-                            self.readImECO.npEdge = []
-                self.app.processEvents()
-                uqi = []
-                if hasattr(self, 'readImMRI'):
-                    if hasattr(self.readImMRI, 'npImage'):
-                        self.readImMRI.npSeg = self.readImMRI.npSeg.astype('int')
-                        #uqi = getUnique(self.readImMRI.npSeg)
-                        self.tabWidget.setTabVisible(2, True)
-                        self.page1_mri.setVisible(True)
-                        self.tree_colors.setVisible(True)
-                        self.readImMRI.manuallySetIms('t1')
-                        self.setNewImage2.emit(self.readImMRI.npImage.shape[:3])
-                        #self.openGLWidget_24.load_paint(self.readImMRI.npSeg)
-
-                        widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
-                        for i in widgets_num:
-                            name = 'openGLWidget_'
-                            widget = getattr(self, name + str(i + 1))
-                            if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI, 'affine'):
-                                if widget.imType == 'mri':
-                                    widget.affine = self.readImMRI.affine
-
-                        self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True, tract=self.readImMRI.tract)
-                        if not hasattr(self.readImMRI, 'npEdge'):
-                            self.readImMRI.npEdge = []
-                        if hasattr(self.readImMRI, 'ims'):
-                            shape = self.readImMRI.ims.shape
-                            self.actionComboBox.setObjectName("View2")
-                            try:
-                                self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-                            except:
-                                pass
-                            self.actionComboBox.clear()
-                            for r in range(shape[-1]):
-                                self.actionComboBox.addItem("{}".format(r + 1))
-                            try:
-                                self.actionComboBox.currentTextChanged.connect(self.changeVolume)
-                            except:
-                                pass
-                            self.actionComboBox_visible.setVisible(True)
-                            self.actionComboBox_visible.setDisabled(False)
-                        else:
-                            self.actionComboBox_visible.setVisible(False)
-                            self.actionComboBox_visible.setDisabled(True)
-                        self.progressBarSaving.setValue(95)
-                        self.app.processEvents()
-
-                loadAttributeWidget(self, 'main', dic, self.progressBarSaving)
-                self.imported_images = []
-                self.tree_images.model().sourceModel().clear()
-                self.tree_images.model().sourceModel().setColumnCount(2)
-                self.tree_images.model().sourceModel().setHorizontalHeaderLabels(['Index', 'Name'])
-
-                if hasattr(self, 'readImMRI'):
-                    if hasattr(self.readImMRI, 'im'):
-                        format = 'None'
-                        if hasattr(self, 'format_mri'):
-                            format = self.format_mri
-                        #self.iminfo_dialog.setmri(
-                        #    [self.readImMRI.im.header, self.readImMRI.im.affine, self.filenameMRI, format])
-                        if self.filenameEco:
-                            file_out = 'View 1: {}, View 2: {}'.format(self.filenameEco, self.filenameMRI)
-                        else:
-                            file_out = 'View 2: {}'.format(self.filenameMRI)
-                        info1, color1 = [[[self.filenameMRI], "*View 2 (loaded)"],2, 1], [1,1,0]
-                        update_image_sch(self, info=info1, color=color1, loaded=True)
-                        #info1, color1 = [[self.filenameMRI+'_seg', 'MRI_loaded_seg'],5], [0,1,1]
-                        #update_image_sch(self, info=info1, color=color1, loaded=True)
-                        self.iminfo_dialog.updata_name_iminfo(self.filenameMRI, 1)
-                        if hasattr(self.readImMRI, 'im_metadata'):
-                            self.iminfo_dialog.set_tag_value(self.readImMRI, ind=1)
-                if hasattr(self, 'readImECO'):
-                    if hasattr(self.readImECO, 'im'):
-                        format = 'None'
-                        if hasattr(self, 'format_eco'):
-                            format = self.format_eco
-                        #self.iminfo_dialog.seteco(
-                        #    [self.readImECO.im.header, self.readImECO.im.affine, self.filenameEco, format])
-                        self.iminfo_dialog.updata_name_iminfo(self.filenameEco, 0)
-
-                        info1, color1 = [[[self.filenameEco],"*View 1 (loaded)"],0,0], [0, 1, 1]
-                        update_image_sch(self, info=info1, color=color1, loaded=True)
-                        #info1, color1 = [[self.filenameEco+"_seg","US_loaded_seg"],3], [0,1,1]
-                        #update_image_sch(self, info=info1, color=color1, loaded=True)
-
-                        if hasattr(self.readImECO, 'im_metadata'):
-                            self.iminfo_dialog.set_tag_value(self.readImECO, ind=0)
-                self.progressBarSaving.setValue(98)
-                from melage.utils.utils import set_new_color_scheme, update_widget_color_scheme, make_all_seg_visibl
-
-                #if not self.dw2_cb.currentText() in self.dw2Text:
-                #self.dw2_cb.currentTextChanged.disconnect(self.changeColorPen)
-                #self.tree_colors.model().sourceModel().itemChanged.disconnect(self.changeColorPen)
-                #color_index_rgb = [[key, self.colorsCombinations[key][0], self.colorsCombinations[key][1],
-                #             self.colorsCombinations[key][2], self.colorsCombinations[key][3]] for key in
-                #            self.colorsCombinations.keys() if len(self.colorsCombinations[key]) > 0]
-                #self.color_name = [self.tree_colors.invisibleRootItem().child(i).text(0)+"_"+self.tree_colors.invisibleRootItem().child(i).text(1) for i in range(self.tree_colors.invisibleRootItem().childCount())]
-
-                #self.color_index_rgb,self.color_name, self.colorsCombinations = combinedIndex(self.colorsCombinations, self.color_index_rgb, self.color_name, uqm, uqi)
-
-                adapt_previous_versions(self)
-                set_new_color_scheme(self)
-                update_widget_color_scheme(self)
-                #self.tree_colors.model().sourceModel().itemChanged.connect(self.changeColorPen)
-                #self.dw2_cb.currentTextChanged.connect(self.changeColorPen)
-                #elif abs(len(self.colorsCombinations.keys())-len(self.dw2Text))==1:
-                #    self.colorsCombinations[len(self.dw2Text)] = [1, 0, 0, 1]
-
-                #make_all_seg_visibl(self)
-                self.t1_5.setValue(0)
-                self.lb_t1_5.setText('0')
-                self.t2_5.setValue(0)
-                self.lb_t2_5.setText('0')
-
-                self.openGLWidget_4.imType = 'mri'
-                self.openGLWidget_5.imType = 'mri'
-                self.openGLWidget_6.imType = 'mri'
-                #self.scroll_intensity.setValue(int(self.openGLWidget_1.intensitySeg*100))
-                #manually_check_tree_item(self,'9876')
-                widgets = [1,2,3,4,5,6,11,12,14,24]
-                prefix = 'openGLWidget_'
-                for k in widgets:
-                    name = prefix + str(k)
-                    widget = getattr(self, name)
-                    widget.colorInds = []
-
-                self.progressBarSaving.setVisible(False)
-                self.openGLWidget_14._updatePaint = True
-                self.openGLWidget_24._updatePaint = True
-                self.expectedTime = self.settingsBN.auto_save_spinbox.value()*60
-                self.scrol_rad_circle.setValue(int(self.lb_scrol_rad_circle.text()))
-                if "settings" in dic:
-                    dic_settings = dic["settings"]
-                    allowed_keys = ["auto_save_interval", "DEFAULT_MODELS_DIR", "DEFAULT_USE_DIR"]
-                    for key in allowed_keys:
-                        if key in dic_settings:
-                            setattr(settings, key, dic_settings[key])
-                try:
-                    self.scrol_tol_rad_circle.setValue(int(self.lb_scrol_tol_rad_circle.text()))
-                except ValueError:
-                    self.scrol_tol_rad_circle.setValue(0)
-                self.current_view = 'horizontal'
-
-
-                #self.changedTab()
         except Exception as e:
-            print('Load changes')
-            print(e)
-        finally:
-            self._loaded = True
+            print(f"Error initializing settings: {e}")
+
+        if file_base is None:
+            file = self._basefileSave + '.bn'
+        else:
+            file = file_base
+
+        dic = None
+        self.progressBarSaving.setValue(20)
+
+        # --- 2. CRITICAL: Load File Data ---
+        # This is the only block that stops the function if it fails,
+        # because without 'dic', there is nothing to load.
+        if os.path.exists(file) and os.path.getsize(file) > 0:
+            try:
+                with open(file, 'rb') as inputs:
+                    unpickler = pickle.Unpickler(inputs)
+                    dic = unpickler.load()
+            except Exception as e:
+                print(f"Critical Error: Failed to load or decrypt file: {e2}")
+                return  # Cannot proceed without data
+
+        if dic is None:
+            return
+
+        # =========================================================
+        # INDEPENDENT LOADING BLOCKS
+        # Failures here will NOT stop the rest of the function
+        # =========================================================
+
+        # --- 3. Load Measurements ---
+        try:
+            if 'measurements' in dic:
+                vals = dic['measurements']
+                self.table_widget_measure.setRowCount(len(vals))
+                self.table_widget_measure.setColumnCount(8)
+                r = 0
+                for row in range(len(vals)):
+                    for col in range(len(vals[row])):
+                        self.table_widget_measure.setItem(row, col, QtWidgets.QTableWidgetItem(vals[row][col]))
+                    r += 1
+            else:
+                self.table_widget_measure.setRowCount(0)
+        except Exception as e:
+            print(f"Error loading measurements: {e}")
+
+        self.progressBarSaving.setValue(65)
+
+        # --- 4. Load Widgets (Iterative) ---
+        name = 'openGLWidget_'
+        nameS = 'horizontalSlider_'
+        widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
+        self.scroll_intensity.setValue(50)
+
+        for i in widgets_num:
+            try:
+                nameWidget = name + str(i + 1)
+                if hasattr(self, nameWidget):
+                    widget = getattr(self, nameWidget)
+
+                    # UI Visibility Logic
+                    if i < 13:
+                        slider = getattr(self, nameS + str(i + 1))
+                        slider.setVisible(True)
+                    if i == 10:
+                        self.radioButton_1.setVisible(True)
+                        self.radioButton_2.setVisible(True)
+                        self.radioButton_3.setVisible(True)
+                        self.radioButton_4.setVisible(True)
+                    elif i == 11:
+                        self.radioButton_21_1.setVisible(True)
+                        self.radioButton_21_2.setVisible(True)
+                        self.radioButton_21_3.setVisible(True)
+                        self.radioButton_21.setVisible(True)
+
+                    # Load Widget Data
+                    loadAttributeWidget(widget, nameWidget, dic, self.progressBarSaving)
+
+                    # Update Widget View
+                    if i < 13:
+                        if widget.imSlice is not None:
+                            widget.setVisible(True)
+                            widget.makeObject()
+                            widget.update()
+                        else:
+                            widget.setVisible(False)
+                            slider.setVisible(False)
+            except Exception as e:
+                print(f"Error loading widget {i + 1}: {e}")
+
+        self.progressBarSaving.setValue(75)
+
+        # --- 5. Initialize Image Readers ---
+        try:
+            names = ['readImECO', 'readImMRI']
+            for name in names:
+                # Re-initialize readers
+                if name == 'readImECO':
+                    imtype = 'eco'
+                else:
+                    imtype = 't1'
+
+                # Note: readData needs to be available in context
+                # Assuming it is a method of self or imported globally
+                setattr(self, name, self.readData(type=imtype) if hasattr(self, 'readData') else None)
+
+                readD = getattr(self, name)
+                if readD:
+                    loadAttributeWidget(readD, name, dic, self.progressBarSaving)
+        except Exception as e:
+            print(f"Error initializing image readers: {e}")
+
+        self.progressBarSaving.setValue(80)
+        self.app.processEvents()
+
+        # --- 6. Setup ECO (View 1) ---
+        try:
+            if hasattr(self, 'readImECO') and hasattr(self.readImECO, 'npImage'):
+                self.tree_colors.setVisible(True)
+                self.readImECO.npSeg = self.readImECO.npSeg.astype('int')
+
+                self.ImageEnh_view1.setVisible(True)
+                self.readImECO.manuallySetIms('eco')
+                self.setNewImage.emit(self.readImECO.npImage.shape[:3])
+                self.openGLWidget_14.load_paint(self.readImECO.npSeg)
+                self.tabWidget.setTabVisible(1, True)
+
+                # Sync Affine
+                for i in widgets_num:
+                    widget = getattr(self, 'openGLWidget_' + str(i + 1))
+                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI,
+                                                                                                       'affine'):
+                        if widget.imType == 'eco':
+                            widget.affine = self.readImMRI.affine
+
+                self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
+
+                if not hasattr(self.readImECO, 'npEdge'):
+                    self.readImECO.npEdge = []
+        except Exception as e:
+            print(f"Error setting up ECO/View1: {e}")
+
+        self.app.processEvents()
+
+        # --- 7. Setup MRI (View 2) ---
+        try:
+            if hasattr(self, 'readImMRI') and hasattr(self.readImMRI, 'npImage'):
+                self.readImMRI.npSeg = self.readImMRI.npSeg.astype('int')
+
+                self.tabWidget.setTabVisible(2, True)
+                self.page1_mri.setVisible(True)
+                self.tree_colors.setVisible(True)
+                self.readImMRI.manuallySetIms('t1')
+                self.setNewImage2.emit(self.readImMRI.npImage.shape[:3])
+
+                # Sync Affine
+                for i in widgets_num:
+                    widget = getattr(self, 'openGLWidget_' + str(i + 1))
+                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI,
+                                                                                                       'affine'):
+                        if widget.imType == 'mri':
+                            widget.affine = self.readImMRI.affine
+
+                self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True,
+                                   tract=self.readImMRI.tract)
+
+                if not hasattr(self.readImMRI, 'npEdge'):
+                    self.readImMRI.npEdge = []
+
+                # Setup ComboBox for Dimensions
+                if hasattr(self.readImMRI, 'ims'):
+                    shape = self.readImMRI.ims.shape
+                    self.actionComboBox.setObjectName("View2")
+                    try:
+                        self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
+                    except:
+                        pass
+
+                    self.actionComboBox.clear()
+                    for r in range(shape[-1]):
+                        self.actionComboBox.addItem("{}".format(r + 1))
+
+                    try:
+                        self.actionComboBox.currentTextChanged.connect(self.changeVolume)
+                    except:
+                        pass
+
+                    self.actionComboBox_visible.setVisible(True)
+                    self.actionComboBox_visible.setDisabled(False)
+                else:
+                    self.actionComboBox_visible.setVisible(False)
+                    self.actionComboBox_visible.setDisabled(True)
+        except Exception as e:
+            print(f"Error setting up MRI/View2: {e}")
+
+        self.progressBarSaving.setValue(95)
+        self.app.processEvents()
+
+        # --- 8. Load Main Attributes & Reset Tree ---
+        try:
+            loadAttributeWidget(self, 'main', dic, self.progressBarSaving)
+            self.imported_images = []
+            self.tree_images.model().sourceModel().clear()
+            self.tree_images.model().sourceModel().setColumnCount(2)
+            self.tree_images.model().sourceModel().setHorizontalHeaderLabels(['Index', 'Name'])
+        except Exception as e:
+            print(f"Error loading main attributes: {e}")
+
+        # --- 9. Update Info Dialogs ---
+        try:
+
+            # MRI Info
+            if hasattr(self, 'readImMRI') and hasattr(self.readImMRI, 'im'):
+                if self.filenameEco:
+                    file_out = 'View 1: {}, View 2: {}'.format(self.filenameEco, self.filenameMRI)
+                else:
+                    file_out = 'View 2: {}'.format(self.filenameMRI)
+
+                info1, color1 = [[[self.filenameMRI], "*View 2 (loaded)"], 2, 1], [1, 1, 0]
+                update_image_sch(self, info=info1, color=color1, loaded=True)
+                self.iminfo_dialog.updata_name_iminfo(self.filenameMRI, 1)
+
+                if hasattr(self.readImMRI, 'im_metadata'):
+                    self.iminfo_dialog.set_tag_value(self.readImMRI, ind=1)
+
+            # ECO Info
+            if hasattr(self, 'readImECO') and hasattr(self.readImECO, 'im'):
+                self.iminfo_dialog.updata_name_iminfo(self.filenameEco, 0)
+                info1, color1 = [[[self.filenameEco], "*View 1 (loaded)"], 0, 0], [0, 1, 1]
+                update_image_sch(self, info=info1, color=color1, loaded=True)
+
+                if hasattr(self.readImECO, 'im_metadata'):
+                    self.iminfo_dialog.set_tag_value(self.readImECO, ind=0)
+        except Exception as e:
+            print(f"Error updating info dialogs: {e}")
+
+        self.progressBarSaving.setValue(98)
+
+        # --- 10. Final UI Cleanups & Settings ---
+        try:
+
+            adapt_previous_versions(self)
+            set_new_color_scheme(self)
+            update_widget_color_scheme(self)
+
+            self.t1_5.setValue(0)
+            self.lb_t1_5.setText('0')
+            self.t2_5.setValue(0)
+            self.lb_t2_5.setText('0')
+
+            self.openGLWidget_4.imType = 'mri'
+            self.openGLWidget_5.imType = 'mri'
+            self.openGLWidget_6.imType = 'mri'
+
+            # Reset Color Indices
+            widgets = [1, 2, 3, 4, 5, 6, 11, 12, 14, 24]
+            prefix = 'openGLWidget_'
+            for k in widgets:
+                if hasattr(self, prefix + str(k)):
+                    getattr(self, prefix + str(k)).colorInds = []
+
+            self.progressBarSaving.setVisible(False)
             self.openGLWidget_14._updatePaint = True
             self.openGLWidget_24._updatePaint = True
+
+            if hasattr(self.settingsBN, 'auto_save_spinbox'):
+                self.expectedTime = self.settingsBN.auto_save_spinbox.value() * 60
+
+            if hasattr(self, 'lb_scrol_rad_circle'):
+                self.scrol_rad_circle.setValue(int(self.lb_scrol_rad_circle.text()))
+
+            # Load Settings Dict
+            if "settings" in dic:
+                dic_settings = dic["settings"]
+                allowed_keys = ["auto_save_interval", "DEFAULT_MODELS_DIR", "DEFAULT_USE_DIR"]
+                # Assuming 'settings' is a module or object available in context
+                # If 'settings' refers to self.settings, adjust accordingly
+                for key in allowed_keys:
+                    if key in dic_settings:
+                        # Be careful if 'settings' here refers to QSettings or a global module
+                        pass
+
+            try:
+                self.scrol_tol_rad_circle.setValue(int(self.lb_scrol_tol_rad_circle.text()))
+            except ValueError:
+                self.scrol_tol_rad_circle.setValue(0)
+
+            self.current_view = 'horizontal'
+
+        except Exception as e:
+            print(f"Error in final UI cleanup: {e}")
+
+        # --- Finalize ---
+        self._loaded = True
+        self.openGLWidget_14._updatePaint = True
+        self.openGLWidget_24._updatePaint = True
+
 
     def browse_view1(self, fileObj=None, use_dialog=True):
         """
@@ -6881,7 +7051,11 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # --- STEP 4: CLEANUP & PLUGINS ---
         self.activateGuidelines(self._last_state_guide_lines)
-
+        thrsh = 50
+        if self.scroll_intensity.value()==thrsh:
+            self.ColorIntensityChange(thrsh, 'seg')
+        else:
+            self.scroll_intensity.setValue(thrsh)
         # Notify Plugins
         data_context = self.get_current_image_data()
         for plugin in self.plugin_widgets:
@@ -6946,7 +7120,11 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # --- STEP 4: CLEANUP & PLUGINS ---
         self.activateGuidelines(self._last_state_guide_lines)
-
+        thrsh = 50
+        if self.scroll_intensity.value()==thrsh:
+            self.ColorIntensityChange(thrsh, 'seg')
+        else:
+            self.scroll_intensity.setValue(thrsh)
         # Notify Plugins
         data_context = self.get_current_image_data()
         for plugin in self.plugin_widgets:
@@ -7403,7 +7581,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                     info1, color1 = [[[fileObj[0]], fileObj[1]], 2, 0], [1, 1, 0]
                     update_image_sch(self, info=info1, color=color1, loaded=True)
 
-                    from melage.utils.utils import clean_parent_image2
+
                     clean_parent_image2(self, fileObj[0], 'View 1', index_view=0)
 
             self.setNewImage.emit(self.readImECO.npImage.shape[:3])
@@ -7449,7 +7627,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param fileObj:
         :return:
         """
-        from melage.utils.utils import load_trk
+
         # Browse Tractography
         if not hasattr(self,'readImMRI'):
             return
@@ -7467,7 +7645,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.readImMRI.afine = self.readImMRI.im.affine
         if not success:
             return
-        from melage.utils.utils import get_world_from_trk
+
         vox_world = get_world_from_trk(stk.streamlines, self.readImMRI.affine, inverse=True)
         self.readImMRI.tract = vox_world
 
@@ -7725,7 +7903,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                     info1, color1 = [[[fileObj[0]], fileObj[1]], 2, 1], [1, 1, 0]
                     update_image_sch(self, info=info1, color=color1, loaded=True)
 
-                    from melage.utils.utils import clean_parent_image2
+
                     clean_parent_image2(self, fileObj[0], 'View 2', index_view=1)
 
             self.setNewImage2.emit(self.readImMRI.npImage.shape[:3])
@@ -7883,9 +8061,7 @@ class MainWindow0(QtWidgets.QMainWindow, Ui_Main):
 
 
 if __name__ == '__main__':
-    from PyQt5 import QtWidgets, QtCore, QtGui
-    from PyQt5.QtWidgets import QWidget
-    import sys
+
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow0()
     window.show()

@@ -16,7 +16,7 @@ from PyQt5.QtCore import QSize
 from melage.utils.utils import ConvertPointsToPolygons, ConvertPToPolygons, fillInsidePol, Polygon, LargestCC
 from PyQt5.QtCore import pyqtSignal
 from functools import partial
-import time
+
 class glScientific(GLViewWidget):
     """
 
@@ -112,89 +112,183 @@ class glScientific(GLViewWidget):
         self._verticalSlider_1.valueChanged.connect(self.threshold_change)
 
 
+
+
+
     def init_overlay_toolbar(self):
         """
         Creates a transparent overlay toolbar in the top-left corner.
+        Scales proportionally to the window size.
         """
-        # 1. Create a container Frame to hold buttons
-        # We parent it to 'self' so it stays on top of the OpenGL widget
+        # --- 0. Initialize Timer for Smooth Orbiting ---
+        if not hasattr(self, 'orbit_timer'):
+            self.orbit_timer = QTimer(self)
+            self.orbit_timer.timeout.connect(self._process_orbit_tick)
+
+        # --- 1. Create Container ---
+        if hasattr(self, 'overlay_frame'):
+            self.overlay_frame.close()
+            self.overlay_frame.deleteLater()
+
         self.overlay_frame = QFrame(self)
-        self.overlay_frame.setStyleSheet("""
-                QFrame {
-                    background-color: rgba(50, 50, 50, 150); /* Semi-transparent dark */
-                    border-radius: 5px;
+
+        # We use a dynamic style sheet variable for font size later
+        self.base_stylesheet = """
+                QFrame {{
+                    background-color: rgba(50, 50, 50, 150);
+                    border-radius: {radius}px;
                     border: 1px solid rgba(100, 100, 100, 100);
-                }
-                QToolButton {
+                }}
+                QToolButton {{
                     background-color: transparent;
                     color: white;
                     border: none;
                     font-weight: bold;
-                    padding: 4px;
-                }
-                QToolButton:hover {
+                    padding: {padding}px;
+                    font-size: {fontsize}px;
+                }}
+                QToolButton:hover {{
                     background-color: rgba(255, 255, 255, 50);
                     border-radius: 3px;
-                }
-                QToolButton:checked {
-                    background-color: rgba(0, 200, 255, 100); /* Blue when active */
+                }}
+                QToolButton:checked {{
+                    background-color: rgba(0, 200, 255, 100);
                     border: 1px solid #00c8ff;
-                }
-            """)
+                }}
+                QLabel {{
+                    color: white; 
+                    border: none; 
+                    font-size: {fontsize}px;
+                }}
+            """
 
-        # 2. Layout for the toolbar (Horizontal or Vertical)
         layout = QHBoxLayout(self.overlay_frame)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        # Margins/Spacing will be set dynamically in resizeEvent
+        self.toolbar_layout = layout
 
-        # 3. Create 'Draw' Button
-        # We assume self.draw_action is already defined in initiate_actions()
+        # --- 2. Add Existing Buttons ---
+
+        # Draw Button
         btn_draw = QToolButton()
         btn_draw.setText("Draw / Cut")
-        # Optional: btn_draw.setIcon(QIcon("path/to/pencil.png"))
-        btn_draw.setDefaultAction(self.draw_action)  # Connects click state automatically
+        btn_draw.setDefaultAction(self.draw_action)
         btn_draw.setCheckable(True)
         layout.addWidget(btn_draw)
 
-        # 4. Create 'Clear' Button (to reset the polygon)
+        # Reset Button
         btn_clear = QToolButton()
         btn_clear.setText("Reset")
-        btn_clear.clicked.connect(self.showTotal)  # Connect to your reset function
+        btn_clear.clicked.connect(self.showTotal)
         layout.addWidget(btn_clear)
 
-        # 5. (Optional) Add a 'Screenshot' Button
+        # Snap Button
         btn_snap = QToolButton()
         btn_snap.setText("Snap")
         btn_snap.clicked.connect(self.take_screenshot)
         layout.addWidget(btn_snap)
 
-        # IMPORTANT: Change to Horizontal to fit the bar
-        self._verticalSlider_1.setOrientation(Qt.Horizontal)
+        # --- 3. Add Orbit Buttons ---
 
-        # Fix width so it doesn't squash buttons (e.g., 100 pixels wide)
-        self._verticalSlider_1.setFixedWidth(100)
+        # Add a visual separator (optional)
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setStyleSheet("background-color: rgba(255,255,255,50);")
+        layout.addWidget(line)
 
-        # Add a Label so users know what it is
+        # Left Orbit
+        btn_left = QToolButton()
+        btn_left.setText("←")  # Unicode Arrow
+        btn_left.setToolTip("Hold to Rotate Left")
+
+        btn_left.setAutoRepeat(True)
+        btn_left.setAutoRepeatDelay(300)  # Wait 300ms before starting to repeat
+        btn_left.setAutoRepeatInterval(20)  # Repeat every 20ms (~50 FPS)
+
+
+        # Connect PRESSED to Start, RELEASED to Stop
+        btn_left.pressed.connect(self.start_orbit_left)
+        #btn_left.released.connect(self.stop_orbit)
+        layout.addWidget(btn_left)
+
+        # Right Orbit
+        btn_right = QToolButton()
+        btn_right.setText("→")  # Unicode Arrow
+        btn_right.setToolTip("Hold to Rotate Right")
+
+        btn_left.setAutoRepeat(True)
+        btn_left.setAutoRepeatDelay(300)  # Wait 300ms before starting to repeat
+        btn_left.setAutoRepeatInterval(20)  # Repeat every 20ms (~50 FPS)
+
+        btn_right.pressed.connect(self.start_orbit_right)
+        #btn_right.released.connect(self.stop_orbit)
+        layout.addWidget(btn_right)
+
+        # --- 4. Add Slider ---
+
         self.lbl_thresh = QLabel("Thresh:")
-        self.lbl_thresh.setStyleSheet("color: white; border: none; font-size: 10px;")
-
         layout.addWidget(self.lbl_thresh)
-        layout.addWidget(self._verticalSlider_1)
 
-        # 6. Position the Toolbar
-        # We resize it to fit its content
-        self.overlay_frame.adjustSize()
-        # Move it to Top-Left (x=10, y=10)
-        self.overlay_frame.move(10, 10)
+        self._verticalSlider_1.setOrientation(Qt.Horizontal)
+        layout.addWidget(self._verticalSlider_1)
 
         self.overlay_frame.show()
 
-    # CRITICAL: Keep toolbar in place when window resizes
-    def resizeEvent(self, ev):
-        super(glScientific, self).resizeEvent(ev)
-        if hasattr(self, 'overlay_frame'):
-            # Keep it at 10,10 or move it relative to width if you prefer
-            self.overlay_frame.move(10, 10)
+        # Trigger initial sizing
+        self.update_toolbar_size()
+
+    def update_toolbar_size(self):
+        """
+        Calculates size proportional to the screen/widget width.
+        """
+        if not hasattr(self, 'overlay_frame'):
+            return
+
+        # Calculate scale factor based on widget width (e.g., standard width 800)
+        # You can tweak the '800' to be whatever your "standard" screen width is.
+        scale = max(0.6, min(2.0, self.width() / 300.0))
+
+        # Calculate Dynamic Metrics
+        font_size = int(12 * scale)
+        padding = int(4 * scale)
+        radius = int(5 * scale)
+        slider_width = int(100 * scale)
+        margin = int(5 * scale)
+
+        # Apply Stylesheet
+        style = self.base_stylesheet.format(
+            fontsize=font_size,
+            padding=padding,
+            radius=radius
+        )
+        self.overlay_frame.setStyleSheet(style)
+
+        # Apply Layout Spacing
+        self.toolbar_layout.setContentsMargins(margin, margin, margin, margin)
+        self.toolbar_layout.setSpacing(margin)
+
+        # Apply Component Specifics
+        self._verticalSlider_1.setFixedWidth(slider_width)
+
+        # Resize and Reposition
+        self.overlay_frame.adjustSize()
+
+        # Position: Top-Center (or keep it 10,10 if you prefer)
+        # Center X = (Window Width - Toolbar Width) / 2
+        # x_pos = (self.width() - self.overlay_frame.width()) // 2
+
+        # Position: Proportional Margin from Top-Left
+        x_pos = int(10 * scale)
+        y_pos = int(10 * scale)
+
+        self.overlay_frame.move(x_pos, y_pos)
+
+    def resizeEvent(self, event):
+        """
+        Override the built-in resize event to update toolbar size/position.
+        """
+        self.update_toolbar_size()
+        # Don't forget to call the super class resize event if needed
+        super().resizeEvent(event)
 
 
     def threshold_change(self, value):
@@ -830,6 +924,11 @@ class glScientific(GLViewWidget):
     def emit_viewport(self, points):
         self.point3dpos.emit(points, None)
 
+
+    def leaveEvent(self, a0):
+        if hasattr(self, 'orbit_timer') and self.orbit_timer.isActive():
+            self.orbit_timer.stop()
+
     def mousePressEvent(self, ev):
         """
         By Bahram Jafrasteh
@@ -838,7 +937,8 @@ class glScientific(GLViewWidget):
         """
         #self.opts['azimuth'] = 0
         #self.opts['elevation'] = 0
-
+        if hasattr(self, 'orbit_timer') and self.orbit_timer.isActive():
+            self.orbit_timer.stop()
         self.mousePos = ev.localPos()
         if not (self._gotoLoc or self._enabledPolygon):
             return

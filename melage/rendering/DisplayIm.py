@@ -30,13 +30,7 @@ else:
 from melage.utils.utils import LargestCC
 from sklearn.mixture import GaussianMixture
 
-"""
-import pyfftw
-fft = pyfftw.interfaces.numpy_fft.fft2
-ifft = pyfftw.interfaces.numpy_fft.ifft2
-fftshift = pyfftw.interfaces.numpy_fft.fftshift
-ifftshift = pyfftw.interfaces.numpy_fft.ifftshift
-"""
+
 fft = np.fft.fft2
 ifft = np.fft.ifft2
 fftshift = np.fft.fftshift

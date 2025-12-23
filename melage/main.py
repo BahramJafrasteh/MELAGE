@@ -1,25 +1,23 @@
 # This Python file uses the following encoding: utf-8
+# --- 1. Python Standard Library ---
 import sys
-
 import os
+import pickle
+from collections import defaultdict
+from time import gmtime, strftime
+
+# Modify System Path (Only keep if running from source)
 sys.path.append('.')
 sys.path.append("../")
-#print(sys.path)
+
+# --- 2. GUI (PyQt5) ---
 from PyQt5 import QtWidgets, QtCore, QtGui
-#from PyQt5.QtWidgets import QWidget
-from melage.mainwindow_widget import Ui_Main
-from melage.dialogs import activation_dialog
+from PyQt5.QtCore import QSettings, QEvent
+
+# --- 3. Melage Project Imports ---
 from melage.config import settings, __VERSION__
-
-## verifyClass
-class verifyClass(QtCore.QObject):
-    sig = QtCore.pyqtSignal(int)
-    def __init__(self):
-        super().__init__()
-
-    def verify_func(self):
-        ## your verification code
-        self.sig.emit(1) ## mean the verification is okay, do it if verification success
+from melage.mainwindow_widget import Ui_Main
+from melage.utils.utils import getAttributeWidget
 
 
 
@@ -46,67 +44,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
         self._openUSEnabled = True
         ######################### Load connect ################################
         self.actionLoad.triggered.connect(self.loadChanges)
-        key_needed = False
-        if key_needed:
 
-
-            self.setEnabled(False)
-            self.activation_dialog = activation_dialog(self,settings.RESOURCE_DIR)
-            self.activation_dialog.correct_key.connect(self.EnableAll)
-            verifyInstance = verifyClass()
-            verifyInstance.sig.connect(self.verify_func)
-            thread = QtCore.QThread()
-            self._v_thread = (thread, verifyInstance)
-            verifyInstance.moveToThread(thread)
-            thread.started.connect(verifyInstance.verify_func)
-            thread.start()
-        else:
-            self.setEnabled(True)
+        self.setEnabled(True)
 
 
 
-
-    def verify_func(self, i):
-        if i == 1:
-            if self.activation_dialog.verify():
-                self.EnableAll(self.activation_dialog.options)
-            else:
-                self.activation_dialog.exec_()
-
-
-            ## enable your buttons
-
-    def EnableAll(self, options):
-        if options=='FULL':
-            #self.menuExport.setEnabled(False)
-            #self.menuPreprocess.setEnabled(False)
-            #self.actionCircles.setEnabled(False)
-
-            '''
-            
-            self.actionPoints.setEnabled(False)
-            self.menuSeg.setEnabled(False)
-            
-            self.actionsaveModified.setVisible(False)
-            self.actionconvert.setVisible(False)
-            self.menuCalc.setEnabled(False)
-            '''
-            self._openUSEnabled = True
-            self.setEnabled(True)
-            self.menuSeg.setEnabled(False)
-            self.menuCalc.setEnabled(False)
-
-            self.menuRegistration.setEnabled(False)
 
     def saveChanges(self):
-        from melage.utils.utils import getAttributeWidget
-        try:
-            import cPickle as pickle
-        except ModuleNotFoundError:
-            import pickle
-        from collections import defaultdict
-        from PyQt5.QtCore import QSettings
-        from time import gmtime, strftime
+
         self.settings.sync()
         dic = defaultdict(list)
 
@@ -178,19 +123,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
 
         self.progressBarSaving.setValue(90)
 
-
-        #fp = gzip.open('primes.data', 'wb')
-        #from cryptography.fernet import Fernet
         with open(self._basefileSave+'.bn', 'wb') as output:
             pickle.dump(dic, output, pickle.HIGHEST_PROTOCOL)
 
-        #f = Fernet(self._key_picke)
-        #with open(self._basefileSave+'.bn', 'rb') as file:
-            # read all file data
-        #    file_data = file.read()
-        #encrypted_data = f.encrypt(file_data)
-        #with open(self._basefileSave+'.bn', 'wb') as file:
-        #    file.write(encrypted_data)
         self.progressBarSaving.setValue(100)
 
     def createPopupMenu(self): # overriding create popup menu
@@ -201,7 +136,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
         return menu
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        from PyQt5.QtCore import QEvent
+
         if event.type() == QEvent.Close: # on closing the window
             if self._basefileSave == '':
                 event.accept()

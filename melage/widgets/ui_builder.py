@@ -1,6 +1,6 @@
 # ui_builder.py
 from PyQt5 import QtWidgets, QtCore, QtGui
-from qtwidgets import AnimatedToggle  # Import your custom toggle
+from melage.widgets.toggle import AnimatedToggle  # Import your custom toggle
 from melage.rendering.DisplayIm import GLWidget
 from melage.rendering.glScientific import glScientific
 from melage.dialogs.helpers import custom_qscrollbar
@@ -326,7 +326,7 @@ class UIBuilder:
             # --- Toggle / Checkbox ---
             elif item['type'] in ['toggle', 'checkbox']:
                 if item['type'] == 'toggle':
-                    widget = AnimatedToggle(checked_color=item.get('color', "#FFB000"))
+                    widget = AnimatedToggle()#checked_color=item.get('color', "#FFB000")
                 else:
                     widget = QtWidgets.QCheckBox(item['text'])
 

@@ -5,7 +5,6 @@ import sys
 sys.path.append("../")
 from PyQt5 import QtWidgets, QtCore, QtGui
 from functools import partial
-from qtwidgets import AnimatedToggle
 from melage.utils.utils import generate_color_scheme_info
 from PyQt5 import Qt
 import numpy as np
@@ -13,14 +12,18 @@ import os
 from .ui_schema import *
 from .ui_builder import UIBuilder
 from .SideBar import VSCodeSidebar, CollapsibleBox
+from melage.utils.utils import read_txt_color, set_new_color_scheme, addTreeRoot, update_color_scheme, addLastColor, update_image_sch
+from melage.config import settings
+from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QMenu, QAction
+from melage.dialogs.helpers import QFileDialogPreview
+from melage.utils.utils import export_tables
+from PyQt5.QtWidgets import QMenu, QAction
+from collections import defaultdict
+
 colorNames =("#FFCC08","darkRed","red", "darkOrange", "orange", "#8b8b00","yellow",
              "darkGreen","green","darkCyan","cyan",
              "darkBlue","blue","magenta","darkMagenta", 'red')
-
-
-from melage.utils.utils import read_txt_color, set_new_color_scheme, addTreeRoot, update_color_scheme, addLastColor, update_image_sch
-from melage.config import settings
-
 
 
 
@@ -85,7 +88,7 @@ class dockWidgets():
                 label_id="label_seg_intensity_title",  # Title Variable Name
                 min_val=0,
                 max_val=100,
-                default=50
+                default=48
             ),
 
 
@@ -553,7 +556,7 @@ class dockWidgets():
     def _some_intial_steps(self):
         self.color_name, self.color_index_rgb, _ = read_txt_color(settings.RESOURCE_DIR+"/color/Simple.txt", mode= '', from_one=True)
         #update_color_scheme(self, None, dialog=False, update_widget=False)
-        from collections import defaultdict
+
         self.colorsCombinations = defaultdict(list)
 
         for clrn, clr in zip(self.color_name, self.color_index_rgb):
@@ -1108,7 +1111,7 @@ class dockWidgets():
         index = self.table_widget_measure.indexAt(pos)
         if not index.isValid():
             return
-        from PyQt5.QtWidgets import QMenu, QAction
+
         menu = QMenu("Color")
         add_action = menu.addAction("&Add")
         edit_action = menu.addAction("&Edit")
@@ -1129,7 +1132,7 @@ class dockWidgets():
         elif action == add_action:
             root.insertRow(root.rowCount())
         elif action == export_action:
-            from melage.utils.utils import export_tables
+
             filters = "CSV (*.csv)"
             opts = QtWidgets.QFileDialog.DontUseNativeDialog
             try:
@@ -1147,7 +1150,7 @@ class dockWidgets():
         :return:
         """
         def dialog():
-            from melage.dialogs.helpers import QFileDialogPreview
+
             opts = QtWidgets.QFileDialog.DontUseNativeDialog
             dialg = QFileDialogPreview(self, "Open File", self.source_dir, self._filters, options=opts,
                                        index=self._last_index_select_image_mri,
@@ -1174,7 +1177,7 @@ class dockWidgets():
         #_ind = self.tree_images.model().sourceModel().item(index.row(), 0).text()
 
 
-        from PyQt5.QtWidgets import QMenu, QAction
+
         menu = QMenu("Images")
 
         menu_import = QtWidgets.QMenu(menu)
@@ -1378,7 +1381,7 @@ class dockWidgets():
             if action is None:
                 return
             if action==import_action:
-                from PyQt5.QtWidgets import QFileDialog
+
                 filters = "LUT(*.txt *.lut)"
                 opts = QFileDialog.DontUseNativeDialog
                 fileObj = QFileDialog.getOpenFileName(self, "Open COLOR File", settings.DEFAULT_USE_DIR, filters, options=opts)

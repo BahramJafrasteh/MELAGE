@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "2.0.0"
+version = "2.0.1"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -32,38 +32,49 @@ classifiers = [
 
 # Core runtime deps kept broad; pin versions later if needed
 dependencies = [
-  "numpy",
-  "scipy",
-  "scikit-image",
-  "scikit-learn",
-  "matplotlib",
-  "Pillow",
-  "nibabel",
-  "pydicom",
-  "pynrrd",
-  "qtwidgets",
-  "SimpleITK",
-  "opencv-python-headless",
-  "PyQt5",
-  "PyOpenGL",
-  "vtk",
-  "pyfftw",
-  "shapely",
-  "cryptography",
-  "trimesh",
-  "numba",
-  "einops",
-  "dominate",
-  "rdp",
-  "QtPy", 
-  "antspyx"
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "Pillow",
+    "PyQt5",
+    "PyOpenGL",
+    "opencv-python-headless", # Basic image processing
+    "nibabel",                # Basic Medical IO
+    "pydicom",                # Basic Medical IO
+    "scikit-image",           # Basic image processing
+    "scikit-learn",           # Basic ML
+    "shapely",
+    
 ]
 
 
 [project.optional-dependencies]
 # install with: pip install melage[dl]
-dl = [
-"torch>=1.12",
+ai = [
+    "torch",
+     "einops",                 # Likely needed for core array manipulation
+]
+bet = [
+ "numba",
+ "trimesh",
+ ]
+
+
+# Advanced Registration & Processing
+# (ANTs is the #1 cause of install failures on Windows)
+processing = [
+    "antspyx",
+    "SimpleITK",
+    
+    "vtk"        # Very heavy, keep optional if you only use it for specific tools
+]
+reports = [
+    "dominate"
+]
+
+# Install everything: pip install melage[all]
+all = [
+    "melage[ai,processing,reports]"
 ]
 
 

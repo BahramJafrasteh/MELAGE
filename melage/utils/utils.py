@@ -2,36 +2,88 @@
 
 __AUTHOR__ = 'Bahram Jafrasteh'
 
+# --- 1. Python Standard Library ---
 import sys
-from operator import index
-from pathlib import Path
+import os
 import re
-sys.path.append("../../")
-import numpy as np
-import struct
-from dataclasses import dataclass
-from PyQt5 import QtWidgets, QtCore, QtGui
 import json
 import math
-import os
-import SimpleITK as sitk
-from shapely.geometry import LineString, Polygon, Point
-from PyQt5.QtCore import Qt
-import cv2
+import struct
+import shutil
+import csv
+import functools
+from pathlib import Path
+from operator import index
+from dataclasses import dataclass
+from collections import defaultdict
+
+# --- 2. Core Math & Data ---
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.cm
+
+# --- 3. SciPy & Sklearn (Math/ML) ---
+from scipy.ndimage import gaussian_filter
+from scipy.interpolate import interpn, splprep, splev
+from scipy.ndimage.morphology import distance_transform_edt
+from scipy.spatial.distance import cdist
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import Pipeline
+
+# --- 4. Geometry & Computer Vision ---
+from shapely.geometry import LineString, Polygon, Point
+from shapely.validation import make_valid
+import cv2
+
+# Scikit-Image
+from skimage.draw import polygon as polygon_skimage
 from skimage.transform import resize as image_resize_skimage
 from skimage.transform import rotate as image_rotate_skimage
-from collections import defaultdict
-from qtwidgets import AnimatedToggle
-from io import BytesIO
+from skimage.filters import threshold_multiotsu, threshold_otsu
+from skimage.measure import label as label_connector
+# NOTE: 'skimage.external.tifffile' is deprecated in newer versions.
+# Use 'import tifffile' if possible, otherwise keep this line.
+try:
+    from skimage.external import tifffile as tif
+except ImportError:
+    import tifffile as tif
+
+# --- 5. Medical Imaging (I/O) ---
+import SimpleITK as sitk
+try:
+    import nrrd
+except ImportError:
+    print("Warning: nrrd not found")
+try:
+    from pydicom.filereader import dcmread
+except ImportError:
+    print("Warning: pydicom not found")
+
+# Nibabel (Consolidated)
 try:
     import nibabel as nib
-except:
-    None
+    from nibabel.orientations import (
+        aff2axcodes, axcodes2ornt, apply_orientation, ornt_transform
+    )
+    from nibabel.processing import resample_to_output, resample_from_to
+    from nibabel.funcs import four_to_three
+except ImportError:
+    print("Warning: nibabel not found")
+
 try:
-    from melage.config import settings
-except:
-    pass
+    import vtk
+except ImportError:
+    print("Warning: vtk not found")
+
+# --- 6. GUI & Visualization (PyQt / VTK) ---
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtCore import Qt, QObject
+from PyQt5.QtWidgets import QFileDialog
+
+from melage.config import settings
+from melage.widgets.toggle import AnimatedToggle
 # Direction of medical image Left, Right, Posterior Anterior, Inferior, Superior
 code_direction = (('L', 'R'), ('P', 'A'), ('I', 'S'))
 
@@ -202,7 +254,7 @@ def save_as_nifti(VtkImage, meta_data, pathfile):
         pathfile: output path
     Returns: write the file with info into the path specified
     """
-    import vtk
+
     nifit_writer = vtk.vtkNIFTIImageWriter()
     nifit_writer.SetInputData(VtkImage)
     nifit_writer.SetFileName(pathfile+'.nii.gz')
@@ -213,8 +265,7 @@ def save_as_nifti(VtkImage, meta_data, pathfile):
 ###################### Reading files with desired coordinate system ######################
 def read_file_with_cs(atlas_file, expected_source_system='RAS'):
     # Read NIFTI images with desired coordinate system
-    from nibabel.orientations import aff2axcodes, axcodes2ornt, apply_orientation, ornt_transform
-    import nibabel as nib
+
     im = nib.load(atlas_file)
     orig_orient = nib.io_orientation(im.affine)
     code_direction = (('L', 'R'), ('P', 'A'), ('I', 'S'))
@@ -286,7 +337,7 @@ def save_modified_nifti(reader, source, filename):
 
     """
     print ('not implemented yet! save_modified')
-    import shutil
+
 
     _imRotate = sitk.GetImageFromArray(reader.npImage)
     for key in reader.im.GetMetaDataKeys():
@@ -450,7 +501,7 @@ def resample_to_spacing(im, newSpacing, method='spline'):
 
         return read_sitk_as_nib(resampled_image)
     except:
-        from nibabel.processing import resample_to_output
+
         return resample_to_output(im, new_spacing)
 
 
@@ -459,7 +510,6 @@ def help_dialogue_open_image(path):
     try:
         im = nib.load(path).dataobj
     except:
-        from pydicom.filereader import dcmread
         im = dcmread(path).pixel_array
     if len(im.shape)==4:
         d = im[...,0]
@@ -498,7 +548,7 @@ def help_dialogue_open_image(path):
 
 
 def calculate_snr(image_array):
-    from scipy.ndimage import gaussian_filter
+
     # Calculate mean signal intensity
     mean_signal = np.mean(image_array)
 
@@ -613,7 +663,7 @@ def convert_to_ras(affine, target = "RAS"):
     Returns:
 
     """
-    from nibabel.orientations import aff2axcodes, axcodes2ornt, ornt_transform
+
     orig_orient = nib.io_orientation(affine)
     source_system = ''.join(list(aff2axcodes(affine, code_direction)))# get direction
     target_orient = axcodes2ornt(target, code_direction)
@@ -623,7 +673,7 @@ def convert_to_ras(affine, target = "RAS"):
 
 ###################### identify current coordinate system ####################
 def getCurrentCoordSystem(affine):
-    from nibabel.orientations import aff2axcodes
+
     orig_orient = nib.io_orientation(affine)
     source_system = ''.join(list(aff2axcodes(affine, code_direction)))# get direction
     return source_system
@@ -689,7 +739,7 @@ def read_segmentation_file(self, file, reader, update_color_s=True):
         im = nib.load(file)  # read imag
         affine = im.affine
     elif type_found=='nrrd':
-        import nrrd
+
         data, header = nrrd.read(file)
 
         img = sitk.ReadImage(file)
@@ -709,42 +759,10 @@ def read_segmentation_file(self, file, reader, update_color_s=True):
         if im is None:
             return 0, False, True
 
-    """
-    
-    if abs(reader.affine-affine).max()>0.01:
-        from nibabel.processing import resample_from_to
-        from scipy.ndimage import map_coordinates
 
-        img_affine = np.round(reader.im.affine,1)
-        img_shape = reader.im.shape
-
-        seg_data = im.get_fdata()
-        seg_affine = np.round(affine,1)
-
-        coords = np.meshgrid(
-            np.arange(img_shape[0]),
-            np.arange(img_shape[1]),
-            np.arange(img_shape[2]),
-            indexing='ij'
-        )
-        coords = np.vstack([c.reshape(-1) for c in coords])  # shape (3, N)
-
-        # Convert image voxel coords -> world coords
-        world_coords = img_affine[:3, :3] @ coords + img_affine[:3, 3:4]
-
-        world_coords2 = seg_affine[:3, :3] @ coords + seg_affine[:3, 3:4]
-
-        # Convert world coords -> segmentation voxel coords
-        seg_vox_coords = np.linalg.inv(seg_affine[:3, :3]) @ (world_coords - seg_affine[:3, 3:4])
-
-        # Resample segmentation using nearest neighbor
-        seg_resampled_flat = map_coordinates(seg_data.astype('float'), seg_vox_coords, order=0, mode='nearest')
-        seg_resampled = seg_resampled_flat.reshape(img_shape)
-        im = nib.Nifti1Image(seg_resampled, reader.im.affine)
-    """
     im.get_data_dtype()
     if im.ndim == 4:
-        from nibabel.funcs import four_to_three
+
         im = four_to_three(im)[0]  # select the first image
 
     transform, _ = convert_to_ras(im.affine, target=reader.target_system)
@@ -835,7 +853,6 @@ DEFAULT_COLOR_FILES = {
     'albert': '/color/albert_LUT.txt',
     'mcrib': '/color/mcrib_LUT.txt',
 }
-from PyQt5.QtWidgets import QFileDialog
 
 # --- Helper Functions (These perform the specific, isolated tasks) ---
 
@@ -1019,7 +1036,7 @@ def update_color_scheme0(self, data, data_add=None, dialog=True, update_widget=T
         return data, True
     else:
         if dialog:
-            from PyQt5.QtWidgets import QFileDialog
+
             filters = "TXT(*.txt)"
             opts = QFileDialog.DontUseNativeDialog
             fileObj = QFileDialog.getOpenFileName(self, "Open COLOR File", self.source_dir, filters, options=opts)
@@ -1295,8 +1312,7 @@ def set_new_color_scheme(self):
     """
     #from widgets.tree_widget import TreeWidgetItem
     if self.color_index_rgb is None:
-        import matplotlib
-        import matplotlib.cm
+
         normalized = matplotlib.colors.Normalize(vmin=0,vmax=len(self.color_name))
         colors = []
         for i in range(len(self.color_name)):
@@ -1328,9 +1344,6 @@ def set_new_color_scheme(self):
         addTreeRoot(parent, '9876', 'Combined', colr)
 
 ################# SET IMAGE SCHEME ###########################
-from PyQt5 import QtGui, QtCore
-import os
-import numpy as np
 
 # Place this helper method inside your main class
 def _is_image_already_added(self, file_path, view_index):
@@ -1890,7 +1903,7 @@ def get_world_from_trk(streamlines, affine, inverse=False, color_based_on_length
     ind_large = length > 1
 
     if color_based_on_length:
-        import matplotlib
+
         normalized = matplotlib.colors.Normalize(vmin=np.quantile(length[ind_large], 0.2), vmax=np.quantile(length[ind_large], 0.7))
         colors = [matplotlib.cm.jet(normalized(len(strl)))
          for strl in streamlines]
@@ -1948,11 +1961,33 @@ def cursorRotate():
 def cursorArrow():
     #bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/arrow.png")
     return QtGui.QCursor(Qt.ArrowCursor)
-def cursorPaint():
-    bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/HandwritingPlus.png")
-    return QtGui.QCursor(bitmap)
+
+
+def cursorPaint(size=24):
+    """
+    Creates a cursor from an image with a corrected 'Hotspot'.
+    """
+    path = settings.RESOURCE_DIR + "/paint-brush-2.png"
+    pixmap = QtGui.QPixmap(path)
+
+    if pixmap.isNull():
+        print(f"Warning: Could not load cursor from {path}")
+        return QtCore.Qt.ArrowCursor
+
+    # 1. Resize: Ensure it's not too big (Standard is 24x24 or 32x32)
+    pixmap = pixmap.scaled(size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+
+    # 2. Define Hotspot: The pixel where the click actually happens.
+    # For a typical brush icon (handle top-right, tip bottom-left):
+    # X = 0 (Left), Y = size-1 (Bottom)
+    hot_x = 0
+    hot_y = size//2
+
+    # NOTE: Adjust hot_x/hot_y if your brush tip is in a different spot!
+
+    return QtGui.QCursor(pixmap, hot_x, hot_y)
 def cursorPaintX():
-    bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/HandwritingPlusX.png")
+    bitmap = QtGui.QPixmap(settings.RESOURCE_DIR+"/paint-brush-2.png")
     return QtGui.QCursor(bitmap)
 
 
@@ -2033,8 +2068,9 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
 
         elif code == 1:  # ImFreeHand
             widget.updateEvents()
-            widget.enabledMagicTool = True
-            widget.setMouseTracking(True)
+            #widget.enabledMagicTool = True
+            #widget.setMouseTracking(True)
+            widget.enabledPen = True
             widget.setCursor(cursorPaint())
 
 
@@ -2068,7 +2104,8 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
             widget.updateEvents()
             widget.enabledPen = True
 
-            widget.setCursor(cursorPaint())
+            #widget.setCursor(cursorPaint())
+            widget.setCursor(Qt.CrossCursor)
             try:
                 widget.customContextMenuRequested.connect(widget.ShowContextMenu_contour)
             except Exception as e:
@@ -2163,29 +2200,37 @@ def zonePoint(x1, y1, xc, yc):
     return zone
 
 ###################### Convert points to polygons ######################
-def ConvertPToPolygons(points, ignoredInd = 0):
+
+
+def ConvertPToPolygons(points, ignoredInd=0):
     """
-    Convert points to polygons
-    Args:
-        points:
-        ignoredInd:
-
-    Returns:
-
+    Optimized: Uses C++ based make_valid instead of slow python logic.
     """
-    from shapely.ops import polygonize, unary_union
+    if len(points) < 3:
+        return []
 
-    ls = LineString(points)
-    polys = []
-    # closed, non-simple
-    lr = LineString(ls.coords[:] + ls.coords[0:1]) # line strings
-    if not lr.is_simple: # not suitable for learning ring
-        mls = unary_union(lr)
-        for polygon in polygonize(mls):
-            polys.append(polygon.buffer(0))
-    else:
-        polys.append(Polygon(points))
-    return polys
+    # 2. Create Polygon directly
+    # Shapely automatically closes the ring, no need to append points[0] manually
+    poly = Polygon(points)
+
+    # 3. Fast Path: If it's already valid, return immediately
+    if poly.is_valid:
+        return [poly]
+
+    # 4. Slow Path: Fix self-intersections (Figure-8, Bowties)
+    # make_valid splits a self-intersecting polygon into a MultiPolygon
+    cleaned = make_valid(poly)
+
+    # 5. Handle standard output types
+    if cleaned.geom_type == 'Polygon':
+        return [cleaned]
+    elif cleaned.geom_type == 'MultiPolygon':
+        return list(cleaned.geoms)
+    elif cleaned.geom_type == 'GeometryCollection':
+        # Sometimes it returns lines/points too, filter for Polygons only
+        return [p for p in cleaned.geoms if p.geom_type == 'Polygon']
+
+    return []
 
 ###################### Convert points to polygons with a defined buffer size ######################
 def ConvertPointsToPolygons(points, width = 0):
@@ -2208,90 +2253,91 @@ def ConvertPointsToPolygons(points, width = 0):
 
 
 
-###################### Convert multipolygons to one polygon ######################
-def ConvertMPolyToPolygons(mPoly):
-    """
-    Convert multipolygon to one polygon
-    Args:
-        mPoly:
-
-    Returns:
-
-    """
-    if mPoly.type == 'MultiPolygon':
-        maxArea = 0
-        for poly in mPoly:
-            if poly.area> maxArea:
-                polygon = poly
-                maxArea = poly.area
-    else:
-        polygon = mPoly
-
-    return polygon
-
-
 ###################### fill inside the polygon (To fill pixels) ######################
 def fillInsidePol(poly):
     """
-    Fill inside polygons
+    Fill inside polygons - Optimized using Scanline Algorithm
     Args:
-        poly:
+        poly: Shapely Polygon object
 
     Returns:
-
+        total_points: (N, 3) array of [x, y, sliceNo]
+        coords: (M, 3) array of exterior coordinates
     """
-    from matplotlib.path import Path
-
     try:
+        # 1. Extract coordinates
         coords = np.array(poly.exterior.coords)
-        sliceNo = coords[0,2]
-        p = Path(coords[:, :2])
-        xmin, ymin, xmax, ymax = poly.bounds
-        x = np.arange(np.floor(xmin), np.ceil(xmax), 1)
-        y = np.arange(np.floor(ymin), np.ceil(ymax), 1)
-        points = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
-        ind_points = p.contains_points(points)
-        selected_points = points[ind_points]
-        # add slice number
-        total_points = np.hstack([selected_points, np.ones([selected_points.shape[0], 1]) * sliceNo])
+
+        # 2. Get Slice Number (Z-axis)
+        # Assuming all points on this polygon are on the same slice
+        sliceNo = coords[0, 2]
+
+        # 3. separate x and y
+        x_poly = coords[:, 0]
+        y_poly = coords[:, 1]
+
+        # 4. FAST RASTERIZATION (The Optimization)
+        # skimage returns the indices (row, col) of pixels inside the polygon
+        # Note: skimage uses (row, col) which maps to (y, x)
+        rr, cc = polygon_skimage(y_poly, x_poly)
+
+        # 5. Stack into (x, y, z) format
+        # rr = y coordinates, cc = x coordinates
+        # We assume integer coordinates for pixels
+        selected_points = np.column_stack((cc, rr))
+
+        # 6. Add Slice Number column
+        # Create a column of the slice number matching the length of points
+        z_col = np.full((len(selected_points), 1), sliceNo)
+
+        total_points = np.hstack([selected_points, z_col])
 
         return total_points, coords
-    except:
-        print('Line 397 utils')
 
+    except Exception as e:
+        print(f'Error in fillInsidePol: {e}')
+        return np.array([]), np.array([])
 ###################### fill index of white voxels ######################
-def findIndexWhiteVoxels(poly, segmentShowWindowName, is_pixel = False, bool_permute_axis=True):
+def findIndexWhiteVoxels(poly, segmentShowWindowName, is_pixel=False, bool_permute_axis=True):
     """
-    Find index of white voxels in the segmetnation
-    Args:
-        poly: polygon
-        segmentShowWindowName: string name
-        is_pixel: is pixel
-        bool_permute_axis: permute axis or not
-
-    Returns:
-
+    Find index of white voxels in the segmentation.
+    Refactored for performance, safety, and readability.
     """
     try:
         if is_pixel:
-            whiteVoxels = np.array(poly).astype("int")
-            edges = whiteVoxels.copy()
-            if bool_permute_axis:
-                whiteVoxels, edges = permute_axis(whiteVoxels, edges, segmentShowWindowName)
-        else:
-            pixels, edges = fillInsidePol(poly)
-            if len(pixels)<=0:
-                return None
-            elif len(pixels)>100000:
-                print('')
+            # CASE 1: 'poly' is already a list of pixel coordinates (e.g., Pen/Brush tool)
+            # Optimization: Specify dtype=int immediately to avoid double-copying
+            whiteVoxels = np.array(poly, dtype=int)
 
-            whiteVoxels = np.array(pixels).astype("int")
-            edges = np.array(edges).astype("int")
-            if bool_permute_axis:
-                whiteVoxels, edges = permute_axis(whiteVoxels, edges, segmentShowWindowName)
+            # For raw pixels, the "edge" is just the pixels themselves
+            edges = whiteVoxels.copy()
+
+        else:
+            # CASE 2: 'poly' is a geometric shape (e.g., Lasso/Polygon tool)
+            # Use the OPTIMIZED fillInsidePol (from previous step)
+            pixels, edges = fillInsidePol(poly)
+
+            # Safety Check: Handle empty polygons gracefully
+            if pixels is None or len(pixels) == 0:
+                # Warning: Returning None might break tuple unpacking (a, b = func())
+                # Consider returning (np.array([]), np.array([])) if your caller expects tuples.
+                return None
+
+                # Optimization: Convert to int only once
+            whiteVoxels = pixels.astype(int)
+            edges = edges.astype(int)
+
+        # --- Shared Logic (Refactored to follow DRY principle) ---
+        # We only apply permutation if we actually found voxels
+        if bool_permute_axis and len(whiteVoxels) > 0:
+            whiteVoxels, edges = permute_axis(whiteVoxels, edges, segmentShowWindowName)
+
         return whiteVoxels, edges
-    except:
-        print('line 424 utils')
+
+    except Exception as e:
+        # Optimization: Print the ACTUAL error instead of a mysterious line number
+        print(f'Error in findIndexWhiteVoxels: {e}')
+        return None
 
 ###################### permute axis of white voxels for painting ######################
 def permute_axis(whiteVoxels, edges, segmentShowWindowName):
@@ -2458,13 +2504,13 @@ def rotation3d(image,  theta_axial, theta_coronal, theta_sagittal, remove_zeros=
     return f_data, M
 ###################### MultiOtsu thresholding #################
 def Threshold_MultiOtsu(a, numc):
-    from skimage.filters import threshold_multiotsu, threshold_otsu
+
     if numc > 1 and numc <= 5:
         thresholds = threshold_multiotsu(a, classes=numc)
     elif numc == 1:
         thresholds = [threshold_otsu(a)]
     else:
-        import numpy as np
+
         thresholds = list(threshold_multiotsu(a, classes=5))
         b = np.digitize(a, thresholds)
 
@@ -2562,7 +2608,6 @@ def rhasattr(obj, path):
     Returns:
 
     """
-    import functools
 
     try:
         functools.reduce(getattr, path.split("."), obj)
@@ -3100,9 +3145,7 @@ def LinkMRI_ECO(pointsMRI, pointsECO, degree = 1):
     Returns:
 
     """
-    from sklearn.preprocessing import PolynomialFeatures
-    from sklearn.linear_model import LinearRegression
-    from sklearn.pipeline import Pipeline
+
 
     pointsMRI = np.asarray(pointsMRI)
     pointsECO = np.asarray(pointsECO)
@@ -3200,7 +3243,7 @@ def LargestCC(segmentation, connectivity=3):
     Get largets connected components
     """
     ndim = 3
-    from skimage.measure import label as label_connector
+
     if segmentation.ndim == 4:
         segmentation = segmentation.squeeze(-1)
         ndim = 4
@@ -3363,8 +3406,7 @@ def convexhull_spline(total_points, currentWidnowName, sliceNum, npSeg):
     :param total_points:
     :return:
     """
-    from scipy.spatial.distance import cdist
-    from scipy.interpolate import splprep, splev
+
 
     distance_point_line = lambda p1, p2, p3: np.linalg.norm(np.cross(p3 - p1, p1 - p2)) / np.linalg.norm(p3 - p1)
     angle_ps = lambda p1, p2: math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / np.pi
@@ -3450,7 +3492,7 @@ def convexhull_spline(total_points, currentWidnowName, sliceNum, npSeg):
     x_new, y_new = splev(u_new, tck, der=0)
     debug = False
     if debug:
-        import matplotlib.pyplot as plt
+
         plt.scatter(convex_hull[:, 0], convex_hull[:, 1]);
         plt.plot(d[routes, 0], d[routes, 1]);
         plt.scatter(d[:, 0], d[:, 1])
@@ -3709,7 +3751,7 @@ def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lin
 
         else:
             # Erase Mode
-            WI = getNoneZeroSeg(current_npseg, whiteInd, colorInd2, 9876)
+            WI = getNoneZeroSeg(current_npseg, WI, colorInd2, 9876)
             if len(WI) < 1:
                 return
 
@@ -3897,7 +3939,7 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
 
 ###################### select proper widgets ######################
 def select_proper_widgets(self):
-    from PyQt5.QtCore import QObject
+
     widgets = []
     sender = QObject.sender(self)
     if self.tabWidget.currentIndex() == 0:
@@ -4049,11 +4091,11 @@ def normalize_mri(data):
 
 ###################### saving 3D images ######################
 def save_3d_img(reader, file, img, format='tif', type_im = 'mri', cs=['RAS', 'AS', True]):
-    import csv
+
     cors, asto, save_csv = cs
 
     if format == 'tif':
-        from skimage.external import tifffile as tif
+
         tif.imsave(file+'.tif', img, bigtiff=True)
     elif format == 'nifti':
         if file[-7:] != '.nii.gz':
@@ -4091,7 +4133,7 @@ def save_3d_img(reader, file, img, format='tif', type_im = 'mri', cs=['RAS', 'AS
             hdr = nib.Nifti1Header()
             hdr['dim'] = np.array([3, img.shape[0], img.shape[1], img.shape[2], 1, 1, 1, 1])
         new_im = nib.Nifti1Image(img.transpose(2, 1, 0)[::-1, ::-1, ::-1], affine) #get back to original
-        from nibabel.orientations import apply_orientation
+
         if asto.lower()=='as':
             new_im =  new_im.as_reoriented(transform) # reorient to the right transformation system
         elif asto.lower()=='to':
@@ -4200,7 +4242,7 @@ def export_tables(self, file):
              if itm is not None:
                 txt = itm.text()
                 dicts_0[r].append(txt)
-    import csv
+
     with open(file + '.csv', 'w') as f:  # You will need 'wb' mode in Python 2.x
         f.write(','.join(headers)+'\n')
 
@@ -4341,12 +4383,12 @@ def bwdist(im):
     '''
     Find distance map of image
     '''
-    from scipy.ndimage.morphology import distance_transform_edt
+
     dist_im = distance_transform_edt(1-im)
     return dist_im
 ###################### Slice interpolation ######################
 def slice_intepolation(reader, slices, currentWidnowName, colorInd, WI):
-    from scipy.interpolate import interpn
+
     '''
     Interpolate between two slices in the image
     '''
@@ -4452,7 +4494,7 @@ def get_SequenceName(SequenceName):
 
 
 def adapt_to_size(imAzero, NewSpacing, Spacing, borderp):
-    from nibabel.processing import resample_to_output, resample_from_to
+
     def signdf(df):
         if df <= 0:
             return -1
@@ -4497,7 +4539,7 @@ def adapt_to_size(imAzero, NewSpacing, Spacing, borderp):
 
 def histogram_equalization(source):
     def histogram_equalization_3d(image, method='ehist'):
-        import cv2
+
         # Reshape the 3D image into a 2D array with shape (num_slices, height * width)
         num_slices, height, width = image.shape
         image = normalize_mri(image)

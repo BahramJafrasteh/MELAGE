@@ -1,5 +1,4 @@
 from .AboutDialog import about_dialog
-from .ActivationDialog import activation_dialog
 from .HistogramDialog import HistImage, FigureCanvas
 from .ImInfoDialog import iminfo_dialog
 from .MaskingDialog import Masking

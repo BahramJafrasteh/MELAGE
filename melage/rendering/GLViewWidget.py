@@ -7,6 +7,7 @@ from OpenGL.GLUT import *
 from collections import defaultdict
 from . import functions as fn
 from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import QTimer
 Vector = QtGui.QVector3D
 ShareWidget = None
 
@@ -34,10 +35,15 @@ class GLViewWidget(QOpenGLWidget):
         if ShareWidget is None:
             ## create a dummy widget to allow sharing objects (textures, shaders, etc) between views
             ShareWidget = QOpenGLWidget()
-            
+
 
         QtWidgets.QOpenGLWidget.__init__(self, parent)
-        
+
+
+        self.orbit_timer = QTimer(self)
+        self.orbit_timer.timeout.connect(self._process_orbit_tick)
+        self.current_orbit_speed = 0
+
         self.setFocusPolicy(QtCore.Qt.ClickFocus)
         self.opts = {
             'devicePixelRatio': devicePixelRatio
@@ -370,6 +376,27 @@ class GLViewWidget(QOpenGLWidget):
         )
         
         return pos
+
+
+    def _process_orbit_tick(self):
+        """Called repeatedly by the timer to simulate dragging."""
+        # We apply 0 elevation change, only azimuth change
+        # This calls your existing orbit function!
+        self.orbit(self._current_orbit_speed, 0)
+
+    def start_orbit_left(self):
+        """Button pressed: Start rotating left."""
+        self._current_orbit_speed = 2.0  # Adjust speed (Degrees per tick)
+        self.orbit_timer.start(16)  # ~60 FPS (16ms per tick)
+
+    def start_orbit_right(self):
+        """Button pressed: Start rotating right."""
+        self._current_orbit_speed = -2.0  # Adjust speed (Degrees per tick)
+        self.orbit_timer.start(16)
+
+    def stop_orbit(self):
+        """Button released: Stop rotation."""
+        self.orbit_timer.stop()
 
     def orbit(self, azim, elev):
         """Orbits the camera around the center position. *azim* and *elev* are given in degrees."""
