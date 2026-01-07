@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "2.0.1"
+version = "2.0.5"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,6 +45,7 @@ dependencies = [
     "scikit-learn",           # Basic ML
     "shapely",
     "SimpleITK",
+    "antspyx"
 ]
 
 
@@ -63,7 +64,6 @@ bet = [
 # Advanced Registration & Processing
 # (ANTs is the #1 cause of install failures on Windows)
 processing = [
-    "antspyx",
     "vtk"        # Very heavy, keep optional if you only use it for specific tools
 ]
 reports = [

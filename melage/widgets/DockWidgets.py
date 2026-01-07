@@ -254,6 +254,7 @@ class dockWidgets():
 
         # Filters
         filters = ["*.bn", "*.nii", "*.nii.gz"]
+        #filters = self._filters + ";; Melage(*.bn)"
         self.file_model.setNameFilters(filters)
         self.file_model.setNameFilterDisables(False)
 

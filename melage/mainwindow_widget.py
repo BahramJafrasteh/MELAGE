@@ -4,6 +4,7 @@ __AUTHOR__ = 'Bahram Jafrasteh'
 import os
 import sys
 import time
+import subprocess
 import traceback
 from functools import partial
 from collections import defaultdict
@@ -97,6 +98,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         Initializing the main attributes
         """
+        self._filters = "Nifti(*.nia *.nii *.nii.gz *.hdr *.img *.img.gz *.mgz);;Vol (*.vol *.V00);;DICOM(*.dcm **);;NRRD(*.nrrd *.nhdr);;DICOMDIR(*DICOMDIR*);;Video (*.mp4 *.avi *.mov *.mkv)"
+        formats = [ll.replace(' ', '').replace(')', '') for el in self._filters.split(';;') for ll in el.split('*')[1:]]
+        formats = [el for el in formats if el != '' and '.' in el]
         super(Ui_Main, self).__init__()
         pwd = os.path.abspath(__file__)
         self.startTime = time.time()
@@ -171,9 +175,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self._lastWindowName = None
 
         self.allowChangeScn = False
-        self._filters = "Nifti(*.nia *.nii *.nii.gz *.hdr *.img *.img.gz *.mgz);;Vol (*.vol *.V00);;DICOM(*.dcm **);;NRRD(*.nrrd *.nhdr);;DICOMDIR(*DICOMDIR*);;Video (*.mp4 *.avi *.mov *.mkv)"
-        formats = [ll.replace(' ', '').replace(')', '') for el in self._filters.split(';;') for ll in el.split('*')[1:]]
-        formats = [el for el in formats if el != '' and '.' in el]
+
         self._availableFormats = formats
         self.settings = QSettings("./brainNeonatal.ini", QSettings.IniFormat) # setting to save
         self._basefileSave = ''
@@ -366,6 +368,117 @@ class Ui_Main(dockWidgets, openglWidgets):
             return
         filename = fileObj[0] + '.png'
         self.save_screenshot(final_image, filename)
+
+    def get_latest_pypi_version(self, package_name="melage"):
+        """
+        Queries the PyPI JSON API to find the latest version number.
+        """
+        try:
+            import json
+            import urllib.request
+            from importlib.metadata import version  # To get installed version
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                e
+            )
+            return
+
+        url = f"https://pypi.org/pypi/{package_name}/json"
+        try:
+            # Set a timeout so the UI doesn't freeze forever if offline
+            with urllib.request.urlopen(url, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                return data["info"]["version"]
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                e
+            )
+            return None
+
+    def update_application(self):
+        """
+        Checks for updates and installs them if the user confirms.
+        """
+        try:
+            import urllib.request
+            from importlib.metadata import version  # To get installed version
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                e
+            )
+            return
+        # 1. Get the CURRENT installed version
+        try:
+            current_ver = version("melage")
+        except Exception:
+            current_ver = "Unknown"
+
+        # 2. Get the LATEST version from PyPI
+        # Change cursor to indicate loading/network activity
+        self.setCursor(Qt.WaitCursor)
+        latest_ver = self.get_latest_pypi_version("melage")
+        self.unsetCursor()
+
+        # 3. Handle Network Errors
+        if latest_ver is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Connection Error",
+                "Could not check for updates.\nPlease check your internet connection."
+            )
+            return
+
+        # 4. Compare Versions
+        if current_ver == latest_ver:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Up to Date",
+                f"You are using the latest version of MELAGE.\n\nVersion: {current_ver}"
+            )
+            return
+
+        # 5. If different, prompt the user
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            'Update Available',
+            f"A new version is available!\n\n"
+            f"🔹 Current Version: {current_ver}\n"
+            f"🔸 New Version:     {latest_ver}\n\n"
+            "Do you want to install the update and restart?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.Yes
+        )
+
+        if reply == QtWidgets.QMessageBox.No:
+            return
+
+        # 6. Perform the Update
+        try:
+            self.setCursor(Qt.WaitCursor)
+
+            # Run pip upgrade using the current interpreter
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "melage"]
+            )
+
+            self.unsetCursor()
+
+            QtWidgets.QMessageBox.information(
+                self,
+                "Update Successful",
+                f"Updated to version {latest_ver} successfully.\n\n"
+                "Please restart the application to see the changes."
+            )
+
+            # Exit to force a clean restart
+            #sys.exit(0)
+
+        except subprocess.CalledProcessError as e:
+            self.unsetCursor()
+            QtWidgets.QMessageBox.critical(self, "Update Failed", f"Error during installation:\n{e}")
 
     def showRpeatWindow(self):
         """
@@ -992,6 +1105,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         ######################### Help->Manual ################################
         self.actionmanual = QtWidgets.QAction(Main)
         self.actionmanual.setObjectName("actionabout")
+        self.update_action = QtWidgets.QAction("Check for Updates...", self)
+        self.update_action.triggered.connect(self.update_application)
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/about.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
         # self.actionmanual.setIcon(icon)
@@ -1085,8 +1200,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuFile.addAction(self.actionexit)
 
         self.menuAbout.addAction(self.actionmanual)
+        self.menuAbout.addAction(self.update_action)
         self.menuAbout.addAction(self.actionabout)
         self.menuAbout.addAction(self.actionVersion)
+
 
         self.menuView.addAction(self.actionMain_Toolbar)
         self.menuView.addAction(self.action_interaction_Toolbar)

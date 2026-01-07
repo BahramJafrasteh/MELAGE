@@ -23,15 +23,16 @@
 MELAGE is an open-source **neuroimaging software** designed for analysis, segmentation, and visualization of multimodal datasets.  
 It combines classical medical image processing with state-of-the-art deep learning support, making it useful for both researchers and practitioners.
 
-## ✨ Features
+🚀 New in v2.x: Real-Time Video Segmentation MELAGE now supports full medical video loading and processing. Apply segmentation algorithms to video streams (e.g., Ultrasound loops) with the same speed and accuracy as static images. Analyze, segment, and save results frame-by-frame in real-time.
 
-- 🧠 **Medical Image Preprocessing**: resampling, denoising, and filtering for various modalities (MRI, CT, Ultrasound, etc.).
-- 🎯 **Segmentation and Labeling**: Region-based segmentation and anatomical labeling with support for standard medical formats.
-- 🖼️ **Visualization**: Interactive 2D/3D visualization of images, segmentations, and anatomical structures.
-- 🔗 **Deep Learning Integration (Optional)**: Seamless use of PyTorch for model-based tasks when installed.
-- 💡 **Extensible Design**: Modular framework that can be adapted for different medical imaging research workflows.
-- 🔌 **Dynamic Plugin Architecture**: **[NEW]** Easily extend MELAGE by dropping scripts into the plugin folder. The system automatically discovers plugins and generates their GUI using a simple `UI_SCHEMA` definition, eliminating the need for manual PyQt coding.
-- ⚡ **Performance & UI Improvements**: Optimized rendering speeds and enhanced interface responsiveness.
+## 🎥 Key Features
+- ⚡ Real-Time Video Processing: Seamlessly load medical videos (e.g., Ultrasound, Cine-MRI) and perform segmentation with the same high speed and accuracy as static images.
+- 🖼️ Multi-Modality Support: Comprehensive support for MRI, CT, X-Ray, and Ultrasound data in standard formats (DICOM, NIfTI, AVI, MP4).
+- 🧠 Deep Learning Integration: Built-in support for PyTorch models, allowing you to deploy state-of-the-art AI for automated segmentation and classification.
+- 🛠️ Advanced Preprocessing: Powerful tools for denoising, filtering, resampling, and harmonizing image data before analysis.
+- 🎨 Interactive Visualization: 2D and 3D rendering capabilities for exploring anatomical structures and segmentation results in detail.
+- 🔌 Dynamic Plugin System: easily extend functionality by dropping Python scripts into the plugins/ folder—MELAGE automatically generates the GUI for you.
+- 💾 Flexible Export: Save your results, including video segmentation masks, into standard research-ready formats.
 
 ## 🧩 Plugins & Dynamic Extensions
 
@@ -61,12 +62,26 @@ This modular architecture supports:
    ```
 
 ## 🚀 Installation
+## **🐧 LINUX**:
+### 🐍 STEP 0: INSTALL CONDA (PREREQUISITE)
+If you don't have Conda, install Miniconda (lightweight version).
 
-### 🛠️ 1.Create a Conda Environment (Recommended))
+ 1. Download installer
+    ```bash
+    wget [https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
+    ```
+ 2. Run installer (Type 'yes' to license and init)
+    ```bash
+    bash Miniconda3-latest-Linux-x86_64.sh
+    ```
+ 3. Refresh shell
+    ```bash
+    source ~/.bashrc
+    ```
+### 🛠️ STEP 1: CREATE ENVIRONMENT (RECOMMENDED)
 
-For **Linux / macOS**:
 ```bash
-# Create a new environment (Python 3.10 is most stable with PyQt5)
+# Create env (Python 3.10 is most stable with PyQt5)
 conda create -n melage-gui python=3.10 -c conda-forge -y
 
 # Activate the environment
@@ -84,8 +99,150 @@ which melage
 # Run
 melage
 ```
+### 📦 STEP 2: INSTALL MELAGE (STANDALONE)
+If skipping Conda (Not recommended for GUI apps):
 
-For **Windows (PowerShell)**:
+From **PyPI**:
+```bash
+pip install melage
+```
+### 🚀 STEP 3: CREATE ONE-CLICK LAUNCHERS
+Create a script file to automatically activate the environment and run the app.
+
+1. Create a file named 'launch_melage.sh' with the following content:
+   (Note: Adjust the 'source' path if your conda is installed elsewhere)
+   ```bash
+   #!/bin/bash
+   # Initialize Conda (Adjust path based on 'conda info --base')
+   source ~/miniconda3/etc/profile.d/conda.sh
+   conda activate melage-gui
+   melage
+   ```
+2. Make it executable:
+   ```bash
+   chmod +x launch_melage.sh
+   ```
+3. Run it:
+   ```bash
+   ./launch_melage.sh
+   ```
+4. (Optional) Create a Desktop Shortcut file named 'Melage.desktop':
+   (Create this file in ~/.local/share/applications/ for Start Menu access
+   OR on your ~/Desktop/ for a desktop icon).
+   ```bash
+   [Desktop Entry]
+   Version=1.0
+   Type=Application
+   Name=Melage
+   Comment=Melage GUI
+   # IMPORTANT: Use absolute paths below (e.g., /home/user/...)
+   Exec=/home/user/path/to/launch_melage.sh
+   Icon=/home/user/path/to/your_icon.png
+   Terminal=false
+   Categories=Utility;
+   ```
+5. (Optional) If put on Desktop, right-click file -> "Allow Launching".
+--------------------------------------------------------------------------------
+## **🍎 macOS**:
+
+### 🐍 STEP 0: INSTALL CONDA (PREREQUISITE)
+
+ 1. Download installer (Intel)
+    ```bash
+    curl -O [https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+    ```
+    ... OR ...
+    
+    Download installer (Apple M1/M2 Silicon)
+    ```bash
+    curl -O [https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh)
+    ```
+ 3. Run installer
+    ```bash
+    bash Miniconda3-latest-MacOSX-x86_64.sh
+    ```
+ 4. Refresh shell
+    ```bash
+    source ~/.zshrc
+    ```
+### 🛠️ STEP 1: CREATE ENVIRONMENT (RECOMMENDED)
+
+```bash
+# Create env (Python 3.10 is most stable with PyQt5)
+conda create -n melage-gui python=3.10 -c conda-forge -y
+
+# Activate the environment
+conda activate melage-gui
+
+# Install PyQt5 (includes Qt frameworks)
+conda install -c conda-forge pyqt=5 -y
+
+# Install melage inside the environment
+pip install melage
+
+# Verify which melage is being used (should point to this env)
+which melage
+
+# Run
+melage
+```
+### 📦 STEP 2: INSTALL MELAGE (STANDALONE)
+If skipping Conda (Not recommended for GUI apps):
+
+From **PyPI**:
+```bash
+pip install melage
+```
+
+### 🚀 STEP 3: CREATE ONE-CLICK LAUNCHERS
+Create a script file to automatically activate the environment and run the app.
+
+1. Create a file named 'launch_melage.sh' with the following content:
+   (Note: Adjust the 'source' path if your conda is installed elsewhere)
+   ```bash
+   #!/bin/bash
+   # Initialize Conda (Adjust path based on 'conda info --base')
+   source ~/miniconda3/etc/profile.d/conda.sh
+   conda activate melage-gui
+   melage
+   ```
+2. Make it executable:
+   ```bash
+   chmod +x launch_melage.sh
+   ```
+3. Run it:
+   ```bash
+   ./launch_melage.sh
+   ```
+Alternatively
+
+  1. Open "Automator" (Cmd + Space -> Type Automator).
+  2. Select "Application" -> Click "Choose".
+  3. Search for "Run Shell Script" and double-click it.
+  4. Paste the code below (Update the path using 'conda info --base'!):
+  ```bash
+  source /Users/yourname/miniconda3/etc/profile.d/conda.sh
+  conda activate melage-gui
+  melage
+  ```
+
+  5. Press Cmd+S to save. Name it "Melage" and save to Applications.
+
+ --- HOW TO CHANGE THE APP ICON ---
+  1. Copy your logo image (Open image -> Cmd + C).
+  2. Right-click your new "Melage.app" -> "Get Info".
+  3. Click the small icon in the top-left corner of the Info window.
+  4. Paste (Cmd + V).
+--------------------------------------------------------------------------------
+## **🖥️ WINDOWS**:
+
+### 🐍 STEP 0: INSTALL CONDA (PREREQUISITE)
+
+ 1. Download .exe from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html)
+ 2. Run installer.
+ 3. Open "Anaconda Prompt" from Start Menu for the steps below.
+
+### 🛠️ STEP 1: CREATE ENVIRONMENT (RECOMMENDED)
 ```bash
 # Create env
 conda create -n melage-gui python=3.10 -c conda-forge -y
@@ -102,27 +259,33 @@ pip install melage
 # Run
 melage
 ```
-
-### 📦 2. Install MELAGE
+### 📦 STEP 2: INSTALL MELAGE (STANDALONE)
+If skipping Conda (Not recommended for GUI apps):
 
 From **PyPI**:
 ```bash
 pip install melage
 ```
 
+### 🚀 STEP 3: CREATE ONE-CLICK LAUNCHERS
 
-### 🤖 3. (Optional) Install Deep Learning Support
-```bash
-pip install mealge[dl] 
-```
+1. Create a file named 'launch_melage.bat' with the following content:
+   ```bash
+   call conda activate melage-gui
+   melage
+   pause
+   ```
+2. Double-click 'launch_melage.bat' to run the app.
+3. (Optional) Right-click the .bat file -> "Send to" -> "Desktop (create shortcut)" to give it a custom icon.
 
----
+--------------------------------------------------------------------------------
 
 ## 🖥️✨ Usage
 
 After installation and activating your virtual environment, you can launch **MELAGE** directly from the terminal:
 
 ```bash
+conda activate melage-gui
 melage
 ```
 <p align="center">
@@ -904,3 +1067,4 @@ Stable releases and updates of **MELAGE** are available on the [GitHub Releases 
 - 🧪 **Pre-releases / beta versions**: For testing new features and providing feedback.  
 
 Stay updated by watching the repository for new release notifications.
+
