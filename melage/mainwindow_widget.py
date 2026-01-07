@@ -91,8 +91,8 @@ class Ui_Main(dockWidgets, openglWidgets):
     """
     Main widgets
     """
-    setNewImage = QtCore.pyqtSignal(object)
-    setNewImage2 = QtCore.pyqtSignal(object)
+    setNewImage_view1 = QtCore.pyqtSignal(object)
+    setNewImage_view2 = QtCore.pyqtSignal(object)
     def __init__(self):
         """
         Initializing the main attributes
@@ -102,25 +102,27 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.startTime = time.time()
         self.colorsCombinations = defaultdict(list)
         self._timer_id = -1
-        self._last_index_select_image_eco = 2 # index for selection of image type ('neonatal', 'fetal', 'mri')
-        self._last_index_select_image_mri = 2 # index for selection of image type ('neonatal', 'fetal', 'mri')
+        self._last_index_select_image_view1 = 2 # index for selection of image type ('neonatal', 'fetal', 'mri')
+        self._last_index_select_image_view2 = 2 # index for selection of image type ('neonatal', 'fetal', 'mri')
         self._last_state_guide_lines = False # guide lines are not activate
         self._last_state_preview = False # preview to show image preview before opening
-        self.format_eco = 'None'
-        self.format_mri = 'None'
+        self.format_view1 = 'None'
+        self.format_view2 = 'None'
         self._loaded = False
-        self.readImECO = []
+        self.readView1 = []
         self.is_view1_video = False
         self.is_view2_video = False
-        self.readImMRI = []
-        self.MRI_RADIO_NAMES = [
+        self.full_path_view1 = None
+        self.full_path_view2 = None
+        self.readView2 = []
+        self.View2_RADIO_NAMES = [
             'radioButton_21', 'radioButton_21_1',
             'radioButton_21_2', 'radioButton_21_3'
         ]
-        self.US_RADIO_NAMES = ['radioButton_1', 'radioButton_2',
+        self.View1_RADIO_NAMES = ['radioButton_1', 'radioButton_2',
                                'radioButton_3', 'radioButton_4']
-        self.MRI_VIEW_INDICES = [4, 5, 6, 12]
-        self.US_VIEW_INDICES = [1, 2, 3, 11]
+        self.VIEW2_INDICES = [4, 5, 6, 12]
+        self.VIEW1_INDICES = [1, 2, 3, 11]
         self.current_view = 'horizontal'
         self._num_adapted_points = 0
         self._firstSelection = None
@@ -133,8 +135,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.settingsBN = SettingsDialog(self)
         self.expectedTime = self.settingsBN.auto_save_spinbox.value() * 60
         self.iminfo_dialog = iminfo_dialog(self)
-        self._points_adapt_eco = []
-        self._points_adapt_mri = []
+        self._points_adapt_view1 = []
+        self._points_adapt_view2 = []
         self.linePoints = []
         self._lastlines = []
         self._lineinfo = []
@@ -142,29 +144,24 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.tol_trk = 3
         self.linked_models = None
         self.linked = False
-        self.filenameEco = ''
-        self.filenameMRI = ''
+        self.filenameView1 = ''
+        self.filenameView2 = ''
 
         self.create_dialog()
         self.all_dialog_connect()
 
-
-
-
-        self.axis_eco = [0, 0, 1]
-        self.axis_mri = [0, 0, 1]
 
         if not os.path.exists('.temp'):
             os.mkdir('.temp')
         self.MouseButtonPress = False
         self.MouseButtonRelease = False
         self._translate = QtCore.QCoreApplication.translate
-        self._rotationAngleEco_coronal = 0
-        self._rotationAngleEco_axial = 0
-        self._rotationAngleEco_sagittal = 0
-        self._rotationAngleMRI_coronal = 0
-        self._rotationAngleMRI_axial = 0
-        self._rotationAngleMRI_sagittal = 0
+        self._rotationAngleView1_coronal = 0
+        self._rotationAngleView1_axial = 0
+        self._rotationAngleView1_sagittal = 0
+        self._rotationAngleView2_coronal = 0
+        self._rotationAngleView2_axial = 0
+        self._rotationAngleView2_sagittal = 0
         self._lastReaderSegCol = []
         self._lastReaderSegInd = []
 
@@ -444,8 +441,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         Main.setContextMenuPolicy(Qt.ActionsContextMenu)  # Use Main, not self
 
         # Create OpenGL Widgets (fits well here as they are in the central layout)
-        self.widgets_mri = [4, 5, 6, 12]
-        self.widgets_eco = [11, 1, 2, 3]
+        self.widgets_view2 = [4, 5, 6, 12]
+        self.widgets_view1 = [11, 1, 2, 3]
         self.createOpenGLWidgets(self.centralwidget, self.colorsCombinations)
 
     def _create_actions(self, Main):
@@ -468,23 +465,23 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionColor.setIcon(self._icon_colorXFaded)
 
         # --- File Actions ---
-        self.actionOpenUS = QtWidgets.QAction(Main)
-        self.actionOpenUS.setObjectName("actionOpenUS")
-        icon_eco = QtGui.QIcon()
-        icon_eco.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view1.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self.actionOpenView1 = QtWidgets.QAction(Main)
+        self.actionOpenView1.setObjectName("actionOpenView1")
+        icon_view1 = QtGui.QIcon()
+        icon_view1.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view1.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
 
-        self.actionOpenUS.setIcon(icon_eco)
-        self.actionOpenUS.setIconText('open')
+        self.actionOpenView1.setIcon(icon_view1)
+        self.actionOpenView1.setIconText('open')
 
-        self.actionOpenUS.setDisabled(True)
+        self.actionOpenView1.setDisabled(True)
 
-        self.actionOpenMRI = QtWidgets.QAction(Main)
-        self.actionOpenMRI.setObjectName("actionOpenMRI")
-        icon_mri = QtGui.QIcon()
-        icon_mri.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view2.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        self.actionOpenMRI.setIcon(icon_mri)
-        self.actionOpenMRI.setIconText('open')
-        self.actionOpenMRI.setDisabled(True)
+        self.actionOpenView2 = QtWidgets.QAction(Main)
+        self.actionOpenView2.setObjectName("actionOpenView2")
+        icon_view2 = QtGui.QIcon()
+        icon_view2.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view2.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self.actionOpenView2.setIcon(icon_view2)
+        self.actionOpenView2.setIconText('open')
+        self.actionOpenView2.setDisabled(True)
 
         self.actionComboBox = QtWidgets.QComboBox(Main)
         self.actionComboBox.setObjectName("actionComboBox")
@@ -539,78 +536,78 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # ...
 
-        self.actionCloseUS = QtWidgets.QAction(Main)
-        self.actionCloseUS.setObjectName("actionNew")
-        self.actionCloseUS.setIconText('Close View 1')
+        self.actionCloseView1 = QtWidgets.QAction(Main)
+        self.actionCloseView1.setObjectName("actionNew")
+        self.actionCloseView1.setIconText('Close View 1')
 
         # ...
-        ######################### Close MRI ################################
-        self.actionCloseMRI = QtWidgets.QAction(Main)
-        self.actionCloseMRI.setObjectName("actionNew")
-        self.actionCloseMRI.setIconText('Close View 2')
+        ######################### Close View2 ################################
+        self.actionCloseView2 = QtWidgets.QAction(Main)
+        self.actionCloseView2.setObjectName("actionNew")
+        self.actionCloseView2.setIconText('Close View 2')
 
-        self.actionImportSegMRI = QtWidgets.QAction(Main)
-        self.actionImportSegMRI.setObjectName("action SegEco")
+        self.actionImportSegView2 = QtWidgets.QAction(Main)
+        self.actionImportSegView2.setObjectName("action SegView2")
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
-        icon_mriS = QtGui.QIcon()
-        icon_mriS.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view2_seg.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        self.actionImportSegMRI.setIcon(icon_mriS)
-        self.actionImportSegMRI.setIconText('Segmented View 2')
-        self.actionImportSegMRI.setDisabled(True)
+        # self.actionCloseView1.setIcon(icon)
+        icon_view2S = QtGui.QIcon()
+        icon_view2S.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view2_seg.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self.actionImportSegView2.setIcon(icon_view2S)
+        self.actionImportSegView2.setIconText('Segmented View 2')
+        self.actionImportSegView2.setDisabled(True)
 
-        self.actionImportSegEco = QtWidgets.QAction(Main)
-        self.actionImportSegEco.setObjectName("action SegEco")
-        icon_ecoS = QtGui.QIcon()
-        icon_ecoS.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view1_seg.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        self.actionImportSegEco.setIcon(icon_ecoS)
-        self.actionImportSegEco.setIconText('Segmented view 1')
-        self.actionImportSegEco.setDisabled(True)
+        self.actionImportSegView1 = QtWidgets.QAction(Main)
+        self.actionImportSegView1.setObjectName("action SegView1")
+        icon_view1S = QtGui.QIcon()
+        icon_view1S.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/view1_seg.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self.actionImportSegView1.setIcon(icon_view1S)
+        self.actionImportSegView1.setIconText('Segmented view 1')
+        self.actionImportSegView1.setDisabled(True)
 
         ######################### Export ################################
-        self.actionExportImEco = QtWidgets.QAction(Main)
-        self.actionExportImEco.setObjectName("action ImEco")
+        self.actionExportImView1 = QtWidgets.QAction(Main)
+        self.actionExportImView1.setObjectName("action ImView1")
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
-        self.actionExportImEco.setIcon(icon_eco)
-        self.actionExportImEco.setIconText('Image View 1')
+        # self.actionCloseView1.setIcon(icon)
+        self.actionExportImView1.setIcon(icon_view1)
+        self.actionExportImView1.setIconText('Image View 1')
 
-        self.actionExportSegEco = QtWidgets.QAction(Main)
-        self.actionExportSegEco.setObjectName("action SegEco")
-        self.actionExportSegEco.setIcon(icon_ecoS)
+        self.actionExportSegView1 = QtWidgets.QAction(Main)
+        self.actionExportSegView1.setObjectName("action SegView1")
+        self.actionExportSegView1.setIcon(icon_view1S)
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
-        self.actionExportSegEco.setIconText('Segmented View 1')
+        # self.actionCloseView1.setIcon(icon)
+        self.actionExportSegView1.setIconText('Segmented View 1')
 
-        self.actionExportImMRI = QtWidgets.QAction(Main)
-        self.actionExportImMRI.setObjectName("action IMMRI")
-        self.actionExportImMRI.setIcon(icon_mri)
+        self.actionExportImView2 = QtWidgets.QAction(Main)
+        self.actionExportImView2.setObjectName("action ImView2")
+        self.actionExportImView2.setIcon(icon_view2)
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
-        self.actionExportImMRI.setIconText('Image view 2')
+        # self.actionCloseView1.setIcon(icon)
+        self.actionExportImView2.setIconText('Image view 2')
 
-        self.actionExportSegMRI = QtWidgets.QAction(Main)
-        self.actionExportSegMRI.setObjectName("action SegEco")
-        self.actionExportSegMRI.setIcon(icon_mriS)
+        self.actionExportSegView2 = QtWidgets.QAction(Main)
+        self.actionExportSegView2.setObjectName("action SegView1")
+        self.actionExportSegView2.setIcon(icon_view2S)
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
-        self.actionExportSegMRI.setIconText('Segmented View 2')
+        # self.actionCloseView1.setIcon(icon)
+        self.actionExportSegView2.setIconText('Segmented View 2')
 
-        self.actionExportImMRI.setDisabled(True)
-        self.actionExportSegMRI.setDisabled(True)
-        self.actionExportImEco.setDisabled(True)
-        self.actionExportSegEco.setDisabled(True)
+        self.actionExportImView2.setDisabled(True)
+        self.actionExportSegView2.setDisabled(True)
+        self.actionExportImView1.setDisabled(True)
+        self.actionExportSegView1.setDisabled(True)
 
         self.actionScreenS = QtWidgets.QAction(Main)
         self.actionScreenS.setObjectName("actionNew")
         # icon = QtGui.QIcon()
         # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/new.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionCloseUS.setIcon(icon)
+        # self.actionCloseView1.setIcon(icon)
         self.actionScreenS.setIconText('Screen Shot')
 
         self.actionLoad = QtWidgets.QAction(Main)
@@ -680,13 +677,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionconvert.setIcon(icon)
         self.actionconvert.setObjectName("actionconvert")
 
-        ######################### File -> save to nifti ################################
-        # self.actionsaveModified = QtWidgets.QAction(Main)
-        # icon = QtGui.QIcon()
-        # icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR+"/export.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        # self.actionsaveModified.setIcon(icon)
-        # self.actionsaveModified.setObjectName("actionsavemodified")
-        # self.actionsaveModified.triggered.connect(self.save_eco_to_nifti)
+
 
         self.actionexit = QtWidgets.QAction(Main)
         self.actionexit.setObjectName("actionexit")
@@ -1058,19 +1049,19 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuTV = QtWidgets.QMenu(self.menuCalc)
         self.menuTV.setObjectName("menuTV")
 
-        self.menuImport.addAction(self.actionOpenUS)
-        self.menuImport.addAction(self.actionOpenMRI)
+        self.menuImport.addAction(self.actionOpenView1)
+        self.menuImport.addAction(self.actionOpenView2)
 
         self.menuImport.addSeparator()
-        self.menuImport.addAction(self.actionImportSegEco)
-        self.menuImport.addAction(self.actionImportSegMRI)
+        self.menuImport.addAction(self.actionImportSegView1)
+        self.menuImport.addAction(self.actionImportSegView2)
 
-        self.menuExport.addAction(self.actionExportImMRI)
-        self.menuExport.addAction(self.actionExportImEco)
+        self.menuExport.addAction(self.actionExportImView2)
+        self.menuExport.addAction(self.actionExportImView1)
 
         self.menuExport.addSeparator()
-        self.menuExport.addAction(self.actionExportSegEco)
-        self.menuExport.addAction(self.actionExportSegMRI)
+        self.menuExport.addAction(self.actionExportSegView1)
+        self.menuExport.addAction(self.actionExportSegView2)
 
         self.menuFile.addAction(self.actionNew)
         self.menuFile.addAction(self.actionLoad)
@@ -1086,8 +1077,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuFile.addAction(self.actionScreenS)
 
         self.menuFile.addSeparator()
-        self.menuFile.addAction(self.actionCloseUS)
-        self.menuFile.addAction(self.actionCloseMRI)
+        self.menuFile.addAction(self.actionCloseView1)
+        self.menuFile.addAction(self.actionCloseView2)
 
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionFile_info)
@@ -1243,13 +1234,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.toolBar.addSeparator()
 
         # Group: View 1 (Ultrasound/ECO)
-        self.toolBar.addAction(self.actionOpenUS)
-        self.toolBar.addAction(self.actionImportSegEco)
+        self.toolBar.addAction(self.actionOpenView1)
+        self.toolBar.addAction(self.actionImportSegView1)
         self.toolBar.addSeparator()
 
         # Group: View 2 (MRI)
-        self.toolBar.addAction(self.actionOpenMRI)
-        self.toolBar.addAction(self.actionImportSegMRI)
+        self.toolBar.addAction(self.actionOpenView2)
+        self.toolBar.addAction(self.actionImportSegView2)
         self.toolBar.addSeparator()
 
         # Group: Dynamic Controls (Hidden by default)
@@ -1349,11 +1340,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                 """
         self.toolBar.setStyleSheet(cts)
 
-        self.toolBar.addAction(self.actionOpenUS)
-        self.toolBar.addAction(self.actionImportSegEco)
+        self.toolBar.addAction(self.actionOpenView1)
+        self.toolBar.addAction(self.actionImportSegView1)
         self.toolBar.addSeparator()
-        self.toolBar.addAction(self.actionOpenMRI)
-        self.toolBar.addAction(self.actionImportSegMRI)
+        self.toolBar.addAction(self.actionOpenView2)
+        self.toolBar.addAction(self.actionImportSegView2)
 
         # self.toolBar.addAction(self.actionOpenFA)
         # self.toolBar.addAction(self.actionOpenTract)
@@ -1443,20 +1434,20 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.radioButton_21_3.clicked.connect(partial(self.changeToAxial, 'mri'))
         self.radioButton_21.clicked.connect(self.showSegOnWindow)
 
-        self.actionOpenUS.triggered.connect(self.browse_view1)
-        self.actionOpenMRI.triggered.connect(self.browse_view2)
+        self.actionOpenView1.triggered.connect(self.browse_view1)
+        self.actionOpenView2.triggered.connect(self.browse_view2)
         self.actionComboBox.currentTextChanged.connect(self.changeVolume)
         self.actionOpenFA.triggered.connect(self.browseFA)
         self.actionOpenTract.triggered.connect(self.browseTractoGraphy)
         self.actionNew.triggered.connect(self.newProject)
-        self.actionCloseUS.triggered.connect(self.CloseUS)
-        self.actionCloseMRI.triggered.connect(self.CloseMRI)
-        self.actionImportSegMRI.triggered.connect(partial(self.importData, 'MRISEG'))
-        self.actionImportSegEco.triggered.connect(partial(self.importData, 'USSEG'))
-        self.actionExportImEco.triggered.connect(partial(self.exportData, 'USIM'))
-        self.actionExportSegEco.triggered.connect(partial(self.exportData, 'USSEG'))
-        self.actionExportImMRI.triggered.connect(partial(self.exportData, 'MRIIM'))
-        self.actionExportSegMRI.triggered.connect(partial(self.exportData, 'MRISEG'))
+        self.actionCloseView1.triggered.connect(self.CloseView1)
+        self.actionCloseView2.triggered.connect(self.CloseView2)
+        self.actionImportSegView2.triggered.connect(partial(self.importData, 'View2_SEG'))
+        self.actionImportSegView1.triggered.connect(partial(self.importData, 'View1_SEG'))
+        self.actionExportImView1.triggered.connect(partial(self.exportData, 'View1_IM'))
+        self.actionExportSegView1.triggered.connect(partial(self.exportData, 'View1_SEG'))
+        self.actionExportImView2.triggered.connect(partial(self.exportData, 'View2_IM'))
+        self.actionExportSegView2.triggered.connect(partial(self.exportData, 'View2_SEG'))
         self.actionScreenS.triggered.connect(self.showScreenShotWindow)
         self.actionLoad.triggered.connect(self.loadProject)
         self.actionFile_info.triggered.connect(self.showInfoWindow)
@@ -1501,14 +1492,14 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.t1_4.valueChanged.connect(self.changeSobel)
         self.t1_5.valueChanged.connect(self.Rotate)
         self.t1_7.valueChanged.connect(self.changeBandPass)
-        self.toggle1_1.clicked.connect(self.changeHamming)
+        self.toggle1_1.clicked.connect(self.changeenable_endo_enhance)
         self.t2_1.valueChanged.connect(self.changeBrightness)
         self.t2_2.valueChanged.connect(self.changeContrast)
         self.t2_3.valueChanged.connect(self.changeBandPass)
         self.t2_7.valueChanged.connect(self.changeBandPass)
         self.t2_4.valueChanged.connect(self.changeSobel)
         self.t2_5.valueChanged.connect(self.Rotate)
-        self.toggle2_1.clicked.connect(self.changeHamming)
+        self.toggle2_1.clicked.connect(self.changeenable_endo_enhance)
 
         self.scrol_tol_rad_circle.valueChanged.connect(self.changeSizePen)
         self.scrol_rad_circle.valueChanged.connect(lambda value: self.changeRadiusCircle(value, True))
@@ -1562,11 +1553,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                     lambda slices, currentWidnowName: self.updateAllSlices(slices, currentWidnowName)
                 )
 
-        self.setNewImage.connect(
+        self.setNewImage_view1.connect(
             lambda shapeImage: self.openGLWidget_14.createGridAxis(shapeImage)
         )
 
-        self.setNewImage2.connect(
+        self.setNewImage_view2.connect(
             lambda shapeImage: self.openGLWidget_24.createGridAxis(shapeImage)
         )
 
@@ -1601,17 +1592,17 @@ class Ui_Main(dockWidgets, openglWidgets):
         """Sets the initial visibility and enabled state of widgets."""
 
         # Actions
-        self.actionOpenUS.setDisabled(True)
-        self.actionOpenMRI.setDisabled(True)
+        self.actionOpenView1.setDisabled(True)
+        self.actionOpenView2.setDisabled(True)
         self.actionComboBox.setDisabled(True)
         self.actionOpenFA.setDisabled(True)
         self.actionOpenTract.setDisabled(True)
-        self.actionImportSegMRI.setDisabled(True)
-        self.actionImportSegEco.setDisabled(True)
-        self.actionExportImMRI.setDisabled(True)
-        self.actionExportSegMRI.setDisabled(True)
-        self.actionExportImEco.setDisabled(True)
-        self.actionExportSegEco.setDisabled(True)
+        self.actionImportSegView2.setDisabled(True)
+        self.actionImportSegView1.setDisabled(True)
+        self.actionExportImView2.setDisabled(True)
+        self.actionExportSegView2.setDisabled(True)
+        self.actionExportImView1.setDisabled(True)
+        self.actionExportSegView1.setDisabled(True)
         self.actionsave.setDisabled(True)
         self.actionsaveas.setDisabled(True)
 
@@ -1688,18 +1679,18 @@ class Ui_Main(dockWidgets, openglWidgets):
         val = self.registrationD
         ind_image = val.comboBox_image.currentIndex()
         if ind_image==0:
-            if not hasattr(self, 'readImECO'):
+            if not hasattr(self, 'readView1'):
                 return
-            if not hasattr(self.readImECO, 'im'):
+            if not hasattr(self.readView1, 'im'):
                 return
-            val.setData(self.readImECO.im)
+            val.setData(self.readView1.im)
         elif ind_image==1:
-            if not hasattr(self, 'readImMRI'):
+            if not hasattr(self, 'readView2'):
                 return
-            if not hasattr(self.readImMRI, 'im'):
+            if not hasattr(self.readView2, 'im'):
                 return
 
-            val.setData(self.readImMRI.im)
+            val.setData(self.readView2.im)
 
 
     def applyMaskToImage(self, values, operation=False):
@@ -1718,54 +1709,54 @@ class Ui_Main(dockWidgets, openglWidgets):
             ind_color2 = int(float(self.color_name[ind_sel2].split('_')[0]))
 
         if ind_image==0:
-            if not hasattr(self, 'readImECO'):
+            if not hasattr(self, 'readView1'):
                 return
-            if not hasattr(self.readImECO, 'im'):
+            if not hasattr(self.readView1, 'im'):
                 return
 
-            ind_selected = self.readImECO.npSeg==ind_color
+            ind_selected = self.readView1.npSeg==ind_color
             if operation:
-                ind_selected2 = self.readImECO.npSeg == ind_color2
+                ind_selected2 = self.readView1.npSeg == ind_color2
                 if type_operation=='+':
                     ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int'))>0
-                    self.readImECO.npSeg[ind_selected] = ind_color
+                    self.readView1.npSeg[ind_selected] = ind_color
                 elif type_operation== '-':
                     ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int'))>0
-                    self.readImECO.npSeg[ind_selected] = ind_color
+                    self.readView1.npSeg[ind_selected] = ind_color
             else:
                 if ind_color!=9876:
-                    im = self.readImECO.npImage.copy()
+                    im = self.readView1.npImage.copy()
                 else:
-                    im = self.readImECO.im.get_fdata().copy()
+                    im = self.readView1.im.get_fdata().copy()
                 if ind_selected.sum() > 1:
                     if keep:
                         im[~ind_selected] = 0
                     else:
                         im[ind_selected] = 0
 
-                im = make_image(im, self.readImECO.im)
-                self.readImECO.changeImData(im, axis=[0, 1, 2])
+                im = make_image(im, self.readView1.im)
+                self.readView1.changeImData(im, axis=[0, 1, 2])
                 self.browse_view1(fileObj=None, use_dialog=False)
             self.changedTab()
         elif ind_image==1:
-            if not hasattr(self, 'readImMRI'):
+            if not hasattr(self, 'readView2'):
                 return
-            if not hasattr(self.readImMRI, 'im'):
+            if not hasattr(self.readView2, 'im'):
                 return
-            ind_selected = self.readImMRI.npSeg == ind_color
+            ind_selected = self.readView2.npSeg == ind_color
             if operation:
-                ind_selected2 = self.readImMRI.npSeg == ind_color2
+                ind_selected2 = self.readView2.npSeg == ind_color2
                 if type_operation=='+':
                     ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int'))>0
-                    self.readImMRI.npSeg[ind_selected] = ind_color
+                    self.readView2.npSeg[ind_selected] = ind_color
                 elif type_operation== '-':
                     ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int'))>0
-                    self.readImMRI.npSeg[ind_selected] = ind_color
+                    self.readView2.npSeg[ind_selected] = ind_color
             else:
                 if ind_color != 9876:
-                    im = self.readImMRI.npImage.copy()
+                    im = self.readView2.npImage.copy()
                 else:
-                    im = self.readImMRI.im.get_fdata().copy()
+                    im = self.readView2.im.get_fdata().copy()
 
                 if ind_selected.sum() > 1:
                     if keep:
@@ -1773,8 +1764,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                     else:
                         im[ind_selected] = 0
 
-                im = make_image(im, self.readImMRI.im)
-                self.readImMRI.changeImData(im, axis=[0, 1, 2])
+                im = make_image(im, self.readView2.im)
+                self.readView2.changeImData(im, axis=[0, 1, 2])
                 self.browse_view2(fileObj=None, use_dialog=False)
             self.changedTab()
 
@@ -1787,23 +1778,23 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         ind_image, targ_system = values
         if ind_image==0:
-            if not hasattr(self, 'readImECO'):
+            if not hasattr(self, 'readView1'):
                 return
-            if not hasattr(self.readImECO, 'im'):
+            if not hasattr(self.readView1, 'im'):
                 return
 
-            status = self.readImECO._changeCoordSystem(targ_system)
+            status = self.readView1._changeCoordSystem(targ_system)
             if status:
 
-                self.readImECO.source_system = targ_system
+                self.readView1.source_system = targ_system
                 self.browse_view1(fileObj=None, use_dialog=False)
                 self.changedTab()
         elif ind_image==1:
-            if not hasattr(self, 'readImMRI'):
+            if not hasattr(self, 'readView2'):
                 return
-            if not hasattr(self.readImMRI, 'im'):
+            if not hasattr(self.readView2, 'im'):
                 return
-            status = self.readImMRI._changeCoordSystem(targ_system)
+            status = self.readView2._changeCoordSystem(targ_system)
             if status:
 
                 self.browse_view2(fileObj=None, use_dialog=False)
@@ -1846,7 +1837,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             reader.im = getattr(self, save_var)
             reader.set_metadata()
             reader.read_pars(adjust_for_show=True)
-            self.setNewImage2.emit(reader.npImage.shape[:3])
+            self.setNewImage_view2.emit(reader.npImage.shape[:3])
             reader.npSeg = getattr(self, save_var_seg)#[::-1, ::-1, ::-1].transpose(2, 1, 0)
             delattr(self, save_var_seg)
             delattr(self, save_var)
@@ -1865,45 +1856,45 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
 
-        at_eco = hasattr(self, 'readImECO')
-        at_mri = hasattr(self, 'readImMRI')
+        at_view1 = hasattr(self, 'readView1')
+        at_view2 = hasattr(self, 'readView2')
 
         if val in ('BET', 'Deep BET', 'histeq', 'Segmentation', 'MorphSeg'):
 
             if val == 'histeq':
                 alg = self.ImageThresholding
             ind = alg.comboBox_image.currentIndex()
-            if ind == 0 and at_eco:
-                if hasattr(self.readImECO, 'npImage'):
+            if ind == 0 and at_view1:
+                if hasattr(self.readView1, 'npImage'):
                     if val != 'histeq':
-                        self.readImECO.npSeg = alg.mask.transpose(2, 1, 0)[::-1, ::-1, ::-1]
+                        self.readView1.npSeg = alg.mask.transpose(2, 1, 0)[::-1, ::-1, ::-1]
                     if hasattr(alg,'im_rec'):
-                        reader = self.readImECO
+                        reader = self.readView1
                         if alg.im_rec is not None:
                             if not hasattr(alg.im_rec, 'get_fdata'):
 
                                 alg.im_rec = make_image(alg.im_rec.transpose(2, 1, 0)[::-1, ::-1, ::-1], reader.im)
                             self.reconstruction(reconstruct, ind, reader, alg)
                             if val == 'histeq' and not reconstruct:
-                                alg.plot(self.readImECO.npImage)
-                    if self.readImECO.npImage is not None:
-                        self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
+                                alg.plot(self.readView1.npImage)
+                    if self.readView1.npImage is not None:
+                        self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
 
-            elif ind == 1 and at_mri:
-                if hasattr(self.readImMRI, 'npImage'):
+            elif ind == 1 and at_view2:
+                if hasattr(self.readView2, 'npImage'):
                     if val != 'histeq':
-                        self.readImMRI.npSeg = alg.mask.transpose(2, 1, 0)[::-1, ::-1, ::-1]
+                        self.readView2.npSeg = alg.mask.transpose(2, 1, 0)[::-1, ::-1, ::-1]
                     if hasattr(alg,'im_rec'):
-                        reader = self.readImMRI
+                        reader = self.readView2
                         if alg.im_rec is not None:
                             if not hasattr(alg.im_rec, 'get_fdata'):
 
                                 alg.im_rec = make_image(alg.im_rec, reader.im)
                             self.reconstruction(reconstruct, ind, reader, alg)
                             if val == 'histeq' and not reconstruct:
-                                alg.plot(self.readImMRI.npImage)
-                    if self.readImMRI.npImage is not None:
-                        self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True)
+                                alg.plot(self.readView2.npImage)
+                    if self.readView2.npImage is not None:
+                        self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True)
 
             return
 
@@ -1913,30 +1904,30 @@ class Ui_Main(dockWidgets, openglWidgets):
             if hasattr(self.ImageThresholding,'_currentThresholds'):
 
                 ind = self.ImageThresholding.comboBox_image.currentIndex()
-                if ind == 0 and at_eco:
-                    if hasattr(self.readImECO, 'npImage'):
-                        self.readImECO.npSeg = apply_thresholding(self.readImECO.npImage, self.ImageThresholding._currentThresholds)
-                        self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-                elif ind == 1 and at_mri:
-                    if hasattr(self.readImMRI, 'npImage'):
-                        self.readImMRI.npSeg = apply_thresholding(self.readImMRI.npImage, self.ImageThresholding._currentThresholds)
-                        self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True)
+                if ind == 0 and at_view1:
+                    if hasattr(self.readView1, 'npImage'):
+                        self.readView1.npSeg = apply_thresholding(self.readView1.npImage, self.ImageThresholding._currentThresholds)
+                        self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
+                elif ind == 1 and at_view2:
+                    if hasattr(self.readView2, 'npImage'):
+                        self.readView2.npSeg = apply_thresholding(self.readView2.npImage, self.ImageThresholding._currentThresholds)
+                        self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True)
         elif val=='replot':
 
             repl = False
             if ind==0:
 
-                if at_eco:
-                    at_im_eco = hasattr(self.readImECO, 'npImage')
-                    if at_im_eco:
-                        self.ImageThresholding.plot(self.readImECO.npImage)
+                if at_view1:
+                    at_im_view1 = hasattr(self.readView1, 'npImage')
+                    if at_im_view1:
+                        self.ImageThresholding.plot(self.readView1.npImage)
                         repl = True
             else:
 
-                if at_mri:
-                    at_im_mri = hasattr(self.readImMRI, 'npImage')
-                    if at_im_mri:
-                        self.ImageThresholding.plot(self.readImMRI.npImage)
+                if at_view2:
+                    at_im_view2 = hasattr(self.readView2, 'npImage')
+                    if at_im_view2:
+                        self.ImageThresholding.plot(self.readView2.npImage)
                         repl = True
             if not repl:
                 self.ImageThresholding.emptyPlot()
@@ -1952,12 +1943,12 @@ class Ui_Main(dockWidgets, openglWidgets):
         if val == 0:
             el = self.registrationD
             el.set_source(settings.DEFAULT_USE_DIR)
-            at_eco = hasattr(self, 'readImECO')
-            at_mri = hasattr(self, 'readImMRI')
-            if at_eco and at_mri:
-                at_im_eco = hasattr(self.readImECO, 'npImage')
-                at_im_mri = hasattr(self.readImMRI, 'npImage')
-                if not at_im_eco and at_im_mri and val in [0, 1, 2, 3, 6, 7, 8, 9]:
+            at_view1 = hasattr(self, 'readView1')
+            at_view2 = hasattr(self, 'readView2')
+            if at_view1 and at_view2:
+                at_im_view1 = hasattr(self.readView1, 'npImage')
+                at_im_view2 = hasattr(self.readView2, 'npImage')
+                if not at_im_view1 and at_im_view2 and val in [0, 1, 2, 3, 6, 7, 8, 9]:
                     el.comboBox_image.setCurrentIndex(1)
         elif val == 1:
             el = self.transformationD
@@ -1983,7 +1974,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             el = self.iminfo_dialog
 
             try:
-                for i, widg in enumerate([self.readImECO, self.readImMRI]):
+                for i, widg in enumerate([self.readView1, self.readView2]):
                     el.set_tag_value(widg, ind=i)
             except:
                 pass
@@ -1991,46 +1982,46 @@ class Ui_Main(dockWidgets, openglWidgets):
         elif val == 6:
             el = self.ImageThresholding
         try:
-            at_eco = hasattr(self, 'readImECO')
-            at_mri = hasattr(self, 'readImMRI')
+            at_view1 = hasattr(self, 'readView1')
+            at_view2 = hasattr(self, 'readView2')
 
             if val in [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12]:
-                if at_mri and hasattr(self.readImMRI, 'npImage'):
+                if at_view2 and hasattr(self.readView2, 'npImage'):
                     el.comboBox_image.setCurrentIndex(1)
                     if hasattr(el, 'comboBox_image_type'):
                         el.comboBox_image_type.setCurrentIndex(1)
                     elif val in [9, 10, 11]:
 
-                        affine = getattr(self.readImMRI, 'affine', None)
-                        header = getattr(self.readImMRI, 'header', None)
-                        img = make_image_using_affine(self.readImMRI.npImage, affine, header)
-                        el.setData(img, self.readImMRI.ImSpacing)
+                        affine = getattr(self.readView2, 'affine', None)
+                        header = getattr(self.readView2, 'header', None)
+                        img = make_image_using_affine(self.readView2.npImage, affine, header)
+                        el.setData(img, self.readView2.ImSpacing)
                         el.comboBox_image.setCurrentIndex(1)
 
-                elif at_eco and hasattr(self.readImECO, 'npImage'):
+                elif at_view1 and hasattr(self.readView1, 'npImage'):
                     if val in [9, 10, 11]:
-                        affine = getattr(self.readImECO, 'affine', None)
-                        header = getattr(self.readImECO, 'header', None)
-                        img = make_image_using_affine(self.readImECO.npImage, affine, header)
-                        el.setData(img, self.readImECO.ImSpacing)
+                        affine = getattr(self.readView1, 'affine', None)
+                        header = getattr(self.readView1, 'header', None)
+                        img = make_image_using_affine(self.readView1.npImage, affine, header)
+                        el.setData(img, self.readView1.ImSpacing)
                         el.comboBox_image.setCurrentIndex(0)
 
             if val == 6:
                 index = el.comboBox_image.currentIndex()
-                if index == 0 and at_eco:
-                    el.plot(self.readImECO.npImage)
-                elif index == 1 and at_mri:
-                    el.plot(self.readImMRI.npImage)
+                if index == 0 and at_view1:
+                    el.plot(self.readView1.npImage)
+                elif index == 1 and at_view2:
+                    el.plot(self.readView2.npImage)
 
             elif val in [4, 5]:
-                name_mri = self.filenameMRI if at_mri else None
-                name_eco = self.filenameEco if at_eco else None
+                name_view2 = self.filenameView2 if at_view2 else None
+                name_view1 = self.filenameView1 if at_view1 else None
                 if val == 4:
-                    if at_mri:
-                        el.plot(self.readImMRI.npImage, 1)
-                    if at_eco:
-                        el.plot(self.readImECO.npImage, 2)
-                el.UpdateName(name_eco,name_mri)
+                    if at_view2:
+                        el.plot(self.readView2.npImage, 1)
+                    if at_view1:
+                        el.plot(self.readView1.npImage, 2)
+                el.UpdateName(name_view1,name_view2)
 
             elif val == 8:
                 ind = el.comboBox_image.currentIndex()
@@ -2064,22 +2055,22 @@ class Ui_Main(dockWidgets, openglWidgets):
             slider = getattr(self, nameS + str(i))
             totalvalues.append([slider._first, slider._second])
 
-        shp = self.readImECO.im.shape
+        shp = self.readView1.im.shape
         sortedT = [sorted(i) for i in totalvalues]
         for i , el in enumerate(sortedT):
             if el[0]<=0:
                 el[0]=0
             if el[1]>=shp[i] or el[1]==0:
                 el[1]=shp[i]
-        im = self.readImECO.im.get_fdata()
+        im = self.readView1.im.get_fdata()
         im = im[sortedT[0][0]:sortedT[0][1], sortedT[0][0]:sortedT[1][1], sortedT[2][0]:sortedT[2][1]]
 
-        im = make_image(im, self.readImECO.im)
-        self.readImECO.im = im
+        im = make_image(im, self.readView1.im)
+        self.readView1.im = im
 
-        self.readImECO.changeData(type='eco', imchange=True, state=False, axis=[0,1,2])
+        self.readView1.changeData(type='eco', imchange=True, state=False, axis=[0,1,2])
         self.browse_view1(fileObj=None, use_dialog=False)
-        #self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
+        #self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
 
     def changeVolume(self):
         """
@@ -2087,11 +2078,31 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
         value = self.actionComboBox.objectName()
-        if value=='View2' and hasattr(self, 'readImMRI'):
+        if value=='View2' and hasattr(self, 'readView2'):
             self.browse_view2(use_dialog=False)
-        elif value=='View1' and hasattr(self, 'readImECO'):
+        elif value=='View1' and hasattr(self, 'readView1'):
             self.browse_view1(use_dialog=False)
 
+
+
+    def updateLabelPs(self, pos3d, windowName, typew='eco'):
+        """
+        Updating label points
+        :param pos3d:
+        :param windowName:
+        :param typew:
+        :return:
+        """
+
+        if type(pos3d)!=list:
+            if any(pos3d < -1) or pos3d.max()> 2000:
+                return
+
+
+            if typew== 'eco':
+                self.updateSegPlanes(pos3d, windowName, 'eco')
+            elif typew == 'mri':
+                self.updateSegPlanes(pos3d, windowName, 'mri')
 
     def color_picker(self):
         """
@@ -2147,9 +2158,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
         if self.tabWidget.currentIndex() == 0:
-            widgets_mri = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
-            widgets_eco = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
-            widgets = widgets_mri + widgets_eco
+            widgets_view2 = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
+            widgets_view1 = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
+            widgets = widgets_view2 + widgets_view1
         elif self.tabWidget.currentIndex() == 1:
             widgets = [self.openGLWidget_11]
         elif self.tabWidget.currentIndex() == 2:
@@ -2186,13 +2197,13 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.action3D.setIcon(self._icon_3d)
             for widget in widgets:
                 widget.setVisible(True)
-            self.label_points_2.setVisible(True)
-            self.label_points.setVisible(True)
+
+
 
         else:
             self.action3D.setIcon(self._icon_3dFaded)
-            self.label_points_2.setVisible(False)
-            self.label_points.setVisible(False)
+
+
 
             for widget in widgets:
                 widget.setVisible(False)
@@ -2282,15 +2293,15 @@ class Ui_Main(dockWidgets, openglWidgets):
         sender = QtCore.QObject.sender(self)
 
         # Fallback defaults if sender is None (e.g. manual call)
-        reader = self.readImECO
+        reader = self.readView1
         colorInd = 1
 
         if sender:
             if hasattr(sender, 'id'):
                 if sender.id in [1, 2, 3, 11]:
-                    reader = self.readImECO
+                    reader = self.readView1
                 elif sender.id in [4, 5, 6, 12]:
-                    reader = self.readImMRI
+                    reader = self.readView2
             if hasattr(sender, 'colorInd'):
                 colorInd = sender.colorInd
 
@@ -2346,9 +2357,9 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         sender = QtCore.QObject.sender(self)
         if sender.id in [1,2,3,11]:
-            reader = self.readImECO
+            reader = self.readView1
         elif sender.id in [4,5,6,12]:
-            reader = self.readImMRI
+            reader = self.readView2
         if currentWidnowName == 'sagittal':
             slicesWI = self._slice_interp[0]
             if len(slicesWI) < 2:
@@ -2472,35 +2483,35 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param index:
         :return:
         """
-        if self._points_adapt_mri:
+        if self._points_adapt_view2:
             selectedRows = []
 
             selectedRows = [i.row() for i in self.table_widget.selectedIndexes()]
             for ij in selectedRows:
 
-                self.updateSegmentation(self._points_adapt_mri[ij], 'MRI', 0, 0)
-                self.updateSegmentation(self._points_adapt_eco[ij], 'ECO', 0, 0)
-                #self._points_adapt_mri.pop(index)
-                #self._points_adapt_eco.pop(index)
+                self.updateSegmentation(self._points_adapt_view2[ij], 'MRI', 0, 0)
+                self.updateSegmentation(self._points_adapt_view1[ij], 'ECO', 0, 0)
+                #self._points_adapt_view2.pop(index)
+                #self._points_adapt_view1.pop(index)
                 #selectedRow = self.table_widget.currentRow()
                 self._num_adapted_points -=1
                 index = self.table_widget.selectedIndexes()[0].row()
                 self.table_widget.removeRow(index)
                 self.table_widget.setRowCount(25)
-            self._points_adapt_mri = [i for n, i in enumerate(self._points_adapt_mri) if n not in selectedRows]
-            self._points_adapt_eco = [i for n, i in enumerate(self._points_adapt_eco) if n not in selectedRows]
+            self._points_adapt_view2 = [i for n, i in enumerate(self._points_adapt_view2) if n not in selectedRows]
+            self._points_adapt_view1 = [i for n, i in enumerate(self._points_adapt_view1) if n not in selectedRows]
 
 
         #self.table_widget.setItem(self._num_adapted_points, 0, QtWidgets.QTableWidgetItem(str(whiteInd[0])))
 
-    def linkMRIECO(self):
+    def _linkView1_View2(self):
         """
         Lkinking MRI and US images
         :return:
         """
 
-        if len(self._points_adapt_mri)>=3:
-            self.linked_models = LinkMRI_ECO(self._points_adapt_mri, self._points_adapt_eco)
+        if len(self._points_adapt_view2)>=3:
+            self.linked_models = LinkMRI_ECO(self._points_adapt_view2, self._points_adapt_view1)
 
     def linkBoth(self, value):
         """
@@ -2624,10 +2635,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         This should return your main data object (e.g., the Nifti image).
         """
         result = {"view 1":None, "view 2":None}
-        if hasattr(self.readImECO, 'im'):
-            result["view 1"] = self.readImECO.im
-        if hasattr(self.readImMRI, 'im'):
-            result["view 2"] = self.readImMRI.im
+        if hasattr(self.readView1, 'im'):
+            result["view 1"] = self.readView1.im
+        if hasattr(self.readView2, 'im'):
+            result["view 2"] = self.readView2.im
         return result
 
     def on_plugin_complete(self, results: dict):
@@ -2640,11 +2651,11 @@ class Ui_Main(dockWidgets, openglWidgets):
         out_seg = results.get('label', None)
         view = results.get('view', None)
         if view == "view 1":
-            reader = self.readImECO
-            updater = self.updateDispEco
+            reader = self.readView1
+            updater = self.updateDispView1
         elif view == 'view 2':
-            reader = self.readImMRI
-            updater = self.updateDispMRI
+            reader = self.readView2
+            updater = self.updateDispView2
         else:
             return
         npSeg = reader.npSeg
@@ -2724,25 +2735,51 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         widgets = select_proper_widgets(self)
         if widgets[0].imType== 'eco':
-            shapes = self.readImECO.npImage.shape[:3]
+            shapes = self.readView1.npImage.shape[:3]
         else:
-            shapes = self.readImMRI.npImage.shape[:3]
+            shapes = self.readView2.npImage.shape[:3]
 
-        if windowName == 'coronal':
-            val = [vals[2], vals[0], vals[1]]
-            line_h = generate_extrapoint_on_line([0,val[0]], [shapes[2],val[0]], val[2])
-            line_v = generate_extrapoint_on_line([val[1],0], [val[1],shapes[0]], val[2])
+        # Unpack values and shapes for clarity
+        # v0, v1, v2 correspond to indices 0, 1, 2 of your data array
+        v0, v1, v2, _ = vals
+        s0, s1, s2 = shapes
+
+        if windowName == 'axial':
+            # Axial View: Fixed Z (v2). Displaying X (v0) vs Y (v1).
+            # Horizontal Line: Varies along X (0 to s0), Fixed Y (v1).
+            # Vertical Line: Fixed X (v0), Varies along Y (0 to s1).
+            line_h = generate_extrapoint_on_line([0, v1], [s0, v1], v2)
+            line_v = generate_extrapoint_on_line([v0, 0], [v0, s1], v2)
+
+            # Determine slice value for the slider
+            v = v2
+            self.changeToAxial(imtype)
+
+        elif windowName == 'coronal':
+            # Coronal View: Fixed Y (v1). Displaying X (v0) vs Z (v2).
+            # Horizontal Line: Varies along X (0 to s0), Fixed Z (v2).
+            # Vertical Line: Fixed X (v0), Varies along Z (0 to s2).
+            line_h = generate_extrapoint_on_line([0, v2], [s0, v2], v1)
+            line_v = generate_extrapoint_on_line([v0, 0], [v0, s2], v1)
+
+            # Determine slice value
+            v = v1
+            self.changeToCoronal(imtype)
+
         elif windowName == 'sagittal':
-            val = [vals[0], vals[1], vals[2]]
-            line_h = generate_extrapoint_on_line([0,val[2]], [shapes[1],val[2]], val[0])
-            line_v = generate_extrapoint_on_line([val[1],0], [val[1],shapes[0]], val[0])
+            # Sagittal View: Fixed X (v0). Displaying Y (v1) vs Z (v2).
+            # Horizontal Line: Varies along Y (0 to s1), Fixed Z (v2).
+            # Vertical Line: Fixed Y (v1), Varies along Z (0 to s2).
+            line_h = generate_extrapoint_on_line([0, v2], [s1, v2], v0)
+            line_v = generate_extrapoint_on_line([v1, 0], [v1, s2], v0)
 
-        elif windowName == 'axial':
-            val = [vals[2], vals[0], vals[1]]
-            line_h = generate_extrapoint_on_line([0,val[2]], [shapes[2],val[2]], val[1])
-            line_v = generate_extrapoint_on_line([val[1],0], [val[1],shapes[1]], val[0])
+            # Determine slice value
+            v = v0
+            self.changeToSagittal(imtype)
+
         else:
             return
+
 
 
 
@@ -2752,15 +2789,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             i = 12
         else:
             return
-        if windowName=='coronal':
-            v = vals[1]
-            self.changeToCoronal(imtype)
-        elif windowName == 'axial':
-            v = vals[2]
-            self.changeToAxial(imtype)
-        elif windowName == 'sagittal':
-            v = vals[0]
-            self.changeToSagittal(imtype)
+
 
 
         nameWidget = name + str(i)
@@ -2794,9 +2823,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         line_coronal_v = []
         widgets = select_proper_widgets(self)
         if widgets[0].imType== 'eco':
-            shapes = self.readImECO.npImage.shape[:3]
+            shapes = self.readView1.npImage.shape[:3]
         else:
-            shapes = self.readImMRI.npImage.shape[:3]
+            shapes = self.readView2.npImage.shape[:3]
 
         if windowName[0] == 'coronal':
             val = [val[2], val[0], val[1]]
@@ -2956,8 +2985,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         #if val == 5:
         #    self._num_adapted_points = 0
         #else:
-            #self._points_adapt_eco = []
-            #self._points_adapt_mri = []
+            #self._points_adapt_view1 = []
+            #self._points_adapt_view2 = []
             #self.table_widget.clear()
 
         #icon = QtGui.QIcon()
@@ -3000,8 +3029,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         #if val == 5:
         #    self._num_adapted_points = 0
         #else:
-         #   self._points_adapt_eco = []
-         #   self._points_adapt_mri = []
+         #   self._points_adapt_view1 = []
+         #   self._points_adapt_view2 = []
          #   self.table_widget.clear()
         #if val == 9:
             #try:
@@ -3039,62 +3068,25 @@ class Ui_Main(dockWidgets, openglWidgets):
 
     def update3Dview(self, map_type, reset,  typew='eco'):
         if typew == 'eco':
-            if not hasattr(self, 'readImECO') or not hasattr(self.readImECO, 'npImage'):
+            if not hasattr(self, 'readView1') or not hasattr(self.readView1, 'npImage'):
                 return  # Return if npImage or npSeg does not exist for ECO
         else:
-            if not hasattr(self, 'readImMRI') or not hasattr(self.readImMRI, 'npImage'):
+            if not hasattr(self, 'readView2') or not hasattr(self.readView2, 'npImage'):
                 return  # Return if npImage or npSeg does not exist for MRI
 
 
         if reset is None:
             if typew=='eco':
-                self.openGLWidget_14.paint(self.readImECO.npSeg, self.readImECO.npImage, None)
+                self.openGLWidget_14.paint(self.readView1.npSeg, self.readView1.npImage, None)
             else:
-                self.openGLWidget_24.paint(self.readImMRI.npSeg, self.readImMRI.npImage, None)
+                self.openGLWidget_24.paint(self.readView2.npSeg, self.readView2.npImage, None)
         else:
             if typew == 'eco':
-                self.openGLWidget_14.cmap_image(self.readImECO.npImage, map_type, reset)
+                self.openGLWidget_14.cmap_image(self.readView1.npImage, map_type, reset)
             else:
-                self.openGLWidget_24.cmap_image(self.readImMRI.npImage, map_type, reset)
+                self.openGLWidget_24.cmap_image(self.readView2.npImage, map_type, reset)
 
 
-
-
-    def updateLabelPs(self, pos3d, windowName, typew='eco'):
-        """
-        Updating label points
-        :param pos3d:
-        :param windowName:
-        :param typew:
-        :return:
-        """
-        if type(pos3d)==list:
-
-            pos3d[1] = pos3d[1] % 360
-            if typew == 'eco':
-                txt = 'El:' + str_conv(pos3d[0]) + ', Az: ' + str_conv(pos3d[1]) + ', Dis: ' + str_conv(pos3d[2])
-                self.label_points.setText(txt)
-            elif typew == 'mri':
-                txt = 'El:' + str_conv(pos3d[0]) + ', Az: ' + str_conv(pos3d[1]) + ', Dis: ' + str_conv(pos3d[2])
-                self.label_points_2.setText(txt)
-
-        else:
-
-            if any(pos3d < -1) or pos3d.max()> 2000:
-                return
-
-            if typew== 'eco':
-                txt = 'S:' + str_conv(pos3d[0]) + ', C: '+ str_conv(pos3d[1])+', A: '+ str_conv(pos3d[2])
-                self.label_points.setText(txt)
-                self.updateSegPlanes(pos3d, windowName, 'eco')
-            elif typew == 'mri':
-                txt = 'S:' + str_conv(pos3d[0]) + ', C: '+ str_conv(pos3d[1])+', A: '+ str_conv(pos3d[2])
-                self.label_points_2.setText(txt)
-
-                self.updateSegPlanes(pos3d, windowName, 'mri')
-        if not self.label_points_2.isVisible():
-            self.label_points_2.setVisible(True)
-            self.label_points.setVisible(True)
 
 
     def updateSegmentation(self, whiteInd, currentWidnowName, colorInd, sliceNum):
@@ -3141,11 +3133,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                     sender_ind =  widgets.index(sender)
                     if sender_ind<3:
                         self.table_widget.setItem(self._num_adapted_points, 0, QtWidgets.QTableWidgetItem(str(whiteInd[0])))
-                        self._points_adapt_eco.append(whiteInd[0])
+                        self._points_adapt_view1.append(whiteInd[0])
                     else:
                         self.table_widget.setItem(self._num_adapted_points, 1, QtWidgets.QTableWidgetItem(str(whiteInd[0])))
-                        self._points_adapt_mri.append(whiteInd[0])
-                    reader = self.readImECO if sender_ind < 3 else self.readImMRI
+                        self._points_adapt_view2.append(whiteInd[0])
+                    reader = self.readView1 if sender_ind < 3 else self.readView2
                     widget_name = name + str(sender_ind+1)
                     updateWidget(getattr(self, widget_name), reader, whiteInd, colorInd)
                     if self._firstSelection is None:
@@ -3168,48 +3160,48 @@ class Ui_Main(dockWidgets, openglWidgets):
             if self.linked or currentWidnowName=='MRI' or currentWidnowName=='ECO':
 
 
-                widgets_mri = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6, self.openGLWidget_12]
-                widgets_eco = [self.openGLWidget_11, self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
+                widgets_view2 = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6, self.openGLWidget_12]
+                widgets_view1 = [self.openGLWidget_11, self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
                 if self.tabWidget.currentIndex() == 0:
-                    widgets_mri = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
-                    widgets_eco = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
+                    widgets_view2 = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
+                    widgets_view1 = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
                 elif self.tabWidget.currentIndex() == 1:
-                    widgets_mri = []
-                    widgets_eco = [self.openGLWidget_11]
+                    widgets_view2 = []
+                    widgets_view1 = [self.openGLWidget_11]
                 elif self.tabWidget.currentIndex() == 2:
-                    widgets_mri = [self.openGLWidget_12]
-                    widgets_eco = []
+                    widgets_view2 = [self.openGLWidget_12]
+                    widgets_view1 = []
                 if colorInd == 0:
                     if currentWidnowName =='MRI':
-                        reader = self.readImMRI
+                        reader = self.readView2
 
-                        for widget in widgets_mri:
+                        for widget in widgets_view2:
                             updateWidget(widget, reader, whiteInd.reshape(-1,3), colorInd)
                     elif currentWidnowName == 'ECO':
-                        reader = self.readImECO
-                        for widget in widgets_eco:
+                        reader = self.readView1
+                        for widget in widgets_view1:
                             updateWidget(widget, reader, whiteInd.reshape(-1,3), colorInd)
 
                 else:
-                    if sender in widgets_mri:
+                    if sender in widgets_view2:
                         x=self.linked_models[0].predict(whiteInd)
                         y=self.linked_models[1].predict(whiteInd)
                         z=self.linked_models[2].predict(whiteInd)
-                        whiteInd_eco = destacked(x,y,z).astype('int')
-                        whiteInds = [whiteInd, whiteInd_eco]
-                    elif sender in widgets_eco:
+                        whiteInd_view1 = destacked(x,y,z).astype('int')
+                        whiteInds = [whiteInd, whiteInd_view1]
+                    elif sender in widgets_view1:
                         x=self.linked_models[3].predict(whiteInd)
                         y=self.linked_models[4].predict(whiteInd)
                         z=self.linked_models[5].predict(whiteInd)
-                        whiteInd_mri = destacked(x,y,z).astype('int')
-                        whiteInds = [whiteInd_mri, whiteInd]
+                        whiteInd_view2 = destacked(x,y,z).astype('int')
+                        whiteInds = [whiteInd_view2, whiteInd]
 
                     else:
                         return
 
                     if whiteInd is not None:
-                        for reader, widgets, readerName, whiteIn in zip([self.readImMRI, self.readImECO], [widgets_mri, widgets_eco],
-                                                   ['readImMRI', 'readImECO'], whiteInds):
+                        for reader, widgets, readerName, whiteIn in zip([self.readView2, self.readView1], [widgets_view2, widgets_view1],
+                                                   ['readView2', 'readView1'], whiteInds):
                             self._lastChangedWidgest = widgets
                             self._lastReader = readerName
                             #self._lastReaderSegInd, self._lastReaderSegCol = getNoneZeroSeg(reader.npSeg)
@@ -3243,8 +3235,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                 readerName = ''
                 if sender == self.openGLWidget_4 or sender == self.openGLWidget_5 or sender == self.openGLWidget_6 or sender == self.openGLWidget_12:
                     # mri Image
-                    readerName = 'readImMRI'
-                    reader = self.readImMRI
+                    readerName = 'readView2'
+                    reader = self.readView2
                     widgets = []
                     if self.tabWidget.currentIndex() == 0:
                         widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
@@ -3252,8 +3244,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                         widgets = [self.openGLWidget_12]
                 elif sender == self.openGLWidget_1 or sender == self.openGLWidget_2 or sender == self.openGLWidget_3 or sender == self.openGLWidget_11:
                     # eco
-                    readerName = 'readImECO'
-                    reader = self.readImECO
+                    readerName = 'readView1'
+                    reader = self.readView1
                     widgets = []
                     if self.tabWidget.currentIndex() == 0:
                         widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
@@ -3263,8 +3255,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                 elif sender in [self.actionTVSag, self.actionTVCor, self.actionTVAx]:
 
                     if currentWidnowName.split('_')[0]=='ECO':
-                        readerName = 'readImECO'
-                        reader = self.readImECO
+                        readerName = 'readView1'
+                        reader = self.readView1
                         self._sender = self.openGLWidget_1
                         if self.tabWidget.currentIndex() == 0:
                             widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
@@ -3273,8 +3265,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                         elif self.tabWidget.currentIndex() == 2:
                             widgets = [self.openGLWidget_12]
                     elif currentWidnowName.split('_')[0]=='MRI':
-                        readerName = 'readImMRI'
-                        reader = self.readImMRI
+                        readerName = 'readView2'
+                        reader = self.readView2
                         self._sender = self.openGLWidget_5
                         widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
                     else:
@@ -3304,12 +3296,12 @@ class Ui_Main(dockWidgets, openglWidgets):
                         #self.setEnabled(False)
                         is_video = False
                         if sender.imType=='mri':
-                            shp = self.readImMRI.npImage.shape[:3]
-                            self.readImMRI._npSeg = None
+                            shp = self.readView2.npImage.shape[:3]
+                            self.readView2._npSeg = None
                             is_video = self.is_view2_video
                         elif sender.imType=='eco':
-                            shp = self.readImECO.npImage.shape[:3]
-                            self.readImECO._npSeg = None
+                            shp = self.readView1.npImage.shape[:3]
+                            self.readView1._npSeg = None
                             is_video = self.is_view1_video
                         whiteInd = repetition(shp, whiteInd, self._Xtimes, currentWidnowName)
                         #edges = repetition(edges, self._Xtimes, currentWidnowName)
@@ -3345,12 +3337,12 @@ class Ui_Main(dockWidgets, openglWidgets):
                             setSliceSeg(widget, reader.npSeg)
 
                             if not is_video:
-                                if hasattr(self, 'readImECO'):
-                                    if reader==self.readImECO and first_entry:
+                                if hasattr(self, 'readView1'):
+                                    if reader==self.readView1 and first_entry:
                                         self.openGLWidget_14.paint(reader.npSeg, reader.npImage, currentWidnowName, sliceNum)
                                         first_entry = False
-                                if hasattr(self, 'readImMRI'):
-                                    if reader==self.readImMRI and first_entry:
+                                if hasattr(self, 'readView2'):
+                                    if reader==self.readView2 and first_entry:
                                         self.openGLWidget_24.paint(reader.npSeg, reader.npImage, currentWidnowName, sliceNum)
                                         first_entry = False
                             #else:
@@ -3389,9 +3381,9 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.table_widget_measure.insertRow(rw)
         clm = self.table_widget_measure.columnCount()
         if values[1]=='0':
-            values[-1] = self.filenameEco
+            values[-1] = self.filenameView1
         if values[1]=='1':
-            values[-1] = self.filenameMRI
+            values[-1] = self.filenameView2
         for c in range(clm):
             self.table_widget_measure.setItem(rw, c, QtWidgets.QTableWidgetItem(values[c]))
 
@@ -3563,12 +3555,12 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         sender = QtCore.QObject.sender(self)
         if sender == self.radioButton_21:
-            ## mri
+            ## view2
             self.openGLWidget_12.showSeg = value
             self.openGLWidget_12.makeObject()
             self.openGLWidget_12.update()
         elif sender == self.radioButton_4:
-            ## eco
+            ## view1
             self.openGLWidget_11.showSeg = value
             self.openGLWidget_11.makeObject()
             self.openGLWidget_11.update()
@@ -3582,27 +3574,32 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param val:
         :return:
         """
+
         sender = QtCore.QObject.sender(self)
         if sender == self.page1_rot_cor:
-            #if self.readImECO.npSeg.max()>0 and val:
+            if not hasattr(self.readView1, 'npImage'):
+                return
+            #if self.readView1.npSeg.max()>0 and val:
                 #self.page1_rot_cor.setChecked(False)
                 #return
             if val.lower()=='coronal':
-                self.t1_5.setValue(self._rotationAngleEco_coronal)
+                self.t1_5.setValue(self._rotationAngleView1_coronal)
             elif val.lower()== 'axial':
-                self.t1_5.setValue(-self._rotationAngleEco_axial)
+                self.t1_5.setValue(-self._rotationAngleView1_axial)
             elif val.lower() == 'sagittal':
-                self.t1_5.setValue(-self._rotationAngleEco_sagittal)
+                self.t1_5.setValue(-self._rotationAngleView1_sagittal)
         elif sender == self.page2_rot_cor:
-            if self.readImMRI.npSeg.max()>0 and val:
+            if not hasattr(self.readView2, 'npImage'):
+                return
+            if self.readView2.npSeg.max()>0 and val:
                 self.page2_rot_cor.setChecked(False)
                 return
             if val.lower() == 'coronal':
-                self.t2_5.setValue(self._rotationAngleMRI_coronal)
+                self.t2_5.setValue(self._rotationAngleView2_coronal)
             elif val.lower()== 'axial':
-                self.t2_5.setValue(-self._rotationAngleMRI_axial)
+                self.t2_5.setValue(-self._rotationAngleView2_axial)
             elif val.lower()== 'sagittal':
-                self.t2_5.setValue(-self._rotationAngleMRI_sagittal)
+                self.t2_5.setValue(-self._rotationAngleView2_sagittal)
 
 
 
@@ -3616,11 +3613,11 @@ class Ui_Main(dockWidgets, openglWidgets):
         if thrsh<0:
             return
         not_exist1, not_exist2 = False, False
-        if hasattr(self, 'readImMRI'):
-            if not hasattr(self.readImMRI, 'npSeg'):
+        if hasattr(self, 'readView2'):
+            if not hasattr(self.readView2, 'npSeg'):
                 not_exist1 = True
-        if hasattr(self, 'readImECO'):
-            if not hasattr(self.readImECO, 'npSeg'):
+        if hasattr(self, 'readView1'):
+            if not hasattr(self.readView1, 'npSeg'):
                 not_exist2 = True
         if not_exist1 and not_exist2:
             return
@@ -3665,22 +3662,22 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
     def trackDistance(self, thrsh=50):
-        if not hasattr(self, 'readImMRI'):
+        if not hasattr(self, 'readView2'):
             self.dw5_s1.setValue(0)
             self.dw5lb1.setText('0')
             return
-        if not hasattr(self.readImMRI, 'npImage'):
+        if not hasattr(self.readView2, 'npImage'):
             self.dw5_s1.setValue(0)
             self.dw5lb1.setText('0')
             return
 
-        if not hasattr(self.readImMRI, 'tract'):
+        if not hasattr(self.readView2, 'tract'):
             self.dw5_s1.setValue(0)
             self.dw5lb1.setText('0')
             return
         oldMin, oldMax = 0, 100
 
-        shp = self.readImMRI.npImage.shape[:3]
+        shp = self.readView2.npImage.shape[:3]
         NewMin, NewMax = 1, min(min(shp[0], shp[1]), shp[2])//6
         OldRange = (oldMax - oldMin)
         NewRange = (NewMax - NewMin)
@@ -3694,9 +3691,9 @@ class Ui_Main(dockWidgets, openglWidgets):
             widget = getattr(self, name)
             if k in widgets_num:
                 widget.updateInfo(*getCurrentSlice(widget,
-                                                   self.readImMRI.npImage, self.readImMRI.npSeg, widget.sliceNum, self.readImMRI.tract, tol_slice=self.tol_trk), widget.sliceNum,
-                                  self.readImMRI.npImage.shape[:3],
-                                  initialState=False, imSpacing=self.readImMRI.ImSpacing)
+                                                   self.readView2.npImage, self.readView2.npSeg, widget.sliceNum, self.readView2.tract, tol_slice=self.tol_trk), widget.sliceNum,
+                                  self.readView2.npImage.shape[:3],
+                                  initialState=False, imSpacing=self.readView2.ImSpacing)
 
                 widget.makeObject()
                 widget.update()
@@ -3706,15 +3703,15 @@ class Ui_Main(dockWidgets, openglWidgets):
         """"
         Thickness in tractography images
         """
-        if not hasattr(self, 'readImMRI'):
+        if not hasattr(self, 'readView2'):
             self.dw5_s2.setValue(0)
             self.dw5lb2.setText('0')
             return
-        if not hasattr(self.readImMRI, 'npImage'):
+        if not hasattr(self.readView2, 'npImage'):
             self.dw5_s2.setValue(0)
             self.dw5lb2.setText('0')
             return
-        if not hasattr(self.readImMRI, 'tract'):
+        if not hasattr(self.readView2, 'tract'):
             self.dw5_s2.setValue(0)
             self.dw5lb2.setText('0')
             return
@@ -3879,14 +3876,14 @@ class Ui_Main(dockWidgets, openglWidgets):
                 else: #segmentation loading
                     #if info[1]<5: #eco loading
                     if index_view == 0:
-                        cond = self.importData(type_image='usseg', fileObj=info[0])
+                        cond = self.importData(type_image='View1_SEG', fileObj=info[0])
                         if cond:
                             self.imported_images[index_row][2] = True
                             clean_parent_image(self, index_row, [indc], index_view=index_view)
                         else:
                             return cond
                     else:
-                        cond = self.importData(type_image='mriseg', fileObj=info[0])
+                        cond = self.importData(type_image='View2_SEG', fileObj=info[0])
                         if cond:
                             self.imported_images[index_row][2] = True
                             clean_parent_image(self, index_row, [indc],index_view=index_view)
@@ -3897,7 +3894,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if info[1]<3:#image loading
                     #if info[1]<2: #eco loading
                     if index_view == 0:
-                        cond = self.CloseUS(message_box='on')
+                        cond = self.CloseView1(message_box='on')
                         if cond:
                             if '*View 1 (loaded)' in info[0][1]:
                                 self.imported_images.pop(index_row)
@@ -3909,7 +3906,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                         else:
                             return cond
                     else:
-                        cond = self.CloseMRI(message_box='on', dialogue=True)
+                        cond = self.CloseView2(message_box='on', dialogue=True)
                         if cond:
                             if '*View 2 (loaded)' in info[0][1]:
                                 self.imported_images.pop(index_row)
@@ -3923,10 +3920,10 @@ class Ui_Main(dockWidgets, openglWidgets):
                 else: #segmentation loading
                     #if info[1] < 5:  # eco loading
                     if index_view == 0:
-                        self.closeImportData(type_image='usseg')
+                        self.closeImportData(type_image='View1_SEG')
                         self.imported_images[index_row][2] = False
                     else:
-                        self.closeImportData(type_image='mriseg')
+                        self.closeImportData(type_image='View2_SEG')
                         self.imported_images[index_row][2] = False
         except Exception as e:
             print(e)
@@ -4072,23 +4069,23 @@ class Ui_Main(dockWidgets, openglWidgets):
             """
             #sender = QtCore.QObject.sender(self)
             sender_eco = False
-            for f in self.widgets_eco:
+            for f in self.widgets_view1:
                 a = getattr(self, 'openGLWidget_{}'.format(f))
                 if a.isVisible():
                     sender_eco = True
                     break
 
             #if sender_eco:
-            if hasattr(self, 'readImECO'):
-                if hasattr(self.readImECO, 'npSeg'):
-                    txt = compute_volume(self.readImECO, self.filenameEco, colrInds, in_txt=self.openedFileName.text(),
+            if hasattr(self, 'readView1'):
+                if hasattr(self.readView1, 'npSeg'):
+                    txt = compute_volume(self.readView1, self.filenameView1, colrInds, in_txt=self.openedFileName.text(),
                                          ind_screen=0)
                     self.openedFileName.setText(txt)
 
             #else:
-            if hasattr(self, 'readImMRI'):
-                if hasattr(self.readImMRI, 'npSeg'):
-                    txt = compute_volume(self.readImMRI, self.filenameMRI, colrInds, in_txt=self.openedFileName.text(),
+            if hasattr(self, 'readView2'):
+                if hasattr(self.readView2, 'npSeg'):
+                    txt = compute_volume(self.readView2, self.filenameView2, colrInds, in_txt=self.openedFileName.text(),
                                          ind_screen=1)
                     self.openedFileName.setText(txt)
             if ind is not None:
@@ -4123,11 +4120,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if not widget.isVisible():
                     continue
                 if k in [14]:
-                    widget.paint(self.readImECO.npSeg,
-                                       self.readImECO.npImage, None)
+                    widget.paint(self.readView1.npSeg,
+                                       self.readView1.npImage, None)
                 elif k in [24]:
-                    widget.paint(self.readImMRI.npSeg,
-                          self.readImMRI.npImage, None)
+                    widget.paint(self.readView2.npSeg,
+                          self.readView2.npImage, None)
                 else:
                     if ind is not None:
                         widget.colorObject = colorPen
@@ -4147,30 +4144,21 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
         sender = QtCore.QObject.sender(self)
-        value /= 100
-        #print(fffff)
+        value = (value/100)
+        widgets_num = []
         if sender == self.t1_1:
-            self.openGLWidget_1.brightness = value
-            self.openGLWidget_1.update()
-            self.openGLWidget_2.brightness = value
-            self.openGLWidget_2.update()
-            self.openGLWidget_3.brightness = value
-            self.openGLWidget_3.update()
-            self.openGLWidget_11.brightness = value
-            self.openGLWidget_11.update()
+            widgets_num = [0, 1, 2, 10]
         elif sender == self.t2_1:
-            self.openGLWidget_4.brightness = value
-            self.openGLWidget_4.update()
-            self.openGLWidget_5.brightness = value
-            self.openGLWidget_5.update()
-            self.openGLWidget_6.brightness = value
-            self.openGLWidget_6.update()
-            self.openGLWidget_12.brightness = value
-            self.openGLWidget_12.update()
+            widgets_num = [3, 4, 5, 11]
+        for k in widgets_num:
+            name = 'openGLWidget_' + str(k + 1)
+            widget = getattr(self, name)
+            widget.brightness = value
+            widget.update()
 
     def changeContrast(self,value): # change contrast brightns
         sender = QtCore.QObject.sender(self)
-        value = (value/100+1)
+        value = (value/100)
         widgets_num = []
         if sender == self.t1_2:
             widgets_num = [0, 1, 2, 10]
@@ -4180,9 +4168,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             name = 'openGLWidget_' + str(k + 1)
             widget = getattr(self, name)
             widget.contrast = value
-            if k in widgets_num:
-                widget.makeObject()
-                widget.update()
+            widget.update()
 
 
     def changeBandPass(self,value): # change threshold
@@ -4194,92 +4180,59 @@ class Ui_Main(dockWidgets, openglWidgets):
         sender = QtCore.QObject.sender(self)
         value =value/100
         if sender == self.t1_3:
-            self.openGLWidget_1.BandPR1 = value
-            self.openGLWidget_1.makeObject()
-            self.openGLWidget_1.update()
-            self.openGLWidget_2.BandPR1 = value
-            self.openGLWidget_2.makeObject()
-            self.openGLWidget_2.update()
-            self.openGLWidget_3.BandPR1 = value
-            self.openGLWidget_3.makeObject()
-            self.openGLWidget_3.update()
-
-            self.openGLWidget_11.BandPR1 = value
-            self.openGLWidget_11.makeObject()
-            self.openGLWidget_11.update()
-
+            widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3, self.openGLWidget_11]
+            for widget in widgets:
+                widget.gamma = value
+                widget.update()
         elif sender == self.t1_7:
-            self.openGLWidget_1.BandPR2 = value
-            self.openGLWidget_1.makeObject()
-            self.openGLWidget_1.update()
-            self.openGLWidget_2.BandPR2 = value
-            self.openGLWidget_2.makeObject()
-            self.openGLWidget_2.update()
-            self.openGLWidget_3.BandPR2 = value
-            self.openGLWidget_3.makeObject()
-            self.openGLWidget_3.update()
-            self.openGLWidget_11.BandPR2 = value
-            self.openGLWidget_11.makeObject()
-            self.openGLWidget_11.update()
+            widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3, self.openGLWidget_11]
+            for widget in widgets:
+                widget.structure = value
+                widget.update()
+
         elif sender == self.t2_3:
-            self.openGLWidget_4.BandPR1 = value
-            self.openGLWidget_4.makeObject()
-            self.openGLWidget_4.update()
-            self.openGLWidget_5.BandPR1 = value
-            self.openGLWidget_5.makeObject()
-            self.openGLWidget_5.update()
-            self.openGLWidget_6.BandPR1 = value
-            self.openGLWidget_6.makeObject()
-            self.openGLWidget_6.update()
-            self.openGLWidget_12.BandPR1 = value
-            self.openGLWidget_12.makeObject()
-            self.openGLWidget_12.update()
+            widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6, self.openGLWidget_12]
+            for widget in widgets:
+                widget.gamma = value
+                widget.update()
         elif sender == self.t2_7:
-            self.openGLWidget_4.BandPR2 = value
-            self.openGLWidget_4.makeObject()
-            self.openGLWidget_4.update()
-            self.openGLWidget_5.BandPR2 = value
-            self.openGLWidget_5.makeObject()
-            self.openGLWidget_5.update()
-            self.openGLWidget_6.BandPR2 = value
-            self.openGLWidget_6.makeObject()
-            self.openGLWidget_6.update()
-            self.openGLWidget_12.BandPR2 = value
-            self.openGLWidget_12.makeObject()
-            self.openGLWidget_12.update()
+            widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6, self.openGLWidget_12]
+            for widget in widgets:
+                widget.structure = value
+                widget.update()
 
 
-    def changeHamming(self,value): # change threshold
+    def changeenable_endo_enhance(self,value): # change threshold
         """
-        Add hamming filter
+        Add enable_endo_enhance filter
         :param value:
         :return:
         """
         sender = QtCore.QObject.sender(self)
         if sender == self.toggle1_1:
-            self.openGLWidget_1.hamming = value
+            self.openGLWidget_1.enable_endo_enhance = value
             self.openGLWidget_1.makeObject()
             self.openGLWidget_1.update()
-            self.openGLWidget_2.hamming = value
+            self.openGLWidget_2.enable_endo_enhance = value
             self.openGLWidget_2.makeObject()
             self.openGLWidget_2.update()
-            self.openGLWidget_3.hamming = value
+            self.openGLWidget_3.enable_endo_enhance = value
             self.openGLWidget_3.makeObject()
             self.openGLWidget_3.update()
-            self.openGLWidget_11.hamming = value
+            self.openGLWidget_11.enable_endo_enhance = value
             self.openGLWidget_11.makeObject()
             self.openGLWidget_11.update()
         elif sender == self.toggle2_1:
-            self.openGLWidget_4.hamming = value
+            self.openGLWidget_4.enable_endo_enhance = value
             self.openGLWidget_4.makeObject()
             self.openGLWidget_4.update()
-            self.openGLWidget_5.hamming = value
+            self.openGLWidget_5.enable_endo_enhance = value
             self.openGLWidget_5.makeObject()
             self.openGLWidget_5.update()
-            self.openGLWidget_6.hamming = value
+            self.openGLWidget_6.enable_endo_enhance = value
             self.openGLWidget_6.makeObject()
             self.openGLWidget_6.update()
-            self.openGLWidget_12.hamming = value
+            self.openGLWidget_12.enable_endo_enhance = value
             self.openGLWidget_12.makeObject()
             self.openGLWidget_12.update()
 
@@ -4293,129 +4246,20 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         sender = QtCore.QObject.sender(self)
         if sender == self.t1_4:
-            if value>0:
-                self.openGLWidget_1.activateSobel = True
-                self.openGLWidget_2.activateSobel = True
-                self.openGLWidget_3.activateSobel = True
-                self.openGLWidget_11.activateSobel = True
-                value = 1 - value/100
-                self.openGLWidget_1.thresholdSobel = value
-                self.openGLWidget_1.update()
-                self.openGLWidget_2.thresholdSobel = value
-                self.openGLWidget_2.update()
-                self.openGLWidget_3.thresholdSobel = value
-                self.openGLWidget_3.update()
-                self.openGLWidget_11.thresholdSobel = value
-                self.openGLWidget_11.update()
-            else:
-                self.openGLWidget_1.activateSobel = False
-                self.openGLWidget_2.activateSobel = False
-                self.openGLWidget_3.activateSobel = False
-                self.openGLWidget_11.activateSobel = False
-                self.openGLWidget_1.update()
-                self.openGLWidget_2.update()
-                self.openGLWidget_3.update()
-                self.openGLWidget_11.update()
+            widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3, self.openGLWidget_11]
+            for widget in widgets:
+                widget.denoise = value/100
+                widget.update()
         elif sender == self.t2_4:
-            if value>0:
-                self.openGLWidget_4.activateSobel = True
-                self.openGLWidget_5.activateSobel = True
-                self.openGLWidget_6.activateSobel = True
-                self.openGLWidget_12.activateSobel = True
-                value = 1 - value/100
-                self.openGLWidget_4.thresholdSobel = value
-                self.openGLWidget_4.update()
-                self.openGLWidget_5.thresholdSobel = value
-                self.openGLWidget_5.update()
-                self.openGLWidget_6.thresholdSobel = value
-                self.openGLWidget_6.update()
-                self.openGLWidget_12.thresholdSobel = value
-                self.openGLWidget_12.update()
-            else:
-                self.openGLWidget_4.activateSobel = False
-                self.openGLWidget_5.activateSobel = False
-                self.openGLWidget_6.activateSobel = False
-                self.openGLWidget_12.activateSobel = False
-                self.openGLWidget_4.update()
-                self.openGLWidget_5.update()
-                self.openGLWidget_6.update()
-                self.openGLWidget_12.update()
+            widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6, self.openGLWidget_12]
+            for widget in widgets:
+                widget.denoise = value/100
+                widget.update()
+
 
 
     def changeWidthPen(self):
         pass
-
-
-    def changeColorize(self, value):
-        """
-        Colorize image
-        :param value:
-        :return:
-        """
-        sender = QtCore.QObject.sender(self)
-
-        if sender == self.hs_t1_8 or sender == self.colorize:
-            if self.tabWidget.currentIndex() == 0:
-                widgets_num = [0, 1, 2]
-            elif self.tabWidget.currentIndex() == 1:
-                widgets_num = [10]
-            elif self.tabWidget.currentIndex() == 2:
-                widgets_num = [11]
-            else:
-                widgets_num = []
-            current_val = self.hs_t1_8.value()
-            if self.colorize.isChecked():
-                for k in range(12):
-                    name = 'openGLWidget_' + str(k + 1)
-                    if not hasattr(self, name):
-                        continue
-                    widget = getattr(self, name)
-                    widget.n_colors = current_val
-                    if k in widgets_num:
-                        widget.makeObject()
-                        widget.update()
-            else:
-                for k in range(12):
-                    name = 'openGLWidget_' + str(k + 1)
-                    if not hasattr(self, name):
-                        continue
-                    widget = getattr(self, name)
-                    widget.n_colors = 0
-                    if k in widgets_num:
-                        widget.makeObject()
-                        widget.update()
-
-        elif sender == self.hs_t2_8 or sender == self.colorize_MRI:
-            if self.tabWidget.currentIndex() == 0:
-                widgets_num = [3, 4, 5]
-            else:
-                widgets_num = []
-            current_val = self.hs_t2_8.value()
-            if self.colorize_MRI.isChecked():
-                for k in range(12):
-                    name = 'openGLWidget_' + str(k + 1)
-                    if not hasattr(self, name):
-                        continue
-                    widget = getattr(self, name)
-                    widget.n_colors = current_val
-                    if k in widgets_num:
-                        widget.makeObject()
-                        widget.update()
-            else:
-                for k in range(12):
-                    name = 'openGLWidget_' + str(k + 1)
-                    if not hasattr(self, name):
-                        continue
-                    widget = getattr(self, name)
-                    widget.n_colors = 0
-                    if k in widgets_num:
-                        widget.makeObject()
-                        widget.update()
-
-
-
-
-
 
 
 
@@ -4445,12 +4289,12 @@ class Ui_Main(dockWidgets, openglWidgets):
             widget.update()
         if sender == self.t1_5:
 
-            if not hasattr(self, 'readImECO') or self.is_view1_video:
+            if not hasattr(self, 'readView1') or self.is_view1_video:
                 return
-            if not hasattr(self.readImECO, 'npSeg') :
+            if not hasattr(self.readView1, 'npSeg') :
                 return
 
-            uq, lenuq = len_unique(self.readImECO.npSeg)
+            uq, lenuq = len_unique(self.readView1.npSeg)
             if lenuq>2:
 
 
@@ -4460,24 +4304,24 @@ class Ui_Main(dockWidgets, openglWidgets):
                 self.t1_5.blockSignals(True)
                 self.lb_t1_5.blockSignals(True)
                 if self.page1_rot_cor.currentText().lower() == 'coronal':
-                    self.t1_5.setValue(self._rotationAngleEco_coronal)
-                    self.lb_t1_5.setNum(self._rotationAngleEco_coronal)
+                    self.t1_5.setValue(self._rotationAngleView1_coronal)
+                    self.lb_t1_5.setNum(self._rotationAngleView1_coronal)
                 elif self.page1_rot_cor.currentText().lower() == 'axial':
-                    self.t1_5.setValue(self._rotationAngleEco_axial)
-                    self.lb_t1_5.setNum(self._rotationAngleEco_axial)
+                    self.t1_5.setValue(self._rotationAngleView1_axial)
+                    self.lb_t1_5.setNum(self._rotationAngleView1_axial)
                 elif self.page1_rot_cor.currentText().lower() == 'sagittal':
-                    self.t1_5.setValue(self._rotationAngleEco_sagittal)
-                    self.lb_t1_5.setNum(self._rotationAngleEco_sagittal)
+                    self.t1_5.setValue(self._rotationAngleView1_sagittal)
+                    self.lb_t1_5.setNum(self._rotationAngleView1_sagittal)
                 self.t1_5.blockSignals(False)
                 self.lb_t1_5.blockSignals(False)
                 #self.t1_5.valueChanged.connect(self.Rotate)
                 return
             if self.page1_rot_cor.currentText().lower() == 'coronal':
-                self._rotationAngleEco_coronal = value
+                self._rotationAngleView1_coronal = value
             elif self.page1_rot_cor.currentText().lower() == 'axial':
-                self._rotationAngleEco_axial = -value
+                self._rotationAngleView1_axial = -value
             elif self.page1_rot_cor.currentText().lower() == 'sagittal':
-                self._rotationAngleEco_sagittal = -value
+                self._rotationAngleView1_sagittal = -value
 
 
             self.dock_progressbar.setVisible(True)
@@ -4485,48 +4329,48 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.progressBarSaving.setValue(20)
 
             rr = 0
-            im, rot_mat = rotation3d(self.readImECO._imChanged, self._rotationAngleEco_axial,
-                            self._rotationAngleEco_coronal, self._rotationAngleEco_sagittal)
+            im, rot_mat = rotation3d(self.readView1._imChanged, self._rotationAngleView1_axial,
+                            self._rotationAngleView1_coronal, self._rotationAngleView1_sagittal)
             if lenuq>1:
-                if self.readImECO._npSeg is None:
-                    self.readImECO._npSeg = self.readImECO.npSeg
+                if self.readView1._npSeg is None:
+                    self.readView1._npSeg = self.readView1.npSeg
 
-                npSeg = self.readImECO._npSeg.copy()
+                npSeg = self.readView1._npSeg.copy()
 
-                Segm = make_image(npSeg, self.readImECO._imChanged)
+                Segm = make_image(npSeg, self.readView1._imChanged)
 
-                npSeg, _ = rotation3d(Segm, self._rotationAngleEco_axial,
-                                self._rotationAngleEco_coronal, self._rotationAngleEco_sagittal)
-                #for rot, axs in zip([self._rotationAngleEco_axial,self._rotationAngleEco_sagittal, self._rotationAngleEco_coronal],
+                npSeg, _ = rotation3d(Segm, self._rotationAngleView1_axial,
+                                self._rotationAngleView1_coronal, self._rotationAngleView1_sagittal)
+                #for rot, axs in zip([self._rotationAngleView1_axial,self._rotationAngleView1_sagittal, self._rotationAngleView1_coronal],
                 #               [[0,0,1], [1,0,0],[0,1,0]]):
                 npSeg[npSeg > 0] = uq.max()
 
-                self.readImECO.npSeg = npSeg
-            self.readImECO.metadata['rot_axial'] = self._rotationAngleEco_axial
-            self.readImECO.metadata['rot_sagittal'] = self._rotationAngleEco_sagittal
-            self.readImECO.metadata['rot_coronal'] = self._rotationAngleEco_coronal
+                self.readView1.npSeg = npSeg
+            self.readView1.metadata['rot_axial'] = self._rotationAngleView1_axial
+            self.readView1.metadata['rot_sagittal'] = self._rotationAngleView1_sagittal
+            self.readView1.metadata['rot_coronal'] = self._rotationAngleView1_coronal
 
 
 
             self.progressBarSaving.setValue(80)
-            self.readImECO.updateData(im, rot_mat, type='eco')
-            self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
+            self.readView1.updateData(im, rot_mat, type='eco')
+            self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
 
             self.progressBarSaving.setValue(100)
             self.setEnabled(True)
             self.dock_progressbar.setVisible(False)
             self.progressBarSaving.setValue(0)
         elif sender == self.t2_5  or self.is_view1_video:
-            if not hasattr(self, 'readImMRI'):
+            if not hasattr(self, 'readView2'):
                 return
-            if not hasattr(self.readImMRI, 'npSeg') :
+            if not hasattr(self.readView2, 'npSeg') :
                 return
 
-            #if not hasattr(self, 'readImMRI'):
+            #if not hasattr(self, 'readView2'):
             #    return
-            #if not hasattr(self.readImMRI, 'npSeg') or value == self._rotationAngleMRI_axial or value == self._rotationAngleMRI_coronal:
+            #if not hasattr(self.readView2, 'npSeg') or value == self._rotationAngleView2_axial or value == self._rotationAngleView2_coronal:
             #    return
-            if self.readImMRI.npSeg.max()>0:
+            if self.readView2.npSeg.max()>0:
                 #MessageBox = QtWidgets.QMessageBox(self)
                 #MessageBox.setText('You are not allowed to change the image after segmentation')
                 #MessageBox.setWindowTitle('Warning')
@@ -4534,38 +4378,38 @@ class Ui_Main(dockWidgets, openglWidgets):
 
                 self.t2_5.blockSignals(True)
                 if self.page2_rot_cor.currentText().lower() == 'coronal':
-                    self.t2_5.setValue(self._rotationAngleMRI_coronal)
-                    self.lb_t2_5.setNum(self._rotationAngleMRI_coronal)
+                    self.t2_5.setValue(self._rotationAngleView2_coronal)
+                    self.lb_t2_5.setNum(self._rotationAngleView2_coronal)
                 elif self.page2_rot_cor.currentText().lower() == 'axial':
-                    self.t2_5.setValue(self._rotationAngleMRI_axial)
-                    self.lb_t2_5.setNum(self._rotationAngleMRI_axial)
+                    self.t2_5.setValue(self._rotationAngleView2_axial)
+                    self.lb_t2_5.setNum(self._rotationAngleView2_axial)
                 elif self.page2_rot_cor.currentText().lower() == 'sagittal':
-                    self.t2_5.setValue(self._rotationAngleMRI_sagittal)
-                    self.lb_t2_5.setNum(self._rotationAngleMRI_sagittal)
+                    self.t2_5.setValue(self._rotationAngleView2_sagittal)
+                    self.lb_t2_5.setNum(self._rotationAngleView2_sagittal)
                 self.t2_5.blockSignals(False)
                 return
             if self.page2_rot_cor.currentText().lower() == 'coronal':
-                self._rotationAngleMRI_coronal = value
+                self._rotationAngleView2_coronal = value
             if self.page2_rot_cor.currentText().lower() == 'axial':
-                self._rotationAngleMRI_axial = -value
+                self._rotationAngleView2_axial = -value
             if self.page2_rot_cor.currentText().lower() == 'sagittal':
-                self._rotationAngleMRI_sagittal = -value
+                self._rotationAngleView2_sagittal = -value
 
             self.dock_progressbar.setVisible(True)
             self.setEnabled(False)
             self.progressBarSaving.setValue(20)
-            im, rot_mat = rotation3d(self.readImMRI._imChanged, self._rotationAngleMRI_axial,
-                            self._rotationAngleMRI_coronal, self._rotationAngleMRI_sagittal)
+            im, rot_mat = rotation3d(self.readView2._imChanged, self._rotationAngleView2_axial,
+                            self._rotationAngleView2_coronal, self._rotationAngleView2_sagittal)
 
-            self.readImMRI.metadata['rot_axial'] = self._rotationAngleMRI_axial
-            self.readImMRI.metadata['rot_sagittal'] = self._rotationAngleMRI_sagittal
-            self.readImMRI.metadata['rot_coronal'] = self._rotationAngleMRI_coronal
+            self.readView2.metadata['rot_axial'] = self._rotationAngleView2_axial
+            self.readView2.metadata['rot_sagittal'] = self._rotationAngleView2_sagittal
+            self.readView2.metadata['rot_coronal'] = self._rotationAngleView2_coronal
 
 
             self.progressBarSaving.setValue(80)
 
-            self.readImMRI.updateData(im, rot_mat, type='t1')
-            self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True, tract=self.readImMRI.tract)
+            self.readView2.updateData(im, rot_mat, type='t1')
+            self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True, tract=self.readView2.tract)
 
             self.progressBarSaving.setValue(100)
             self.setEnabled(True)
@@ -4659,34 +4503,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
 
-    def save_eco_to_nifti(self):
-        """
-        Save US iamge to NIFTI
-        :return:
-        """
-
-        if not hasattr(self, 'readImECO'):
-            return
-        try:
-            self.dock_progressbar.setVisible(True)
-            self.setEnabled(False)
-            self.progressBarSaving.setValue(0)
-
-            self.saveChanges()
-
-
-            status =save_modified_nifti(self.readImECO, settings.DEFAULT_USE_DIR, self.filenameEco)
-
-            self.progressBarSaving.setValue(100)
-            self.setEnabled(True)
-            self.dock_progressbar.setVisible(False)
-            self.progressBarSaving.setValue(0)
-
-        except Exception as e:
-            print(e)
-            return e
-        return True
-
     def convert(self):
         """
         Data Conversion
@@ -4698,17 +4514,17 @@ class Ui_Main(dockWidgets, openglWidgets):
         opts =QtWidgets.QFileDialog.DontUseNativeDialog
         fileObj = QtWidgets.QFileDialog.getSaveFileName( self, "Open File", settings.DEFAULT_USE_DIR, filters, options=opts)
 
-        if  fileObj[1] != '' and hasattr(self, 'readImECO'):
+        if  fileObj[1] != '' and hasattr(self, 'readView1'):
             outfile_format = filters.split(';;').index(fileObj[1])
-            if self.readImECO.success:
+            if self.readView1.success:
                 file_path, file_extension = os.path.splitext(fileObj[0])
                 self.setCursor(QtCore.Qt.WaitCursor)
                 if outfile_format == 0: # DICOM
-                    save_as_dicom(self.npImage, self.readImECO.metadata_dict, file_path)
+                    save_as_dicom(self.npImage, self.readView1.metadata_dict, file_path)
                 elif outfile_format == 1: # NIFTI
-                    save_as_nifti(self.npImage, self.readImECO.metadata_dict, file_path)
+                    save_as_nifti(self.npImage, self.readView1.metadata_dict, file_path)
                 elif outfile_format == 2: # NRRD
-                    save_as_nrrd(self.npImage, self.readImECO.metadata_dict, file_path)
+                    save_as_nrrd(self.npImage, self.readView1.metadata_dict, file_path)
                 self.setCursor(QtCore.Qt.ArrowCursor)
 
 
@@ -4757,6 +4573,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         Changing the tab
         """
         # --- 1. Determine which widgets to SHOW ---
+
         if self.tabWidget.currentIndex() == 0:
             # Tab 0: Multi-View
             widgets_num_view1 = [0, 1, 2]
@@ -4826,9 +4643,9 @@ class Ui_Main(dockWidgets, openglWidgets):
                     if label:
                         label.setVisible(True)
 
-                    widget.UpdatePaintInfo()
+                    #widget.UpdatePaintInfo()
 
-                    widget.makeObject()
+                    #widget.makeObject()
                     widget.update()
                 continue
 
@@ -4836,13 +4653,13 @@ class Ui_Main(dockWidgets, openglWidgets):
             if k == 23:
                 try:
                     # 3D View 2
-                    self.openGLWidget_24.paint(self.readImMRI.npSeg, self.readImMRI.npImage, None)
+                    self.openGLWidget_24.paint(self.readView2.npSeg, self.readView2.npImage, None)
                 except Exception as e:
                     pass
             elif k == 13:
                 try:
                     # 3D View 1
-                    self.openGLWidget_14.paint(self.readImECO.npSeg, self.readImECO.npImage, None)
+                    self.openGLWidget_14.paint(self.readView1.npSeg, self.readView1.npImage, None)
                 except Exception as e:
                     pass
 
@@ -4850,16 +4667,18 @@ class Ui_Main(dockWidgets, openglWidgets):
             else:
                 if hasattr(widget, 'imSlice') and widget.imSlice is not None:
                     if slider:
+                        slider.blockSignals(True)
                         slider.setRange(0, widget.imDepth)
+                        slider.blockSignals(False)
                         slider.setValue(widget.sliceNum)
                         slider.setVisible(True)
                     if label:
                         label.setVisible(True)
 
                     widget.setVisible(True)
-                    widget.UpdatePaintInfo()
+                    #widget.UpdatePaintInfo()
 
-                    widget.makeObject()
+                    #widget.makeObject()
                     widget.update()
         if self.tabWidget.currentIndex()>0 and len(widgets_num)>1:
             self.changeToCoronal()
@@ -4950,16 +4769,19 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param typw:
         :return:
         """
+
         if typw == 'eco':
+            windoe_name = 'video' if self.is_view1_video else 'coronal'
             changeCoronalSagittalAxial(self.horizontalSlider_11, self.openGLWidget_11,
-                                       self.readImECO, 'coronal', 3, self.label_11, initialState = True, tol_slice=self.tol_trk)
+                                       self.readView1, windoe_name, 3, self.label_11, initialState = True, tol_slice=self.tol_trk)
 
             self.radioButton_1.setChecked(True)
             self.radioButton_2.setChecked(False)
             self.radioButton_3.setChecked(False)
         elif typw == 'mri':
+            windoe_name = 'video' if self.is_view2_video else 'coronal'
             changeCoronalSagittalAxial(self.horizontalSlider_12, self.openGLWidget_12,
-                                       self.readImMRI, 'coronal', 3, self.label_12, initialState = True, tol_slice=self.tol_trk)
+                                       self.readView2, windoe_name, 3, self.label_12, initialState = True, tol_slice=self.tol_trk)
 
             self.radioButton_21_1.setChecked(True)
             self.radioButton_21_2.setChecked(False)
@@ -4973,14 +4795,16 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return:
         """
         if typw == 'eco':
+            windoe_name = 'video' if self.is_view1_video else 'sagittal'
             changeCoronalSagittalAxial(self.horizontalSlider_11, self.openGLWidget_11,
-                                   self.readImECO, 'sagittal', 1, self.label_11, initialState = True, tol_slice=self.tol_trk)
+                                   self.readView1, windoe_name, 1, self.label_11, initialState = True, tol_slice=self.tol_trk)
             self.radioButton_1.setChecked(False)
             self.radioButton_2.setChecked(True)
             self.radioButton_3.setChecked(False)
         elif typw == 'mri':
+            windoe_name = 'video' if self.is_view2_video else 'sagittal'
             changeCoronalSagittalAxial(self.horizontalSlider_12, self.openGLWidget_12,
-                                       self.readImMRI, 'sagittal', 1, self.label_12, initialState = True, tol_slice=self.tol_trk)
+                                       self.readView2, windoe_name, 1, self.label_12, initialState = True, tol_slice=self.tol_trk)
 
             self.radioButton_21_1.setChecked(False)
             self.radioButton_21_2.setChecked(True)
@@ -4989,27 +4813,29 @@ class Ui_Main(dockWidgets, openglWidgets):
 
     def changeToAxial(self, typw='eco'):
         if typw == 'eco':
+            windoe_name = 'video' if self.is_view1_video else 'axial'
             changeCoronalSagittalAxial(self.horizontalSlider_11, self.openGLWidget_11,
-                                   self.readImECO, 'axial', 5, self.label_11, initialState = True, tol_slice=self.tol_trk)
+                                   self.readView1, windoe_name, 5, self.label_11, initialState = True, tol_slice=self.tol_trk)
             self.radioButton_1.setChecked(False)
             self.radioButton_2.setChecked(False)
             self.radioButton_3.setChecked(True)
         elif typw == 'mri':
+            windoe_name = 'video' if self.is_view2_video else 'axial'
             changeCoronalSagittalAxial(self.horizontalSlider_12, self.openGLWidget_12,
-                                       self.readImMRI, 'axial', 5, self.label_12, initialState=True, tol_slice=self.tol_trk)
+                                       self.readView2, windoe_name, 5, self.label_12, initialState=True, tol_slice=self.tol_trk)
 
             self.radioButton_21_1.setChecked(False)
             self.radioButton_21_2.setChecked(False)
             self.radioButton_21_3.setChecked(True)
 
 
-    def _udpate_video_reader(self, reader, sliceNum, tol_slice):
+    def _udpate_video_reader(self, widget, reader, sliceNum, tol_slice):
         if reader.current_frame == sliceNum:
             return
 
         reader.update_video_and_seg_frame(sliceNum)
 
-        widget = self.openGLWidget_11
+
         widget.points = []
         widget.selectedPoints = []
 
@@ -5029,64 +4855,58 @@ class Ui_Main(dockWidgets, openglWidgets):
         tol_slice = self.tol_trk
         if self.allowChangeScn:
             if not self.is_view1_video:
-                updateSight(self.horizontalSlider_11, self.openGLWidget_11, self.readImECO, value, tol_slice=tol_slice)
+                updateSight(self.horizontalSlider_11, self.openGLWidget_11, self.readView1, value, tol_slice=tol_slice)
             else:
                 slider = None
                 if self.tabWidget.currentIndex()==1:
                     slider = self.horizontalSlider_11
-                    reader = self.readImECO
+                    widget = self.openGLWidget_11
+                    reader = self.readView1
                 if slider is not None:
-                    sliceNum = slider.value()
-                    self._udpate_video_reader(reader, sliceNum, tol_slice)
+                    sliceNum = value #slider.value()
+                    self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
 
     def changeSightTab4(self, value):
+        tol_slice = self.tol_trk
         if self.allowChangeScn:
             if    not self.is_view2_video:
-                updateSight(self.horizontalSlider_12, self.openGLWidget_12, self.readImMRI, value, tol_slice=self.tol_trk)
+                updateSight(self.horizontalSlider_12, self.openGLWidget_12, self.readView2, value, tol_slice=self.tol_trk)
             else:
-                slider = self.horizontalSlider_12
-                sliceNum = slider.value()
-                reader = self.readImMRI
-                tol_slice = self.tol_trk
-                reader.update_video_and_seg_frame(sliceNum)
-
-                widget = self.openGLWidget_12
-                widget.points = []
-                widget.selectedPoints = []
-
-                widget.updateInfo(*getCurrentSlice(widget,
-                                                                reader.npImage, reader.npSeg,
-                                                                sliceNum, reader.tract, tol_slice=tol_slice), sliceNum, reader.npImage.shape,
-                                  imSpacing = reader.ImSpacing)
-                widget.update()
+                if self.tabWidget.currentIndex()==2:
+                    slider = self.horizontalSlider_12
+                    widget = self.openGLWidget_12
+                    reader = self.readView2
+                if slider is not None:
+                    sliceNum = value #slider.value()
+                    self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
 
     def changeSight1(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_1, self.openGLWidget_1, self.readImECO, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_1, self.openGLWidget_1, self.readView1, value, tol_slice=self.tol_trk)
 
 
     def changeSight2(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_2, self.openGLWidget_2, self.readImECO, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_2, self.openGLWidget_2, self.readView1, value, tol_slice=self.tol_trk)
 
     def changeSight3(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_3, self.openGLWidget_3, self.readImECO, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_3, self.openGLWidget_3, self.readView1, value, tol_slice=self.tol_trk)
 
     def changeSight4(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_4, self.openGLWidget_4, self.readImMRI, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_4, self.openGLWidget_4, self.readView2, value, tol_slice=self.tol_trk)
 
 
     def changeSight5(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_5, self.openGLWidget_5, self.readImMRI, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_5, self.openGLWidget_5, self.readView2, value, tol_slice=self.tol_trk)
 
 
 
     def changeSight6(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_6, self.openGLWidget_6, self.readImMRI, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_6, self.openGLWidget_6, self.readView2, value, tol_slice=self.tol_trk)
 
     def toggle_video_playback(self, index=0):
         if index==0:
@@ -5112,7 +4932,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         else:
             slider.setValue(0)  # Loop
 
-    def updateDispEco(self, npImage = None, npSeg = None, initialState= False):
+    def updateDispView1(self, npImage = None, npSeg = None, initialState= False):
         """
         Updating US image
         :param npImage:
@@ -5149,60 +4969,72 @@ class Ui_Main(dockWidgets, openglWidgets):
                 #self.btn_play_view1.setVisible(False)
                 #self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
-            if self.horizontalSlider_1.maximum()!= self.readImECO.ImExtent[3]-1:
-                self.horizontalSlider_1.setRange(0, self.readImECO.ImExtent[3])
-                self.horizontalSlider_1.setValue(self.readImECO.ImExtent[3]//2)
-                self.label_1.setText(str_conv(self.readImECO.ImExtent[3] // 2))
+            def update_slider(slider, label, extent_val):
+                if slider.maximum() != extent_val - 1:
+                    mid_val = extent_val // 2
+                    slider.blockSignals(True)
+                    slider.setRange(0, extent_val)
+                    slider.blockSignals(False)
+                    slider.setValue(mid_val)
+                    label.setText(str_conv(mid_val))
 
-            if self.horizontalSlider_2.maximum()!= self.readImECO.ImExtent[1]-1:
-                self.horizontalSlider_2.setRange(0, self.readImECO.ImExtent[1])
-                self.horizontalSlider_2.setValue(self.readImECO.ImExtent[1]//2)
-                self.label_2.setText(str_conv(self.readImECO.ImExtent[1] // 2))
+            # Usage:
+            ext = self.readView1.ImExtent
+            update_slider(self.horizontalSlider_1, self.label_1, ext[3])
+            update_slider(self.horizontalSlider_2, self.label_2, ext[1])
+            update_slider(self.horizontalSlider_3, self.label_3, ext[5])
+            currentWidnowName_in = self.openGLWidget_11.currentWidnowName
+            view_to_ext_index = {
+                'coronal': 3,
+                'sagittal': 1,
+                'axial': 5,
+            }
 
-            if self.horizontalSlider_3.maximum() != self.readImECO.ImExtent[5]-1:
-                self.horizontalSlider_3.setRange(0, self.readImECO.ImExtent[5])
-                self.horizontalSlider_3.setValue(self.readImECO.ImExtent[5]//2)
-                self.label_3.setText(str_conv(self.readImECO.ImExtent[5] // 2))
+            ext_v = ext[view_to_ext_index[currentWidnowName_in]]
+            update_slider(self.horizontalSlider_11, self.label_11, ext_v)
 
-            if self.horizontalSlider_11.maximum() != self.readImECO.ImExtent[3]-1:
-                self.horizontalSlider_11.setRange(0, self.readImECO.ImExtent[3])
-                self.horizontalSlider_11.setValue(self.readImECO.ImExtent[3]//2)
-                self.label_11.setText(str_conv(self.readImECO.ImExtent[3]//2))
+
+            self.openGLWidget_1.updateCurrentImageInfo(npImage.shape[:3])
+            self.openGLWidget_2.updateCurrentImageInfo(npImage.shape[:3])
+            self.openGLWidget_3.updateCurrentImageInfo(npImage.shape[:3])
+            #self.openGLWidget_11.updateCurrentImageInfo(npImage.shape[:3])
+
             self.radioButton_1.setVisible(True)
             self.radioButton_3.setVisible(True)
             self.radioButton_2.setVisible(True)
             self.radioButton_4.setVisible(True)
-            self.label_points.setVisible(True)
+
             # 1. Restore the Right Side
             self.openGLWidget_14.setVisible(True)
             self.openGLWidget_14.show()
-            self.widget.show()
+            #self.widget.show()
+            self.set_view_mode_show_all_view1()
             # 2. Restore Splitter Ratio (e.g., 2/3 Left, 1/3 Right)
             # Reset Vertical Sizes to something reasonable
             # e.g., Top takes majority, others take what they need
-            self.splitter_left_view1.setSizes([2000, 50, 50])
-            self.splitter_left_view1.setStretchFactor(0, 0)  # Standard resizing behavior
-            self.splitter_left_view1.setStretchFactor(1, 0)
-            self.splitter_main_view1.setSizes([2000, 1000])
+            #self.splitter_left_view1.setSizes([2000, 50, 50])
+            #self.splitter_left_view1.setStretchFactor(0, 0)  # Standard resizing behavior
+            #self.splitter_left_view1.setStretchFactor(1, 0)
+            #self.splitter_main_view1.setSizes([2000, 1000])
         else:
             # 1. SHOW Play Button
             if hasattr(self, 'btn_play_view1'):
                 self.btn_play_view1.setVisible(True)
             self.openGLWidget_14.hide()
-
-            self.splitter_left_view1.setSizes([10000, 50, 0])
+            self.set_view_mode_focused_view1()
+            #self.splitter_left_view1.setSizes([10000, 50, 0])
 
             # 3. Ensure the Horizontal Splitter gives space to left (as discussed before)
-            self.splitter_main_view1.setSizes([10000, 0])
-            self.splitter_left_view1.setStretchFactor(0, 1)  # Video expands
-            self.splitter_left_view1.setStretchFactor(1, 0)  # Slider stays fixed
-            self.splitter_left_view1.setStretchFactor(2, 0)  # Radio stays fixed
+            #self.splitter_main_view1.setSizes([10000, 0])
+            #self.splitter_left_view1.setStretchFactor(0, 1)  # Video expands
+            #self.splitter_left_view1.setStretchFactor(1, 0)  # Slider stays fixed
+            #self.splitter_left_view1.setStretchFactor(2, 0)  # Radio stays fixed
 
             self.radioButton_1.setVisible(False)
             self.radioButton_2.setVisible(False)
             self.radioButton_3.setVisible(False)
             self.radioButton_4.setVisible(False)
-            self.label_points.setVisible(False)
+
 
 
 
@@ -5228,7 +5060,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             widget.points = []
             sliceNum = slider.value()
             widget.updateInfo(*getCurrentSlice(widget, npImage, npSeg, sliceNum, tol_slice=self.tol_trk), sliceNum, npImage.shape[:3],
-                                            initialState=initialState, imSpacing=self.readImECO.ImSpacing)
+                                            initialState=initialState, imSpacing=self.readView1.ImSpacing)
             widget.update()
         for _widget_id in ind_3d_widget:
             widget = getattr(self, name_widg + str(_widget_id))
@@ -5236,19 +5068,19 @@ class Ui_Main(dockWidgets, openglWidgets):
 
                 widget.clear()
                 widget._seg_im = None
-                widget.paint(self.readImECO.npSeg,
-                                           self.readImECO.npImage, None)
+                widget.paint(self.readView1.npSeg,
+                                           self.readView1.npImage, None)
                 widget.colorInd = ind
-                widget.paint(self.readImECO.npSeg, self.readImECO.npImage, None)
+                widget.paint(self.readView1.npSeg, self.readView1.npImage, None)
             else:
-                widget._image = self.readImECO.npImage
+                widget._image = self.readView1.npImage
 
         self.allowChangeScn = True
 
 
 
 
-    def updateDispMRI(self, npImage = None, npSeg = None, initialState= False):
+    def updateDispView2(self, npImage = None, npSeg = None, initialState= False):
         """
         Updating US image
         :param npImage:
@@ -5285,29 +5117,37 @@ class Ui_Main(dockWidgets, openglWidgets):
                 #self.btn_play_view2.setVisible(False)
                 #self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
-            if self.horizontalSlider_4.maximum() != self.readImMRI.ImExtent[3] - 1:
-                self.horizontalSlider_4.setRange(0, self.readImMRI.ImExtent[3])
-                self.horizontalSlider_4.setValue(self.readImMRI.ImExtent[3]//2)
-                self.label_4.setText(str_conv(self.readImMRI.ImExtent[3] // 2))
+            def update_slider(slider, label, extent_val):
+                if slider.maximum() != extent_val - 1:
+                    mid_val = extent_val // 2
+                    slider.blockSignals(True)
+                    slider.setRange(0, extent_val)
+                    slider.blockSignals(False)
+                    slider.setValue(mid_val)
+                    label.setText(str_conv(mid_val))
 
-            if self.horizontalSlider_5.maximum() != self.readImMRI.ImExtent[1] - 1:
-                self.horizontalSlider_5.setRange(0, self.readImMRI.ImExtent[1])
-                self.horizontalSlider_5.setValue(self.readImMRI.ImExtent[1]//2)
-                self.label_5.setText(str_conv(self.readImMRI.ImExtent[1]//2))
 
-            if self.horizontalSlider_6.maximum() != self.readImMRI.ImExtent[5] - 1:
-                self.horizontalSlider_6.setRange(0, self.readImMRI.ImExtent[5])
-                self.horizontalSlider_6.setValue(self.readImMRI.ImExtent[5]//2)
-                self.label_6.setText(str_conv(self.readImMRI.ImExtent[5]//2))
+            ext = self.readView2.ImExtent
+            update_slider(self.horizontalSlider_4, self.label_1, ext[3])
+            update_slider(self.horizontalSlider_5, self.label_2, ext[1])
+            update_slider(self.horizontalSlider_6, self.label_3, ext[5])
+            currentWidnowName_in = self.openGLWidget_12.currentWidnowName
+            view_to_ext_index = {
+                'coronal': 3,
+                'sagittal': 1,
+                'axial': 5,
+            }
+
+            ext_v = ext[view_to_ext_index[currentWidnowName_in]]
+            update_slider(self.horizontalSlider_12, self.label_12, ext_v)
+
+
 
             self.openGLWidget_4.updateCurrentImageInfo(npImage.shape[:3])
             self.openGLWidget_5.updateCurrentImageInfo(npImage.shape[:3])
             self.openGLWidget_6.updateCurrentImageInfo(npImage.shape[:3])
+            #self.openGLWidget_12.updateCurrentImageInfo(npImage.shape[:3])
 
-            if self.horizontalSlider_12.maximum() != self.readImMRI.ImExtent[3] - 1:
-                self.horizontalSlider_12.setRange(0, self.readImMRI.ImExtent[3])
-                self.horizontalSlider_12.setValue(self.readImMRI.ImExtent[3]//2)
-                self.label_12.setText(str_conv(self.readImMRI.ImExtent[3]//2))
 
 
 
@@ -5317,45 +5157,43 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.label_6.setVisible(True)
 
 
-            #self.openGLWidget_14.currentWidnowName = 'coronal'
-            #self.openGLWidget_14.updateCurrentImageInfo(npImage.shape[:3])
 
             self.radioButton_21.setVisible(True)
             self.radioButton_21_1.setVisible(True)
             self.radioButton_21_2.setVisible(True)
             self.radioButton_21_3.setVisible(True)
 
-            self.label_points_2.setVisible(True)
             # 1. Restore the Right Side
             self.openGLWidget_24.setVisible(True)
             self.openGLWidget_24.show()
-            self.widget.show()
+            #self.widget.show()
             # 2. Restore Splitter Ratio (e.g., 2/3 Left, 1/3 Right)
             # Reset Vertical Sizes to something reasonable
             # e.g., Top takes majority, others take what they need
-            self.splitter_left_view2.setSizes([2000, 50, 50])
-            self.splitter_left_view2.setStretchFactor(0, 0)  # Standard resizing behavior
-            self.splitter_left_view2.setStretchFactor(1, 0)
-            self.splitter_main_view2.setSizes([2000, 1000])
+            self.set_view_mode_show_all_view2()
+            #self.splitter_left_view2.setSizes([2000, 50, 50])
+            #self.splitter_left_view2.setStretchFactor(0, 0)  # Standard resizing behavior
+            #self.splitter_left_view2.setStretchFactor(1, 0)
+            #self.splitter_main_view2.setSizes([2000, 1000])
         else:
             # 1. SHOW Play Button
             if hasattr(self, 'btn_play_view2'):
                 self.btn_play_view2.setVisible(True)
             self.openGLWidget_24.hide()
-
-            self.splitter_left_view2.setSizes([10000, 50, 0])
+            self.set_view_mode_focused_view2()
+            #self.splitter_left_view2.setSizes([10000, 50, 0])
 
             # 3. Ensure the Horizontal Splitter gives space to left (as discussed before)
-            self.splitter_main_view2.setSizes([10000, 0])
-            self.splitter_left_view2.setStretchFactor(0, 1)  # Video expands
-            self.splitter_left_view2.setStretchFactor(1, 0)  # Slider stays fixed
-            self.splitter_left_view2.setStretchFactor(2, 0)  # Radio stays fixed
+            #self.splitter_main_view2.setSizes([10000, 0])
+            #self.splitter_left_view2.setStretchFactor(0, 1)  # Video expands
+            #self.splitter_left_view2.setStretchFactor(1, 0)  # Slider stays fixed
+            #self.splitter_left_view2.setStretchFactor(2, 0)  # Radio stays fixed
 
             self.radioButton_21.setVisible(False)
             self.radioButton_21_1.setVisible(False)
             self.radioButton_21_2.setVisible(False)
             self.radioButton_21_3.setVisible(False)
-            self.label_points_2.setVisible(False)
+
 
 
 
@@ -5381,7 +5219,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             widget.points = []
             sliceNum = slider.value()
             widget.updateInfo(*getCurrentSlice(widget, npImage, npSeg, sliceNum, tol_slice=self.tol_trk), sliceNum, npImage.shape[:3],
-                                            initialState=initialState, imSpacing=self.readImMRI.ImSpacing)
+                                            initialState=initialState, imSpacing=self.readView2.ImSpacing)
             widget.update()
         for _widget_id in ind_3d_widget:
             widget = getattr(self, name_widg + str(_widget_id))
@@ -5389,98 +5227,14 @@ class Ui_Main(dockWidgets, openglWidgets):
 
                 widget.clear()
                 widget._seg_im = None
-                widget.paint(self.readImMRI.npSeg,
-                                           self.readImMRI.npImage, None)
+                widget.paint(self.readView2.npSeg,
+                                           self.readView2.npImage, None)
                 widget.colorInd = ind
-                widget.paint(self.readImMRI.npSeg, self.readImMRI.npImage, None)
+                widget.paint(self.readView2.npSeg, self.readView2.npImage, None)
             else:
-                widget._image = self.readImMRI.npImage
+                widget._image = self.readView2.npImage
 
         self.allowChangeScn = True
-
-
-    def updateDispMRI2_(self, npImage = None, npSeg = None, initialState = False, tract=None):
-        """
-        Update MRI
-        :param npImage:
-        :param npSeg:
-        :param initialState:
-        :param tract:
-        :return:
-        """
-        if npImage is None:
-            return
-        try:
-            self.page1_mri.setVisible(True)
-            self.tree_colors.setVisible(True)
-            self.allowChangeScn = False
-            colorPen = [1, 0, 0, 1]
-            ind = 9876
-            #try:
-            #    ind = self.dw2Text.index('X_Combined')+1
-            #    colorPen = self.colorsCombinations[ind]
-            #except:
-            #    colorPen = [1,0,0,1]
-            #    ind = 1
-
-            self.horizontalSlider_4.setRange(0, self.readImMRI.ImExtent[3])
-            self.horizontalSlider_4.setValue(self.readImMRI.ImExtent[3]//2)
-            self.label_4.setText(str_conv(self.readImMRI.ImExtent[3] // 2))
-            self.label_4.setVisible(True)
-            self.horizontalSlider_5.setRange(0, self.readImMRI.ImExtent[1])
-            self.horizontalSlider_5.setValue(self.readImMRI.ImExtent[1]//2)
-            self.label_5.setText(str_conv(self.readImMRI.ImExtent[1]//2))
-            self.label_5.setVisible(True)
-            self.horizontalSlider_6.setRange(0, self.readImMRI.ImExtent[5])
-            self.horizontalSlider_6.setValue(self.readImMRI.ImExtent[5]//2)
-            self.label_6.setText(str_conv(self.readImMRI.ImExtent[5]//2))
-            self.label_6.setVisible(True)
-            self.openGLWidget_4.updateCurrentImageInfo(npImage.shape[:3])
-            self.openGLWidget_5.updateCurrentImageInfo(npImage.shape[:3])
-            self.openGLWidget_6.updateCurrentImageInfo(npImage.shape[:3])
-
-
-            self.horizontalSlider_12.setRange(0, self.readImMRI.ImExtent[3])
-            self.horizontalSlider_12.setValue(self.readImMRI.ImExtent[3]//2)
-            self.label_12.setText(str_conv(self.readImMRI.ImExtent[3]//2))
-
-            self.openGLWidget_12.currentWidnowName = 'coronal'
-            self.openGLWidget_12.updateCurrentImageInfo(npImage.shape[:3])
-
-            self.radioButton_21.setVisible(True)
-            self.radioButton_21_1.setVisible(True)
-            self.radioButton_21_2.setVisible(True)
-            self.radioButton_21_3.setVisible(True)
-
-            name_lbl = 'label_'
-            name_widg = 'openGLWidget_'
-            name_slider = 'horizontalSlider_'
-
-            for i in [4,5,6,12]:
-                widget = getattr(self, name_widg+str(i))
-                slider = getattr(self, name_slider+str(i))
-                widget.colorObject = colorPen
-                widget.colorInd = ind
-                widget.setVisible(True)
-                slider.setVisible(True)
-                widget.points = []
-                sliceNum = slider.value()
-                widget.updateInfo(*getCurrentSlice(widget,
-                                                                 npImage, npSeg, sliceNum, tract, tol_slice=self.tol_trk), sliceNum, npImage.shape[:3],
-                                                initialState=initialState, imSpacing=self.readImMRI.ImSpacing)
-                widget.update()
-            if not initialState:
-                self.openGLWidget_24.clear()
-                self.openGLWidget_24._seg_im = None
-                self.openGLWidget_24.paint(self.readImMRI.npSeg,
-                                           self.readImMRI.npImage, None)
-                self.openGLWidget_24.colorInd = ind
-            else:
-                self.openGLWidget_24._image = self.readImMRI.npImage
-            self.allowChangeScn = True
-        except Exception as e:
-            self.warning_msgbox(
-                '{} There is something wrong please check the file.'.format(e))
 
 
 
@@ -5493,8 +5247,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuView.setTitle(self._translate("Main", "View"))
         self.menuToolbar.setTitle(self._translate("Main", "Toolbars"))
         self.menuWidgets.setTitle(self._translate("Main", "Widgets"))
-        self.actionOpenUS.setText(self._translate("Main", "Image View 1"))
-        self.actionOpenMRI.setText(self._translate("Main", "Image View 2"))
+        self.actionOpenView1.setText(self._translate("Main", "Image View 1"))
+        self.actionOpenView2.setText(self._translate("Main", "Image View 2"))
         self.actionOpenFA.setText(self._translate("Main", "OpenFA"))
         self.actionLoad.setText(self._translate("Main", "Load project"))
         self.actionNew.setText(self._translate("Main", "New project"))
@@ -5643,8 +5397,8 @@ class Ui_Main(dockWidgets, openglWidgets):
 
             self.progressBarSaving.setValue(0)
             self._loaded = False
-            self.CloseUS(message_box='off')
-            self.CloseMRI(message_box='off')
+            self.CloseView1(message_box='off')
+            self.CloseView2(message_box='off')
             self.loadChanges(base_file)
 
             self.activateGuidelines(False)
@@ -5654,20 +5408,20 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.progressBarSaving.setValue(0)
 
             if self._openUSEnabled:
-                self.actionOpenUS.setDisabled(False)
-            self.actionOpenMRI.setDisabled(False)
+                self.actionOpenView1.setDisabled(False)
+            self.actionOpenView2.setDisabled(False)
             self.actionOpenFA.setDisabled(True)
             self.actionOpenTract.setDisabled(True)
-            if rhasattr(self, 'readImECO.npImage'):
-                self.actionImportSegEco.setDisabled(False)
-                self.actionExportImEco.setDisabled(False)
-                self.actionExportSegEco.setDisabled(False)
+            if rhasattr(self, 'readView1.npImage'):
+                self.actionImportSegView1.setDisabled(False)
+                self.actionExportImView1.setDisabled(False)
+                self.actionExportSegView1.setDisabled(False)
 
-            if rhasattr(self, 'readImMRI.npImage'):
-                self.actionImportSegMRI.setDisabled(False)
-                self.actionExportImMRI.setDisabled(False)
-                self.actionExportSegMRI.setDisabled(False)
-            #self.actionImportSegMRI.setDisabled(False)
+            if rhasattr(self, 'readView2.npImage'):
+                self.actionImportSegView2.setDisabled(False)
+                self.actionExportImView2.setDisabled(False)
+                self.actionExportSegView2.setDisabled(False)
+            #self.actionImportSegView2.setDisabled(False)
             self.actionsave.setDisabled(False)
             self.actionsaveas.setDisabled(False)
             self.toolBar2.setDisabled(False)
@@ -5693,8 +5447,8 @@ class Ui_Main(dockWidgets, openglWidgets):
 
             self._basefileSave, _ = os.path.splitext(fileObj[0])
             if self._openUSEnabled:
-                self.actionOpenUS.setDisabled(False)
-            self.actionOpenMRI.setDisabled(False)
+                self.actionOpenView1.setDisabled(False)
+            self.actionOpenView2.setDisabled(False)
 
             self.actionOpenFA.setDisabled(True)
             self.actionOpenTract.setDisabled(True)
@@ -5713,7 +5467,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.Main.setWindowTitle(self._translate("Main", os.path.basename(self._basefileSave)))
             self.save()
 
-    def CloseUS(self, message_box=True):
+    def CloseView1(self, message_box=True):
         """
         Closes the Ultrasound (ECO) image and resets the associated UI elements.
 
@@ -5721,7 +5475,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         :return: True if the view was closed, False if the user cancelled.
         """
         # 1. Check state: Is there anything to close?
-        if not self.readImECO:
+        if not self.readView1:
             # print("Ultrasound view is already closed.")
             return True  # Already closed
 
@@ -5740,25 +5494,25 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 4. Perform cleanup only if confirmed
         if proceed:
-            self._perform_us_cleanup()
+            self._perform_view1_cleanup()
 
         return proceed
 
-    def _set_us_widgets_visible(self, is_visible):
+    def _set_view1_widgets_visible(self, is_visible):
         """Helper method to show/hide all widgets related to the US view."""
 
         # Disable actions
-        self.actionImportSegEco.setDisabled(True)
-        self.actionExportImEco.setDisabled(True)
-        self.actionExportSegEco.setDisabled(True)
+        self.actionImportSegView1.setDisabled(True)
+        self.actionExportImView1.setDisabled(True)
+        self.actionExportSegView1.setDisabled(True)
 
         # Toggle radio buttons
-        for name in self.US_RADIO_NAMES:
+        for name in self.View1_RADIO_NAMES:
             radio_button = getattr(self, name)
             radio_button.setVisible(is_visible)
 
         # Toggle sliders, labels, and OpenGL widgets
-        for k in self.US_VIEW_INDICES:
+        for k in self.VIEW1_INDICES:
             slider = getattr(self, 'horizontalSlider_' + str(k))
             label = getattr(self, 'label_' + str(k))
             widget = getattr(self, 'openGLWidget_' + str(k))
@@ -5774,11 +5528,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                 widget.resetInit()
                 widget.initialState()
 
-    def _perform_us_cleanup(self):
+    def _perform_view1_cleanup(self):
         """Helper method to consolidate all cleanup tasks for closing the US view."""
 
         # 1. Hide all the main US widgets
-        self._set_us_widgets_visible(False)
+        self._set_view1_widgets_visible(False)
 
         # 2. Reset other related UI elements
         self.reset_view_pages(index=0)
@@ -5787,13 +5541,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         # self.tree_colors.setVisible(False) # Removed commented-out code
 
         # 3. Clear the image data
-        self.readImECO = []
+        self.readView1 = []
         self.btn_play_view1.setVisible(False)
         # 4. Update tab state
         self.changedTab()
 
         # 5. Resize other (MRI) widgets
-        for k in self.MRI_VIEW_INDICES:
+        for k in self.VIEW2_INDICES:
             name = 'openGLWidget_' + str(k)
             widget = getattr(self, name)
             event = QtGui.QResizeEvent(widget.size(), widget.size())
@@ -5819,101 +5573,19 @@ class Ui_Main(dockWidgets, openglWidgets):
         for plugin in self.plugin_widgets:
             data_context = self.get_current_image_data()
             plugin.update_data_context(data_context)
-    def CloseUS2(self, message_box='on'):
-        def setVisible(val):
+        self.full_path_view1 = None
 
-            self.actionImportSegEco.setDisabled(True)
-            self.actionExportImEco.setDisabled(True)
-            self.actionExportSegEco.setDisabled(True)
-
-
-            self.radioButton_1.setVisible(val)
-            self.radioButton_2.setVisible(val)
-            self.radioButton_3.setVisible(val)
-            self.radioButton_4.setVisible(val)
-            for k in [1,2,3,11]:
-                name = 'openGLWidget_' + str(k)
-                slider = getattr(self, 'horizontalSlider_' + str(k))
-                label = getattr(self, 'label_' + str(k))
-                label.setVisible(val)
-                slider.setVisible(val)
-                widget = getattr(self, name)
-                widget.setVisible(val)
-                widget.imType = 'eco'
-                widget.clear()
-                widget.resetInit()
-                widget.initialState()
-        if message_box=='off':
-            setVisible(False)
-            self.reset_view_pages(index=0)
-            self.openGLWidget_14.clear()
-            self.ImageEnh_view1.setVisible(False)
-            #self.tree_colors.setVisible(False)
-
-            # self.save()
-            self.readImECO = []
-            self.changedTab()
-        else:
-            #qm = QtWidgets.QMessageBox(self)
-            #ret = qm.question(self, '', "Are you sure to close View 1?", qm.Yes | qm.No)
-            cond = True#ret == qm.Yes
-            if cond:
-
-                setVisible(False)
-                self.reset_view_pages(index=0)
-                self.openGLWidget_14.clear()
-                self.ImageEnh_view1.setVisible(False)
-                #self.tree_colors.setVisible(False)
-                #self.save()
-
-                self.readImECO = []
-                #self.changedTab()
-                for k in  [4,5,6,12]:
-                    name = 'openGLWidget_' + str(k)
-                    widget = getattr(self, name)
-                    event = QtGui.QResizeEvent(widget.size(), widget.size())
-                    widget.resizeEvent(event)
-                    widget.resize(QtCore.QSize(widget.size().width(), widget.size().height() * 2))
-                #self.browse_view1(use_dialog=False)
-                self.actionComboBox_visible.setVisible(False)
-                self.actionComboBox_visible.setDisabled(True)
-                try:
-                    self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-                    self.actionComboBox.setObjectName("View1")
-                except:
-                    pass
-                self.actionComboBox.clear()
-
-                clean_parent_image(self, -1, ['View 1'], index_view=0)
-                #clean_parent_image2(self, fileObj[0], 'View 1', index_view=0)
-                #self.changedTab()
-            return cond
-
-        # --- Assumed imports ---
-        # from PyQt5 import QtWidgets, QtGui, QtCore
-
-        # --- Assumed base class (for context) ---
-        # class YourMainWindow(QtWidgets.QMainWindow):
-        #     def __init__(self):
-        #         super().__init__()
-        #         # Define widget groups as class attributes for clarity and maintenance
-        #         # This is MUCH better than "magic numbers"
-
-
-        #         # ... other init setup ...
-        #         self.readImMRI = [] # Initialize state
-
-    def CloseMRI(self, message_box=True):
+    def CloseView2(self, message_box=True):
         """
-        Closes the MRI image and resets the associated UI elements.
+        Closes the View2 image and resets the associated UI elements.
 
         :param show_confirmation: If True, asks the user for confirmation before closing.
         :return: True if the view was closed, False if the user cancelled.
         """
         # 1. Check state: Is there anything to close?
-        #    (Assuming self.readImMRI = [] is the "closed" state)
-        if not self.readImMRI:
-            # print("MRI view is already closed.")
+        #    (Assuming self.readView2 = [] is the "closed" state)
+        if not self.readView2:
+
             return True  # Already closed, operation is "successful"
 
         proceed = False
@@ -5932,20 +5604,20 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 4. Perform cleanup only if user confirmed or no confirmation was needed
         if proceed:
-            self._perform_mri_cleanup()
+            self._perform_view2_cleanup()
 
         return proceed
 
-    def _set_mri_widgets_visible(self, is_visible):
+    def _set_view2_widgets_visible(self, is_visible):
         """Helper method to show/hide all widgets related to the MRI view."""
 
         # Disable actions
-        self.actionImportSegMRI.setDisabled(True)
-        self.actionExportImMRI.setDisabled(True)
-        self.actionExportSegMRI.setDisabled(True)
+        self.actionImportSegView2.setDisabled(True)
+        self.actionExportImView2.setDisabled(True)
+        self.actionExportSegView2.setDisabled(True)
 
         # Toggle radio buttons
-        for name in self.MRI_RADIO_NAMES:
+        for name in self.View2_RADIO_NAMES:
             radio_button = getattr(self, name)
             radio_button.setVisible(is_visible)
 
@@ -5958,7 +5630,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.openedFileName.setText(f'{kept_part} ; ')
 
         # Toggle sliders, labels, and OpenGL widgets
-        for k in self.MRI_VIEW_INDICES:
+        for k in self.VIEW2_INDICES:
             slider = getattr(self, 'horizontalSlider_' + str(k))
             label = getattr(self, 'label_' + str(k))
             widget = getattr(self, 'openGLWidget_' + str(k))
@@ -5974,11 +5646,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                 widget.resetInit()
                 widget.initialState()
 
-    def _perform_mri_cleanup(self):
+    def _perform_view2_cleanup(self):
         """Helper method to consolidate all cleanup tasks for closing the MRI view."""
 
         # 1. Hide all the main MRI widgets
-        self._set_mri_widgets_visible(False)
+        self._set_view2_widgets_visible(False)
 
         # 2. Reset other related UI elements
         self.reset_view_pages(index=1)
@@ -5987,11 +5659,11 @@ class Ui_Main(dockWidgets, openglWidgets):
         # self.tree_colors.setVisible(False) # Removed commented-out code
 
         # 3. Clear the image data
-        self.readImMRI = []
+        self.readView2 = []
         # self.save() # Removed commented-out code
         self.btn_play_view2.setVisible(False)
         # 4. Resize other widgets
-        for k in self.US_VIEW_INDICES:
+        for k in self.VIEW1_INDICES:
             name = 'openGLWidget_' + str(k)
             widget = getattr(self, name)
             event = QtGui.QResizeEvent(widget.size(), widget.size())
@@ -6019,108 +5691,24 @@ class Ui_Main(dockWidgets, openglWidgets):
             data_context = self.get_current_image_data()
             plugin.update_data_context(data_context)
 
-    def CloseMRI2(self, message_box='on', dialogue=True):
-        """
-        Closing MRI image
-        :param message_box:
-        :param dialogue:
-        :return:
-        """
-        def setVisible(val):
-            self.actionImportSegMRI.setDisabled(True)
-            self.actionExportImMRI.setDisabled(True)
-            self.actionExportSegMRI.setDisabled(True)
+        self.full_path_view2 = None
 
-            self.radioButton_21.setVisible(val)
-            self.radioButton_21_1.setVisible(val)
-            self.radioButton_21_2.setVisible(val)
-            self.radioButton_21_3.setVisible(val)
-            txt = self.openedFileName.text()
-            division_ind = txt.find(' ; ')
-            if division_ind!=-1:
-                if division_ind != 0:
-                    kept_part = txt[:division_ind - 1]
-                else:
-                    kept_part = ''
-                self.openedFileName.setText(kept_part+' ; ')
+    def _check_status_warning_view1(self):
 
-            for k in [4,5,6,12]:
-                slider = getattr(self, 'horizontalSlider_' + str(k))
-                label = getattr(self, 'label_' + str(k))
-                label.setVisible(val)
-                slider.setVisible(val)
-
-                name = 'openGLWidget_' + str(k)
-                widget = getattr(self, name)
-                widget.setVisible(val)
-                widget.imType = 'mri'
-                widget.clear()
-                widget.resetInit()
-                widget.initialState()
-
-        if message_box=='off':
-            setVisible(False)
-            self.reset_view_pages(index=1)
-            self.openGLWidget_24.clear()
-            # self.save()
-            self.readImMRI = []
-            self.page1_mri.setVisible(False)
-            #self.tree_colors.setVisible(False)
-
-        else:
-            if dialogue:
-                #qm = QtWidgets.QMessageBox(self)
-                #ret = qm.question(self, '', "Are you sure to close View 2?", qm.Yes | qm.No)
-                #cond = ret==qm.Yes
-                cond = True
-                if not cond:
-                    return cond
-            else:
-                cond = True
-            if cond:
-                if not hasattr(self.readImMRI, 'npImage'):
-                    # message image already closed
-                    return
-                setVisible(False)
-                self.reset_view_pages(index=1)
-                self.openGLWidget_24.clear()
-                #self.save()
-                self.readImMRI = []
-                self.page1_mri.setVisible(False)
-                #self.tree_colors.setVisible(False)
-            for k in [1,2,3,11]:
-                name = 'openGLWidget_' + str(k)
-                widget = getattr(self, name)
-                event = QtGui.QResizeEvent(widget.size(), widget.size())
-                widget.resizeEvent(event)
-                widget.resize(QtCore.QSize(widget.size().width(),widget.size().height()*2))
-            self.actionComboBox_visible.setVisible(False)
-            self.actionComboBox_visible.setDisabled(True)
-            self.actionComboBox.setObjectName("View2")
-            try:
-                self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-            except:
-                pass
-            self.actionComboBox.clear()
-            clean_parent_image(self, -1, ['View 2'], index_view=1)
-            return cond
-
-    def _check_status_warning_eco(self):
-
-        if not hasattr(self, 'readImECO'):
+        if not hasattr(self, 'readView1'):
             self.warning_msgbox('There is no UltraSound image')
             return False
-        if not hasattr(self.readImECO, 'npImage'):
+        if not hasattr(self.readView1, 'npImage'):
             self.warning_msgbox('There is no UltraSound image')
             return False
         return True
 
-    def _check_status_warning_mri(self):
-        if not hasattr(self, 'readImMRI'):
-            self.warning_msgbox('There is no MRI image')
+    def _check_status_warning_view2(self):
+        if not hasattr(self, 'readView2'):
+            self.warning_msgbox('There is no View2 image')
             return False
-        if not hasattr(self.readImMRI, 'npImage'):
-            self.warning_msgbox('There is no MRI image')
+        if not hasattr(self.readView2, 'npImage'):
+            self.warning_msgbox('There is no View2 image')
             return False
         return True
 
@@ -6168,14 +5756,14 @@ class Ui_Main(dockWidgets, openglWidgets):
         # --- 1. CONFIGURATION MAPPING ---
         # Maps the input 'type' string to the actual object attributes
         config_map = {
-            'usim': {'reader': 'readImECO', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
-                     'check': '_check_status_warning_eco'},
-            'usseg': {'reader': 'readImECO', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
-                      'check': '_check_status_warning_eco'},
-            'mriim': {'reader': 'readImMRI', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
-                      'check': '_check_status_warning_mri'},
-            'mriseg': {'reader': 'readImMRI', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
-                       'check': '_check_status_warning_mri'},
+            'View1_IM': {'reader': 'readView1', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
+                     'check': '_check_status_warning_view1'},
+            'View1_SEG': {'reader': 'readView1', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
+                      'check': '_check_status_warning_view1'},
+            'View2_IM': {'reader': 'readView2', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
+                      'check': '_check_status_warning_view2'},
+            'View2_SEG': {'reader': 'readView2', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
+                       'check': '_check_status_warning_view2'},
         }
 
         # Validate Input
@@ -6191,7 +5779,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         if check_func and not check_func():
             return
 
-        # Get the Reader Object (e.g., self.readImECO)
+        # Get the Reader Object (e.g., self.readView1)
         reader = getattr(self, conf['reader'], None)
         if reader is None: return
 
@@ -6208,7 +5796,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             filters = "NifTi (*.nii *.nii.gz *.mgz);;tif(*.tif)"
 
         # Generate Default Filename
-        original_path = getattr(self, 'filenameEco' if 'us' in export_type else 'filenameMRI', "output")
+        original_path = getattr(self, 'filenameView1' if 'us' in export_type else 'filenameView2', "output")
         base_name = os.path.splitext(os.path.basename(original_path))[0]
         default_name = base_name + conf['suffix']
 
@@ -6472,79 +6060,79 @@ class Ui_Main(dockWidgets, openglWidgets):
         filters = "NifTi (*.nii *.nii.gz *.mgz);;tif(*.tif)"
         opts = QtWidgets.QFileDialog.DontUseNativeDialog
         currentCS = 'RAS'
-        if type.lower()=='usim':
-            status = self._check_status_warning_eco()
+        if type.lower()=='View1_IM':
+            status = self._check_status_warning_view1()
             if not status:
                 return
             try:
-                #fl = '.'.join(self.filenameEco.split('.')[:-1])
-                fl = self.filenameEco
-                flfmt = [el for el in self._availableFormats if el in self.filenameEco]
+                #fl = '.'.join(self.filenameView1.split('.')[:-1])
+                fl = self.filenameView1
+                flfmt = [el for el in self._availableFormats if el in self.filenameView1]
                 flfmt = flfmt[flfmt.index(max(flfmt))]
                 fl = fl.replace(flfmt, '')
                 newn = fl + '_new'
             except:
                 newn = ''
-            if hasattr(self.readImECO, 'source_system'):
-                currentCS = self.readImECO.source_system
+            if hasattr(self.readView1, 'source_system'):
+                currentCS = self.readView1.source_system
             fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
             if fileObj[0] != '':
-                save_as_image(self.readImECO, fileObj[0], self.readImECO.npImage.astype(np.float32), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
-        elif type.lower()=='usseg':
-            status = self._check_status_warning_eco()
+                save_as_image(self.readView1, fileObj[0], self.readView1.npImage.astype(np.float32), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
+        elif type.lower()=='View1_SEG':
+            status = self._check_status_warning_view1()
             if not status:
                 return
             try:
-                #fl = '.'.join(self.filenameEco.split('.')[:-1])
-                fl = self.filenameEco
-                flfmt = [el for el in self._availableFormats if el in self.filenameEco]
+                #fl = '.'.join(self.filenameView1.split('.')[:-1])
+                fl = self.filenameView1
+                flfmt = [el for el in self._availableFormats if el in self.filenameView1]
                 flfmt = flfmt[flfmt.index(max(flfmt))]
                 fl = fl.replace(flfmt, '')
                 newn = fl + '_seg'
             except:
                 newn = ''
-            if hasattr(self.readImECO, 'source_system'):
-                currentCS = self.readImECO.source_system
+            if hasattr(self.readView1, 'source_system'):
+                currentCS = self.readView1.source_system
             fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
             if fileObj[0] != '':
-                save_as_image(self.readImECO, fileObj[0], self.readImECO.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
-        elif type.lower()=='mriim':
-            status = self._check_status_warning_mri()
+                save_as_image(self.readView1, fileObj[0], self.readView1.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
+        elif type.lower()=='View2_IM':
+            status = self._check_status_warning_view2()
             if not status:
                 return
             try:
-                #fl = '.'.join(self.filenameMRI.split('.')[:-1])
-                fl = self.filenameMRI
-                flfmt = [el for el in self._availableFormats if el in self.filenameMRI]
+                #fl = '.'.join(self.filenameView2.split('.')[:-1])
+                fl = self.filenameView2
+                flfmt = [el for el in self._availableFormats if el in self.filenameView2]
                 flfmt = flfmt[flfmt.index(max(flfmt))]
                 fl = fl.replace(flfmt, '')
                 newn = fl + '_new'
             except:
                 newn = ''
-            if hasattr(self.readImMRI, 'source_system'):
-                currentCS = self.readImMRI.source_system
+            if hasattr(self.readView2, 'source_system'):
+                currentCS = self.readView2.source_system
             fileObj, currentCS = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
             if fileObj[0] != '':
-                save_as_image(self.readImMRI, fileObj[0], self.readImMRI.npImage.astype(np.float32),format=filters.split(';;').index(fileObj[1]), cs=currentCS)
-        elif type.lower()=='mriseg':
-            status = self._check_status_warning_mri()
+                save_as_image(self.readView2, fileObj[0], self.readView2.npImage.astype(np.float32),format=filters.split(';;').index(fileObj[1]), cs=currentCS)
+        elif type.lower()=='View2_SEG':
+            status = self._check_status_warning_view2()
             if not status:
                 return
             try:
-                fl = self.filenameMRI
-                flfmt = [el for el in self._availableFormats if el in self.filenameMRI]
+                fl = self.filenameView2
+                flfmt = [el for el in self._availableFormats if el in self.filenameView2]
                 flfmt = flfmt[flfmt.index(max(flfmt))]
                 fl = fl.replace(flfmt, '')
-                #fl = '.'.join(self.filenameMRI.split('.')[:-1])
+                #fl = '.'.join(self.filenameView2.split('.')[:-1])
                 newn = fl + '_seg'
             except:
                 newn = ''
 
-            if hasattr(self.readImMRI, 'source_system'):
-                currentCS = self.readImMRI.source_system
+            if hasattr(self.readView2, 'source_system'):
+                currentCS = self.readView2.source_system
             fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
             if fileObj[0]!='':
-                save_as_image(self.readImMRI, fileObj[0], self.readImMRI.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), cs=cs)
+                save_as_image(self.readView2, fileObj[0], self.readView2.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), cs=cs)
 
 
 
@@ -6554,17 +6142,17 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param type_image:
         :return:
         """
-        if type_image.lower()=='usseg':
-            if hasattr(self, 'readImECO'):
-                if hasattr(self.readImECO, 'npImage'):
-                    self.readImECO.npSeg = self.readImECO.npImage*0
-                    self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-        elif type_image.lower()=='mriseg':
-            if hasattr(self, 'readImMRI'):
-                if hasattr(self.readImMRI, 'npImage'):
-                    self.readImMRI.npSeg = self.readImMRI.npImage*0
-                    self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True,
-                                       tract=self.readImMRI.tract)
+        if type_image.lower()=='View1_SEG':
+            if hasattr(self, 'readView1'):
+                if hasattr(self.readView1, 'npImage'):
+                    self.readView1.npSeg = self.readView1.npImage*0
+                    self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
+        elif type_image.lower()=='View2_SEG':
+            if hasattr(self, 'readView2'):
+                if hasattr(self.readView2, 'npImage'):
+                    self.readView2.npSeg = self.readView2.npImage*0
+                    self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True,
+                                       tract=self.readView2.tract)
 
 
 
@@ -6595,67 +6183,68 @@ class Ui_Main(dockWidgets, openglWidgets):
                 return False
 
             #return True
-
-        if type_image.lower()=='usseg':
-            if hasattr(self, 'readImECO'):
-                if hasattr(self.readImECO, 'npImage'):
-                    if self.is_view1_video:
-                        reader = self.readImECO
-                        npSeg, readable, equalDim = reader.read_video_segmentations(fileObj[0])
-                        if len(self.readImECO.npImage.shape[:2]) != len(npSeg.shape):
+        try:
+            if type_image.lower()=='view1_seg':
+                if hasattr(self, 'readView1'):
+                    if hasattr(self.readView1, 'npImage'):
+                        if self.is_view1_video:
+                            reader = self.readView1
+                            npSeg, readable, equalDim = reader.read_video_segmentations(fileObj[0])
+                            if len(self.readView1.npImage.shape[:2]) != len(npSeg.shape):
+                                return False
+                        else:
+                            npSeg, readable, equalDim = read_segmentation_file(self, fileObj[0], self.readView1, update_color_s=update_color_s)
+                            if len(self.readView1.npImage.shape[:3]) != len(npSeg.shape):
+                                return False
+                        if not equalDim:
+                            self.warning_msgbox(
+                                'Expected segmentation with dimensions {}, but the segmentation has {}'.format(self.readView1.npImage.shape[:3], npSeg.shape))
                             return False
-                    else:
-                        npSeg, readable, equalDim = read_segmentation_file(self, fileObj[0], self.readImECO, update_color_s=update_color_s)
-                        if len(self.readImECO.npImage.shape[:3]) != len(npSeg.shape):
+                        if not readable:
+                            self.warning_msgbox('The number of colors are less than the segmentated parts. Unable to read the file.')
                             return False
-                    if not equalDim:
-                        self.warning_msgbox(
-                            'Expected segmentation with dimensions {}, but the segmentation has {}'.format(self.readImECO.npImage.shape[:3], npSeg.shape))
-                        return False
-                    if not readable:
-                        self.warning_msgbox('The number of colors are less than the segmentated parts. Unable to read the file.')
-                        return False
 
 
-                    self.readImECO.npSeg = npSeg.astype('int')
-                    #manually_check_tree_item(self, '9876')
-                    #self.openGLWidget_14.paint(self.readImECO.npSeg, self.readImECO.npImage, None)
-                    self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-                    make_all_seg_visibl(self)
-                    ls = manually_check_tree_item(self, '9876')
-                    self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
-                    return True
-        elif type_image.lower()=='mriseg':
-            if hasattr(self, 'readImMRI'):
-                if hasattr(self.readImMRI, 'npImage'):
-                    if self.is_view2_video:
-                        reader = self.readImMRI
-                        npSeg, readable, equalDim = reader.read_video_segmentations(fileObj[0])
-                        if len(self.readImMRI.npImage.shape[:2]) != len(npSeg.shape):
+                        self.readView1.npSeg = npSeg.astype('int')
+                        #manually_check_tree_item(self, '9876')
+
+                        self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
+                        #make_all_seg_visibl(self)
+                        ls = manually_check_tree_item(self, '9876')
+                        self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
+                        return True
+            elif type_image.lower()=='view2_seg':
+                if hasattr(self, 'readView2'):
+                    if hasattr(self.readView2, 'npImage'):
+                        if self.is_view2_video:
+                            reader = self.readView2
+                            npSeg, readable, equalDim = reader.read_video_segmentations(fileObj[0])
+                            if len(self.readView2.npImage.shape[:2]) != len(npSeg.shape):
+                                return False
+                        else:
+                            npSeg, readable, equalDim = read_segmentation_file(self, fileObj[0], self.readView2, update_color_s=update_color_s)
+                            if len(self.readView2.npImage.shape[:3]) != len(npSeg.shape):
+                                return False
+                        if not equalDim:
+                            self.warning_msgbox(
+                                'Expected segmentation with dimensions {}, but the segmentation has {}'.format(self.readView2.npImage.shape[:3], npSeg.shape))
                             return False
-                    else:
-                        npSeg, readable, equalDim = read_segmentation_file(self, fileObj[0], self.readImMRI, update_color_s=update_color_s)
-                        if len(self.readImMRI.npImage.shape[:3]) != len(npSeg.shape):
+                        if not readable:
+                            self.warning_msgbox(
+                                 'The number of colors are less than the segmentated parts. Unable to read the file.')
                             return False
-                    if not equalDim:
-                        self.warning_msgbox(
-                            'Expected segmentation with dimensions {}, but the segmentation has {}'.format(self.readImMRI.npImage.shape[:3], npSeg.shape))
-                        return False
-                    if not readable:
-                        self.warning_msgbox(
-                             'The number of colors are less than the segmentated parts. Unable to read the file.')
-                        return False
 
 
-                    self.readImMRI.npSeg = npSeg.astype('int')
-                    #manually_check_tree_item(self, '9876')
-                    #self.openGLWidget_24.paint(self.readImMRI.npSeg, self.readImMRI.npImage, None)
-                    self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True,
-                                       tract=self.readImMRI.tract)
-                    ls = manually_check_tree_item(self, '9876')
-                    self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
-                    #make_all_seg_visibl(self)
-                    return True
+                        self.readView2.npSeg = npSeg.astype('int')
+                        #manually_check_tree_item(self, '9876')
+
+                        self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True)
+                        ls = manually_check_tree_item(self, '9876')
+                        self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
+                        #make_all_seg_visibl(self)
+                        return True
+        except Exception as e:
+            self.warning_msgbox(e)
 
     def save_screenshot(self, q_img, filename):
         """
@@ -6673,6 +6262,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.setEnabled(True)
         self.dock_progressbar.setVisible(False)
         self.progressBarSaving.setValue(0)
+
+
 
     def loadChanges(self, file_base=None):
         """
@@ -6716,7 +6307,182 @@ class Ui_Main(dockWidgets, openglWidgets):
                     unpickler = pickle.Unpickler(inputs)
                     dic = unpickler.load()
             except Exception as e:
-                print(f"Critical Error: Failed to load or decrypt file: {e2}")
+                print(f"Critical Error: Failed to load or decrypt file: {e}")
+                return  # Cannot proceed without data
+
+        if dic is None:
+            return
+
+        # =========================================================
+        # INDEPENDENT LOADING BLOCKS
+        # Failures here will NOT stop the rest of the function
+        # =========================================================
+        try:
+            loadAttributeWidget(self, 'main', dic, self.progressBarSaving)
+        except Exception as e:
+            print(f"Error loading main attributes: {e}")
+        if self.full_path_view1:
+            self.browse_view1(fileObj=[self.full_path_view1, 'view1'])
+        if self.full_path_view2:
+            self.browse_view2(fileObj=[self.full_path_view2, 'view2'])
+        # --- 3. Load Measurements ---
+        try:
+            if 'measurements' in dic:
+                vals = dic['measurements']
+                self.table_widget_measure.setRowCount(len(vals))
+                self.table_widget_measure.setColumnCount(8)
+                r = 0
+                for row in range(len(vals)):
+                    for col in range(len(vals[row])):
+                        self.table_widget_measure.setItem(row, col, QtWidgets.QTableWidgetItem(vals[row][col]))
+                    r += 1
+            else:
+                self.table_widget_measure.setRowCount(0)
+        except Exception as e:
+            print(f"Error loading measurements: {e}")
+
+        self.progressBarSaving.setValue(65)
+
+        # --- 4. Load Widgets (Iterative) ---
+        name = 'openGLWidget_'
+        nameS = 'horizontalSlider_'
+        widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
+        self.scroll_intensity.setValue(50)
+
+        for i in widgets_num:
+            try:
+                nameWidget = name + str(i + 1)
+                if hasattr(self, nameWidget):
+                    widget = getattr(self, nameWidget)
+
+                    # UI Visibility Logic
+                    if i < 13:
+                        slider = getattr(self, nameS + str(i + 1))
+                        slider.setVisible(True)
+                    if i == 10:
+                        self.radioButton_1.setVisible(True)
+                        self.radioButton_2.setVisible(True)
+                        self.radioButton_3.setVisible(True)
+                        self.radioButton_4.setVisible(True)
+                    elif i == 11:
+                        self.radioButton_21_1.setVisible(True)
+                        self.radioButton_21_2.setVisible(True)
+                        self.radioButton_21_3.setVisible(True)
+                        self.radioButton_21.setVisible(True)
+
+                    # Load Widget Data
+                    loadAttributeWidget(widget, nameWidget, dic, self.progressBarSaving)
+
+                    # Update Widget View
+                    if i < 13:
+                        if widget.imSlice is not None:
+                            widget.setVisible(True)
+                            widget.makeObject()
+                            widget.update()
+                        else:
+                            widget.setVisible(False)
+                            slider.setVisible(False)
+            except Exception as e:
+                print(f"Error loading widget {i + 1}: {e}")
+
+        self.progressBarSaving.setValue(75)
+        self.progressBarSaving.setValue(80)
+        self.progressBarSaving.setValue(95)
+
+
+        self.progressBarSaving.setValue(98)
+
+        # --- 10. Final UI Cleanups & Settings ---
+        try:
+
+
+            set_new_color_scheme(self)
+            update_widget_color_scheme(self)
+
+            self.openGLWidget_4.imType = 'mri'
+            self.openGLWidget_5.imType = 'mri'
+            self.openGLWidget_6.imType = 'mri'
+
+            # Reset Color Indices
+            widgets = [1, 2, 3, 4, 5, 6, 11, 12, 14, 24]
+            prefix = 'openGLWidget_'
+            for k in widgets:
+                if hasattr(self, prefix + str(k)):
+                    getattr(self, prefix + str(k)).colorInds = []
+
+            self.progressBarSaving.setVisible(False)
+            self.openGLWidget_14._updatePaint = True
+            self.openGLWidget_24._updatePaint = True
+
+            if hasattr(self.settingsBN, 'auto_save_spinbox'):
+                self.expectedTime = self.settingsBN.auto_save_spinbox.value() * 60
+
+
+
+            # Load Settings Dict
+            if "settings" in dic:
+                dic_settings = dic["settings"]
+                allowed_keys = ["auto_save_interval", "DEFAULT_MODELS_DIR", "DEFAULT_USE_DIR"]
+                # Assuming 'settings' is a module or object available in context
+                # If 'settings' refers to self.settings, adjust accordingly
+                for key in allowed_keys:
+                    if key in dic_settings:
+                        # Be careful if 'settings' here refers to QSettings or a global module
+                        pass
+
+            self.current_view = 'horizontal'
+
+        except Exception as e:
+            print(f"Error in final UI cleanup: {e}")
+
+        # --- Finalize ---
+        self._loaded = True
+        self.openGLWidget_14._updatePaint = True
+        self.openGLWidget_24._updatePaint = True
+
+    def loadChanges2(self, file_base=None):
+        """
+        This function loads all previous values.
+        Refactored to continue execution even if individual sections fail.
+        """
+        # --- 1. Imports and Setup ---
+
+
+        sender = QtCore.QObject.sender(self)
+
+        if file_base is not None and type(file_base) is not bool:
+            self._basefileSave = file_base
+
+        if type(self._basefileSave) == bool or self._basefileSave == '' or self._loaded:
+            return
+
+        # Initialize settings and UI flags
+        try:
+            self.settings = QSettings(self._basefileSave + '.ini', self.settings.IniFormat)
+            self.openGLWidget_14._updatePaint = False
+            self.openGLWidget_24._updatePaint = False
+            self.activate3d(True)
+        except Exception as e:
+            print(f"Error initializing settings: {e}")
+
+        if file_base is None:
+            file = self._basefileSave + '.bn'
+        else:
+            file = file_base
+
+        dic = None
+        self.progressBarSaving.setValue(20)
+
+        # --- 2. CRITICAL: Load File Data ---
+        # This is the only block that stops the function if it fails,
+        # because without 'dic', there is nothing to load.
+        if os.path.exists(file) and os.path.getsize(file) > 0:
+            try:
+                with open(file, 'rb') as inputs:
+                    unpickler = pickle.Unpickler(inputs)
+                    dic = unpickler.load()
+            except Exception as e:
+                print(f"Critical Error: Failed to load or decrypt file: {e}")
                 return  # Cannot proceed without data
 
         if dic is None:
@@ -6791,10 +6557,10 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # --- 5. Initialize Image Readers ---
         try:
-            names = ['readImECO', 'readImMRI']
+            names = ['readView1', 'readView2']
             for name in names:
                 # Re-initialize readers
-                if name == 'readImECO':
+                if name == 'readView1':
                     imtype = 'eco'
                 else:
                     imtype = 't1'
@@ -6814,28 +6580,28 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # --- 6. Setup ECO (View 1) ---
         try:
-            if hasattr(self, 'readImECO') and hasattr(self.readImECO, 'npImage'):
+            if hasattr(self, 'readView1') and hasattr(self.readView1, 'npImage'):
                 self.tree_colors.setVisible(True)
-                self.readImECO.npSeg = self.readImECO.npSeg.astype('int')
+                self.readView1.npSeg = self.readView1.npSeg.astype('int')
 
                 self.ImageEnh_view1.setVisible(True)
-                self.readImECO.manuallySetIms('eco')
-                self.setNewImage.emit(self.readImECO.npImage.shape[:3])
-                self.openGLWidget_14.load_paint(self.readImECO.npSeg)
+                self.readView1.manuallySetIms('eco')
+                self.setNewImage_view1.emit(self.readView1.npImage.shape[:3])
+                self.openGLWidget_14.load_paint(self.readView1.npSeg)
                 self.tabWidget.setTabVisible(1, True)
 
                 # Sync Affine
                 for i in widgets_num:
                     widget = getattr(self, 'openGLWidget_' + str(i + 1))
-                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI,
+                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readView2,
                                                                                                        'affine'):
                         if widget.imType == 'eco':
-                            widget.affine = self.readImMRI.affine
+                            widget.affine = self.readView2.affine
 
-                self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
+                self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
 
-                if not hasattr(self.readImECO, 'npEdge'):
-                    self.readImECO.npEdge = []
+                if not hasattr(self.readView1, 'npEdge'):
+                    self.readView1.npEdge = []
         except Exception as e:
             print(f"Error setting up ECO/View1: {e}")
 
@@ -6843,32 +6609,32 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # --- 7. Setup MRI (View 2) ---
         try:
-            if hasattr(self, 'readImMRI') and hasattr(self.readImMRI, 'npImage'):
-                self.readImMRI.npSeg = self.readImMRI.npSeg.astype('int')
+            if hasattr(self, 'readView2') and hasattr(self.readView2, 'npImage'):
+                self.readView2.npSeg = self.readView2.npSeg.astype('int')
 
                 self.tabWidget.setTabVisible(2, True)
                 self.page1_mri.setVisible(True)
                 self.tree_colors.setVisible(True)
-                self.readImMRI.manuallySetIms('t1')
-                self.setNewImage2.emit(self.readImMRI.npImage.shape[:3])
+                self.readView2.manuallySetIms('t1')
+                self.setNewImage_view2.emit(self.readView2.npImage.shape[:3])
 
                 # Sync Affine
                 for i in widgets_num:
                     widget = getattr(self, 'openGLWidget_' + str(i + 1))
-                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readImMRI,
+                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readView2,
                                                                                                        'affine'):
                         if widget.imType == 'mri':
-                            widget.affine = self.readImMRI.affine
+                            widget.affine = self.readView2.affine
 
-                self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True,
-                                   tract=self.readImMRI.tract)
+                self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True,
+                                   tract=self.readView2.tract)
 
-                if not hasattr(self.readImMRI, 'npEdge'):
-                    self.readImMRI.npEdge = []
+                if not hasattr(self.readView2, 'npEdge'):
+                    self.readView2.npEdge = []
 
                 # Setup ComboBox for Dimensions
-                if hasattr(self.readImMRI, 'ims'):
-                    shape = self.readImMRI.ims.shape
+                if hasattr(self.readView2, 'ims'):
+                    shape = self.readView2.ims.shape
                     self.actionComboBox.setObjectName("View2")
                     try:
                         self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
@@ -6909,27 +6675,27 @@ class Ui_Main(dockWidgets, openglWidgets):
         try:
 
             # MRI Info
-            if hasattr(self, 'readImMRI') and hasattr(self.readImMRI, 'im'):
-                if self.filenameEco:
-                    file_out = 'View 1: {}, View 2: {}'.format(self.filenameEco, self.filenameMRI)
+            if hasattr(self, 'readView2') and hasattr(self.readView2, 'im'):
+                if self.filenameView1:
+                    file_out = 'View 1: {}, View 2: {}'.format(self.filenameView1, self.filenameView2)
                 else:
-                    file_out = 'View 2: {}'.format(self.filenameMRI)
+                    file_out = 'View 2: {}'.format(self.filenameView2)
 
-                info1, color1 = [[[self.filenameMRI], "*View 2 (loaded)"], 2, 1], [1, 1, 0]
+                info1, color1 = [[[self.filenameView2], "*View 2 (loaded)"], 2, 1], [1, 1, 0]
                 update_image_sch(self, info=info1, color=color1, loaded=True)
-                self.iminfo_dialog.updata_name_iminfo(self.filenameMRI, 1)
+                self.iminfo_dialog.updata_name_iminfo(self.filenameView2, 1)
 
-                if hasattr(self.readImMRI, 'im_metadata'):
-                    self.iminfo_dialog.set_tag_value(self.readImMRI, ind=1)
+                if hasattr(self.readView2, 'im_metadata'):
+                    self.iminfo_dialog.set_tag_value(self.readView2, ind=1)
 
             # ECO Info
-            if hasattr(self, 'readImECO') and hasattr(self.readImECO, 'im'):
-                self.iminfo_dialog.updata_name_iminfo(self.filenameEco, 0)
-                info1, color1 = [[[self.filenameEco], "*View 1 (loaded)"], 0, 0], [0, 1, 1]
+            if hasattr(self, 'readView1') and hasattr(self.readView1, 'im'):
+                self.iminfo_dialog.updata_name_iminfo(self.filenameView1, 0)
+                info1, color1 = [[[self.filenameView1], "*View 1 (loaded)"], 0, 0], [0, 1, 1]
                 update_image_sch(self, info=info1, color=color1, loaded=True)
 
-                if hasattr(self.readImECO, 'im_metadata'):
-                    self.iminfo_dialog.set_tag_value(self.readImECO, ind=0)
+                if hasattr(self.readView1, 'im_metadata'):
+                    self.iminfo_dialog.set_tag_value(self.readView1, ind=0)
         except Exception as e:
             print(f"Error updating info dialogs: {e}")
 
@@ -7009,37 +6775,38 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if not fileObj: return False
 
                 # Save state
-                self._last_index_select_image_eco = index
+
             else:
                 # File object passed directly (e.g. from Drag & Drop)
                 fileObj, index = fileObj, fileObj[1] if len(fileObj) > 1 else 2
-
+            self._last_index_select_image_view1 = index
             # Read Data based on selected type
             success = self._load_data_by_type(fileObj, index, index_view = 0)
             if not success: return False
 
         # --- STEP 2: SETUP VIDEO VS STANDARD MODE ---
         # Check if loaded data is a Video Proxy
-        self.is_view1_video = getattr(self.readImECO, 'isVideo', False) or \
-                              getattr(self.readImECO, 'isChunkedVideo', False)
+        self.is_view1_video = getattr(self.readView1, 'isVideo', False) or \
+                              getattr(self.readView1, 'isChunkedVideo', False)
 
         if self.is_view1_video:
-            self._configure_video_ui(self.readImECO, name_tab= 'segmentationTab', ind_use = [0, 1, 2, 10, 13], index_tab=0)
+            self._configure_video_ui(self.readView1, name_tab= 'segmentationTab', ind_use = [0, 1, 2, 10, 13], index_tab=0)
         else:
-            self._configure_standard_ui(self.readImMRI, index_tab=0) # update second view too
+            self._configure_standard_ui(self.readView2, index_tab=0) # update second view too
+
 
         # --- STEP 3: CONFIGURE VIEWERS ---
         # Handle multi-dimensional volumes (4D)
-        self._setup_multidim_combobox(self.readImECO, use_dialog)
+        self._setup_multidim_combobox(self.readView1, use_dialog)
 
         # If data loaded successfully, initialize display
-        if hasattr(self.readImECO, 'npImage'):
+        if hasattr(self.readView1, 'npImage'):
 
-            self._initialize_display_widgets(self.readImECO, str_name_file = 'filenameEco', fileObj = fileObj, use_dialog = use_dialog,
+            self._initialize_display_widgets(self.readView1, str_name_file = 'filenameView1', fileObj = fileObj, use_dialog = use_dialog,
             index_tab = 0, widgets_to_reset = [0, 1, 2, 10], view_text = 'View 1')
 
             # Trigger external plugins / signals
-            self.setNewImage.emit(self.readImECO.npImage.shape[:3])
+            self.setNewImage_view1.emit(self.readView1.npImage.shape[:3])
             self.toolBar2.setDisabled(False)
 
             # Initial text update
@@ -7078,37 +6845,37 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if not fileObj: return False
 
                 # Save state
-                self._last_index_select_image_eco = index
+
             else:
                 # File object passed directly (e.g. from Drag & Drop)
                 fileObj, index = fileObj, fileObj[1] if len(fileObj) > 1 else 2
-
+            self._last_index_select_image_view1 = index
             # Read Data based on selected type
             success = self._load_data_by_type(fileObj, index, index_view = 1)
             if not success: return False
 
         # --- STEP 2: SETUP VIDEO VS STANDARD MODE ---
         # Check if loaded data is a Video Proxy
-        self.is_view2_video = getattr(self.readImMRI, 'isVideo', False) or \
-                              getattr(self.readImMRI, 'isChunkedVideo', False)
+        self.is_view2_video = getattr(self.readView2, 'isVideo', False) or \
+                              getattr(self.readView2, 'isChunkedVideo', False)
 
         if self.is_view2_video:
-            self._configure_video_ui(self.readImMRI, name_tab= 'MRISegTab', ind_use = [3, 4, 5, 11, 23], index_tab=1)
+            self._configure_video_ui(self.readView2, name_tab= 'MRISegTab', ind_use = [3, 4, 5, 11, 23], index_tab=1)
         else:
-            self._configure_standard_ui(self.readImECO, index_tab=1) # update second view too
+            self._configure_standard_ui(self.readView1, index_tab=1) # update second view too
 
         # --- STEP 3: CONFIGURE VIEWERS ---
         # Handle multi-dimensional volumes (4D)
-        self._setup_multidim_combobox(self.readImMRI, use_dialog)
+        self._setup_multidim_combobox(self.readView2, use_dialog)
 
         # If data loaded successfully, initialize display
-        if hasattr(self.readImMRI, 'npImage'):
+        if hasattr(self.readView2, 'npImage'):
 
-            self._initialize_display_widgets(self.readImMRI, str_name_file = 'filenameMRI', fileObj = fileObj, use_dialog = use_dialog,
+            self._initialize_display_widgets(self.readView2, str_name_file = 'filenameView2', fileObj = fileObj, use_dialog = use_dialog,
             index_tab = 1, widgets_to_reset = [3, 4, 5, 11], view_text = 'View 2')
 
             # Trigger external plugins / signals
-            self.setNewImage.emit(self.readImMRI.npImage.shape[:3])
+            self.setNewImage_view2.emit(self.readView2.npImage.shape[:3])
             self.toolBar2.setDisabled(False)
 
             # Initial text update
@@ -7142,8 +6909,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         opts = QtWidgets.QFileDialog.DontUseNativeDialog
         dialg = QFileDialogPreview(self, "Open File", settings.DEFAULT_USE_DIR,
                                    self._filters, options=opts,
-                                   index=self._last_index_select_image_mri,
-                                   last_state=self._last_state_preview)
+                                   index=self._last_index_select_image_view2,
+                                   last_state=self._last_state_preview) #TODO
         dialg.setFileMode(QtWidgets.QFileDialog.ExistingFile)
 
         # Resize dialog nicely
@@ -7159,25 +6926,19 @@ class Ui_Main(dockWidgets, openglWidgets):
         return None, -1
 
     def _load_data_by_type(self, fileObj, index, index_view=0):
-        """Reads the file into self.readImECO based on index type."""
+        """Reads the file into self.readView1 based on index type."""
         try:
-            if index == 2:
-                imtype = 'eco'
-                reader, Info = self.readD(fileObj, 't1', target_system='RAS')
-            elif index == 0:
-                reader, Info = self.readD(fileObj, 'neonatal', target_system='SPR')
-            elif index == 1:
-                reader, Info = self.readD(fileObj, 'fetal', target_system='PLI')
-            else:
-                return False
-
-            if index_view == 0:
-                self.readImECO = reader
-            elif index_view == 1:
-                self.readImMRI = reader
-
+            reader, Info, file_full_path = self.readD(fileObj, 'eco', target_system='RAS')
             if Info[2].lower() != 'success':
                 return False
+            if index_view == 0:
+                self.readView1 = reader
+                self.full_path_view1 = file_full_path
+            elif index_view == 1:
+                self.readView2 = reader
+                self.full_path_view2 = file_full_path
+
+
 
             return True
         except Exception as e:
@@ -7199,24 +6960,29 @@ class Ui_Main(dockWidgets, openglWidgets):
         for k in ind_use:  # Indices of standard views
             getattr(self, f'openGLWidget_{k + 1}').setVisible(False)
 
-        self.tabWidget.setCurrentIndex(main_tab_index)
-        self._format = 'video'
-
         # Set context name
         if index_tab == 0:
             self.openGLWidget_11.currentWidnowName = "video"
         elif index_tab==1:
             self.openGLWidget_12.currentWidnowName = "video"
 
+        self.tabWidget.setCurrentIndex(main_tab_index)
+        self._format = 'video'
+
+
+
         # Setup Video Slider
         if hasattr(reader, 'seg_ims'):
             if index_tab==0:
                 slider = self.horizontalSlider_11
+
             elif index_tab==1:
                 slider = self.horizontalSlider_12
+            slider.blockSignals(True)
             slider.setRange(0, reader.seg_ims.shape[-1])
-
+            slider.blockSignals(False)
             slider.setValue(reader.current_frame)
+
 
 
 
@@ -7227,17 +6993,19 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.tabWidget.setTabEnabled(i, True)
             self.tabWidget.setTabToolTip(i, "")
 
-        # Ensure MRI widgets are visible if data exists
+        # Ensure View2 widgets are visible if data exists
         if index_tab==0:
-            if hasattr(self, 'readImMRI') and hasattr(self.readImMRI, 'npImage'):
+            if hasattr(self, 'readView2') and hasattr(self.readView2, 'npImage'):
                 for k in [3, 4, 5]:
                     getattr(self, f'openGLWidget_{k + 1}').setVisible(True)
-                self.updateDispMRI(reader.npImage, reader.npSeg, initialState=True)
+                self.updateDispView2(reader.npImage, reader.npSeg, initialState=True)
+            self.openGLWidget_11.currentWidnowName = "coronal"
         elif index_tab==1:
-            if hasattr(self, 'readImECO') and hasattr(self.readImECO, 'npImage'):
+            if hasattr(self, 'readView1') and hasattr(self.readView1, 'npImage'):
                 for k in [0, 1, 2]:
                     getattr(self, f'openGLWidget_{k + 1}').setVisible(True)
-                self.updateDispEco(reader.npImage, reader.npSeg, initialState=True)
+                self.updateDispView1(reader.npImage, reader.npSeg, initialState=True)
+            self.openGLWidget_12.currentWidnowName = "coronal"
 
     def _setup_multidim_combobox(self, reader, use_dialog):
         """Handles the combobox for 4D datasets."""
@@ -7261,10 +7029,10 @@ class Ui_Main(dockWidgets, openglWidgets):
                 self.actionComboBox_visible.setVisible(True)
                 self.actionComboBox.currentTextChanged.connect(self.changeVolume)
 
-    def _initialize_display_widgets(self, reader, str_name_file = 'filenameEco', fileObj=None, use_dialog=None,
+    def _initialize_display_widgets(self, reader, str_name_file = 'filenameView1', fileObj=None, use_dialog=None,
                                     index_tab = 0, widgets_to_reset = [0, 1, 2, 10], view_text = 'View 1'):
         """Sets up the OpenGL Widgets, Colors, and Metadata."""
-        self.format_eco = self._format
+        self.format_view1 = self._format
         self._set_widgets_visible(True, index_view = index_tab)
 
         # Set Filename
@@ -7297,9 +7065,9 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # Final Paint
         if index_tab==0:
-            self.updateDispEco(reader.npImage, reader.npSeg, initialState=True)
+            self.updateDispView1(reader.npImage, reader.npSeg, initialState=True)
         elif index_tab==1:
-            self.updateDispMRI(reader.npImage, reader.npSeg, initialState=True)
+            self.updateDispView2(reader.npImage, reader.npSeg, initialState=True)
         self.changedTab()
         self.reset_view_pages(index= index_tab)
 
@@ -7314,9 +7082,9 @@ class Ui_Main(dockWidgets, openglWidgets):
     def _set_widgets_visible(self, val, index_view=0):
         """Helper to show/hide standard control groups."""
         if index_view ==0:
-            self.actionImportSegEco.setDisabled(not val)
-            self.actionExportImEco.setDisabled(not val)
-            self.actionExportSegEco.setDisabled(not val)
+            self.actionImportSegView1.setDisabled(not val)
+            self.actionExportImView1.setDisabled(not val)
+            self.actionExportSegView1.setDisabled(not val)
             self.btn_play_view1.setVisible(True)
             for rb in [self.radioButton_1, self.radioButton_2, self.radioButton_3, self.radioButton_4]:
                 rb.setVisible(val)
@@ -7325,16 +7093,16 @@ class Ui_Main(dockWidgets, openglWidgets):
                 getattr(self, f'label_{k}').setVisible(val)
                 getattr(self, f'horizontalSlider_{k}').setVisible(val)
                 getattr(self, f'openGLWidget_{k}').setVisible(val)
-
+            self.openGLWidget_14.setVisible(val)
             if val:  # Reset rotations if showing
-                self._rotationAngleEco_coronal = 0
-                self._rotationAngleEco_axial = 0
-                self._rotationAngleEco_sagittal = 0
+                self._rotationAngleView1_coronal = 0
+                self._rotationAngleView1_axial = 0
+                self._rotationAngleView1_sagittal = 0
                 self.t1_5.setValue(0)
         elif index_view ==1:
-            self.actionImportSegMRI.setDisabled(not val)
-            self.actionExportImMRI.setDisabled(not val)
-            self.actionExportSegMRI.setDisabled(not val)
+            self.actionImportSegView2.setDisabled(not val)
+            self.actionExportImView2.setDisabled(not val)
+            self.actionExportSegView2.setDisabled(not val)
             self.btn_play_view2.setVisible(True)
 
             for rb in [self.radioButton_21, self.radioButton_21_1, self.radioButton_21_2, self.radioButton_21_2]:
@@ -7344,281 +7112,23 @@ class Ui_Main(dockWidgets, openglWidgets):
                 getattr(self, f'label_{k}').setVisible(val)
                 getattr(self, f'horizontalSlider_{k}').setVisible(val)
                 getattr(self, f'openGLWidget_{k}').setVisible(val)
-
+            self.openGLWidget_24.setVisible(val)
             if val:  # Reset rotations if showing
-                self._rotationAngleMRI_coronal = 0
-                self._rotationAngleMRI_axial = 0
-                self._rotationAngleMRI_sagittal = 0
+                self._rotationAngleView2_coronal = 0
+                self._rotationAngleView2_axial = 0
+                self._rotationAngleView2_sagittal = 0
                 self.t2_5.setValue(0)
 
     def _update_volume_text_info(self, index_view =0):
         """Updates the text showing volume calculation."""
         if index_view == 0:
-            txt = compute_volume(self.readImECO, self.filenameEco, [9876],
+            txt = compute_volume(self.readView1, self.filenameView1, [9876],
                                  in_txt=self.openedFileName.text(), ind_screen=index_view)
         elif index_view == 1:
-            txt = compute_volume(self.readImMRI, self.filenameMRI, [9876],
+            txt = compute_volume(self.readView2, self.filenameView2, [9876],
                                  in_txt=self.openedFileName.text(), ind_screen=index_view)
         self.openedFileName.setText(txt)
 
-
-
-    def browse_view1_old(self, fileObj=None, use_dialog=True):
-        """
-        Browsing MRI
-        :param fileObj:
-        :param use_dialog:
-        :return:
-        """
-
-        def setVisible(val, imtype='eco'):
-            self.actionImportSegEco.setDisabled(False)
-            self.actionExportImEco.setDisabled(False)
-            self.actionExportSegEco.setDisabled(False)
-
-
-            self.radioButton_1.setVisible(val)
-            self.radioButton_2.setVisible(val)
-            self.radioButton_3.setVisible(val)
-            self.radioButton_4.setVisible(val)
-            for k in [1,2,3,11]:
-                name = 'openGLWidget_' + str(k)
-                slider = getattr(self, 'horizontalSlider_' + str(k))
-                label = getattr(self, 'label_' + str(k))
-                label.setVisible(val)
-                slider.setVisible(val)
-                widget = getattr(self, name)
-                widget.setVisible(val)
-                widget.imType = imtype
-
-        self.init_state()
-
-        if use_dialog or fileObj is not None:
-            if not isinstance(fileObj, list):
-                fileObj = ['', '']
-                opts = QtWidgets.QFileDialog.DontUseNativeDialog
-                dialg = QFileDialogPreview(self, "Open File", settings.DEFAULT_USE_DIR, self._filters, options=opts,
-                                           index=self._last_index_select_image_mri, last_state=self._last_state_preview)
-                dialg.setFileMode(QtWidgets.QFileDialog.ExistingFile)
-
-                parent_size = self.size()
-                dialog_width = int(parent_size.width() * 0.6)
-                dialog_height = int(parent_size.height() * 0.7)
-                dialg.resize(dialog_width, dialog_height)
-
-
-                if dialg.exec_() == QFileDialogPreview.Accepted:
-                    fileObj = dialg.getFileSelected()
-                    fileObj[1] = dialg.selectedNameFilter()
-
-                if not fileObj[0]:
-                    return False
-
-                self._last_state_preview = dialg.checkBox_preview.isChecked()
-                index = dialg._combobox_type.currentIndex()
-            else:
-                [fileObj, index] = fileObj
-
-            if index == 2:
-                imtype = 'eco'
-                #readImECO, Info = self.readD(fileObj, 't1', target_system='IPL')
-                readImECO, Info = self.readD(fileObj, 't1', target_system='RAS')
-            else:
-                print('Please optimze the trage system')
-                imtype = 'eco'
-                if index == 0:
-                    readImECO, Info = self.readD(fileObj, 'neonatal', target_system='SPR')
-                elif index == 1:
-                    readImECO, Info = self.readD(fileObj, 'fetal', target_system='PLI')
-                else:
-                    return False
-
-            if Info[2].lower() != 'success':
-                return False
-            else:
-                self.readImECO = readImECO
-            self._last_index_select_image_eco = index
-        self.is_view1_video = getattr(self.readImECO, 'isVideo', False) or getattr(self.readImECO, 'isChunkedVideo', False)
-        if self.is_view1_video:
-            main_tab_index = self.tabWidget.indexOf(self.segmentationTab)
-            # --- DISABLE MODE ---
-            for i in range(self.tabWidget.count()):
-                if i != main_tab_index:
-                    self.tabWidget.setTabEnabled(i, False)
-                    self.tabWidget.setTabToolTip(i, "Not available for Video files")
-                else:
-                    self.tabWidget.setTabEnabled(i, True)
-            widgets_num = [0, 1, 2, 13]
-            for k in widgets_num:
-                widget_name = 'openGLWidget_' + str(k + 1)
-                widget = getattr(self, widget_name)
-                widget.setVisible(False)
-            # Force switch to the main tab so user isn't stuck on a disabled one
-            self.tabWidget.setCurrentIndex(main_tab_index)
-            self._format = 'video'
-
-            slider = getattr(self, 'horizontalSlider_'+ str(11))
-            slider.setRange(0, self.readImECO.seg_ims.shape[-1])
-            slider.setValue(self.readImECO.current_frame)
-
-            widget = getattr(self, 'openGLWidget_' + str(11))
-            widget.currentWidnowName = "video"
-        else:
-            # --- RESTORE MODE ---
-            # Important: Re-enable tabs if loading a normal MRI afterwards
-            for i in range(self.tabWidget.count()):
-                self.tabWidget.setTabEnabled(i, True)
-                self.tabWidget.setTabToolTip(i, "")
-        if hasattr(self, 'readImMRI'):
-            if hasattr(self.readImMRI, 'npImage'):
-                for k in [3,4,5]:
-                    name = 'openGLWidget_' + str(k + 1)
-                    widget = getattr(self, name)
-                    widget.setVisible(True)
-
-                self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True)
-
-        if use_dialog:
-            self.actionComboBox_visible.setVisible(False)
-            self.actionComboBox_visible.setDisabled(True)
-        else:
-            Info = None
-            txt = self.actionComboBox.currentText()
-
-            if txt:
-                Info = self.readImECO.UpdateAnotherDim(int(float(txt)) - 1)
-
-            if hasattr(self.readImECO, '_fileDicom'):
-                self.filenameEco = self.readImECO._fileDicom
-
-            if Info is None:
-                Info = [True, True, 'success']
-                if not hasattr(self, '_format'):
-                    self._format = 'NIFTI'
-
-            readImECO = self.readImECO
-
-        if Info[2].lower() != 'success':
-            return False
-        else:
-            self.readImECO = readImECO
-
-        if hasattr(self.readImECO, 'ims') and use_dialog:
-            _num_dims = self.readImECO._num_dims
-            if _num_dims > 1:
-                try:
-                    self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-                except:
-                    pass
-                self.actionComboBox.clear()
-                for r in range(_num_dims):
-                    self.actionComboBox.addItem("{}".format(r + 1))
-
-                self.actionComboBox_visible.setDisabled(False)
-                self.actionComboBox_visible.setVisible(True)
-                self.actionComboBox.setObjectName("View1")
-
-                try:
-                    self.actionComboBox.currentTextChanged.connect(self.changeVolume)
-                except:
-                    pass
-
-        setVisible(True)
-
-        if hasattr(self.readImECO, 'npImage'):
-            self.format_eco = self._format
-
-            if fileObj is not None:
-                if hasattr(self.readImECO, '_fileDicom'):
-                    self.filenameEco = self.readImECO._fileDicom
-                else:
-                    self.filenameEco = basename(fileObj[0])
-
-            if self.filenameMRI:
-                file_out = 'US: {}, MRI: {}'.format(self.filenameEco, self.filenameMRI)
-            else:
-                file_out = 'MRI: {}'.format(self.filenameMRI)
-
-            self.iminfo_dialog.updata_name_iminfo(self.filenameEco, 0)
-
-            if hasattr(self.readImECO, 'im_metadata'):
-                self.iminfo_dialog.set_tag_value(self.readImECO, ind=0)
-
-            """
-            from melage.utils.utils import update_color_scheme
-            if rhasattr(self, 'readImECO.npSeg'):
-                update_color_scheme(self, self.readImMRI.npSeg, self.readImECO.npSeg, dialog=False)
-            else:
-                update_color_scheme(self, self.readImMRI.npSeg, dialog=False)
-            """
-
-            ls = manually_check_tree_item(self, '9876')
-            self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
-
-            if self.readImECO.npImage is not None:
-                self.tabWidget.setTabVisible(1, True)
-
-
-                widgets_num = [0, 1, 2, 10]
-                for k in widgets_num:
-                    widget_name = 'openGLWidget_' + str(k+1)
-                    widget = getattr(self, widget_name)
-                    if widget.isVisible():
-                        widget.resetInit()
-                        widget.initialState()
-                        widget.affine = getattr(self.readImECO, "im_metadata", {}).get("Affine", widget.affine)
-
-
-                self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-
-                self.changedTab()
-                self.reset_view_pages(index=0)
-
-                if use_dialog:
-
-                    self.HistImage.UpdateName(self.filenameEco, None)
-                    self.iminfo_dialog.UpdateName(self.filenameEco, None)
-                    info1, color1 = [[[fileObj[0]], fileObj[1]], 2, 0], [1, 1, 0]
-                    update_image_sch(self, info=info1, color=color1, loaded=True)
-
-
-                    clean_parent_image2(self, fileObj[0], 'View 1', index_view=0)
-
-            self.setNewImage.emit(self.readImECO.npImage.shape[:3])
-            self.readInfo(Info)
-            self.reset_view_pages(index=0)
-
-            self._rotationAngleEco_coronal = 0
-            self._rotationAngleEco_axial = 0
-            self._rotationAngleEco_sagittal=0
-
-
-            self.t1_5.setValue(0)
-            self.toolBar2.setDisabled(False)
-
-            txt = compute_volume(self.readImECO, self.filenameEco, [9876], in_txt=self.openedFileName.text(),
-                                 ind_screen=0)
-            self.openedFileName.setText(txt)
-
-        else:
-            setVisible(False)
-
-        self.activateGuidelines(self._last_state_guide_lines)
-
-
-        # update data context
-        for plugin in self.plugin_widgets:
-            data_context = self.get_current_image_data()
-            plugin.update_data_context(data_context)
-        ####
-
-        for ind in range(2):
-            save_var = '_immri_bedl_{}'.format(ind)
-            save_var_seg = '_immri_bedl_seg_{}'.format(ind)
-            setattr(self, save_var,None)
-            setattr(self, save_var_seg, None)
-
-        return True
 
 
     def browseTractoGraphy(self, fileObj=None):
@@ -7629,9 +7139,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
 
         # Browse Tractography
-        if not hasattr(self,'readImMRI'):
+        if not hasattr(self,'readView2'):
             return
-        if not hasattr(self.readImMRI, 'npImage'):
+        if not hasattr(self.readView2, 'npImage'):
             return
         if fileObj is None or type(fileObj) is bool:
             opts =QtWidgets.QFileDialog.DontUseNativeDialog
@@ -7641,17 +7151,17 @@ class Ui_Main(dockWidgets, openglWidgets):
             return
         stk, success = load_trk(fileObj[0])
         #from melage.utils.utils import get_affine_shape
-        if not hasattr(self.readImMRI, 'affine'):
-            self.readImMRI.afine = self.readImMRI.im.affine
+        if not hasattr(self.readView2, 'affine'):
+            self.readView2.afine = self.readView2.im.affine
         if not success:
             return
 
-        vox_world = get_world_from_trk(stk.streamlines, self.readImMRI.affine, inverse=True)
-        self.readImMRI.tract = vox_world
+        vox_world = get_world_from_trk(stk.streamlines, self.readView2.affine, inverse=True)
+        self.readView2.tract = vox_world
 
 
-        if hasattr(self, 'readImMRI'):
-            if hasattr(self.readImMRI, 'npSeg'):
+        if hasattr(self, 'readView2'):
+            if hasattr(self.readView2, 'npSeg'):
                 widgets_num = [0, 1, 2, 11]
                 for k in widgets_num:
                     name = 'openGLWidget_' + str(k + 1)
@@ -7667,8 +7177,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                     sliceNum = slider.value()
 
                     widget.updateInfo(*getCurrentSlice(widget,
-                                                       self.readImMRI.npImage, self.readImMRI.npSeg, sliceNum, self.readImMRI.tract, tol_slice=self.tol_trk), sliceNum, self.readImMRI.npImage.shape[:3],
-                                      initialState=False, imSpacing=self.readImMRI.ImSpacing)
+                                                       self.readView2.npImage, self.readView2.npSeg, sliceNum, self.readView2.tract, tol_slice=self.tol_trk), sliceNum, self.readView2.npImage.shape[:3],
+                                      initialState=False, imSpacing=self.readView2.ImSpacing)
                     widget.makeObject()
                     widget.update()
 
@@ -7691,15 +7201,15 @@ class Ui_Main(dockWidgets, openglWidgets):
         npImage[(Img.npImage <= 100) * (Img.npImage > 80)] = 4
         npImage[(Img.npImage > 100)] = 5
         #npImage[Img.npImage <= 10] = 0
-        if hasattr(self, 'readImMRI'):
-            if hasattr(self.readImMRI, 'npSeg'):
+        if hasattr(self, 'readView2'):
+            if hasattr(self.readView2, 'npSeg'):
                 widgets_num = [0, 1, 2, 11]
                 for k in widgets_num:
                     name = 'openGLWidget_' + str(k + 1)
                     widget = getattr(self, name)
                     widget.resetInit()
                     widget.initialState()
-                self.readImMRI.npSeg = npImage
+                self.readView2.npSeg = npImage
                 widgets_num = [3, 4, 5]
                 name_slider = 'horizontalSlider_'
                 for k in widgets_num:
@@ -7709,235 +7219,12 @@ class Ui_Main(dockWidgets, openglWidgets):
                     sliceNum = slider.value()
 
                     widget.updateInfo(*getCurrentSlice(widget,
-                                                       self.readImMRI.npImage, self.readImMRI.npSeg, sliceNum, self.readImMRI.tract, tol_slice=self.tol_trk), sliceNum, self.readImMRI.npImage.shape[:3],
-                                      initialState=False, imSpacing=self.readImMRI.ImSpacing)
+                                                       self.readView2.npImage, self.readView2.npSeg, sliceNum, self.readView2.tract, tol_slice=self.tol_trk), sliceNum, self.readView2.npImage.shape[:3],
+                                      initialState=False, imSpacing=self.readView2.ImSpacing)
                     widget.makeObject()
                     widget.update()
 
 
-    def browse_view2_(self, fileObj=None, use_dialog=True):
-        """
-        Browsing MRI
-        :param fileObj:
-        :param use_dialog:
-        :return:
-        """
-
-        def setVisible(val, imtype="mri"):
-            self.actionImportSegMRI.setDisabled(False)
-            self.actionExportImMRI.setDisabled(False)
-            self.actionExportSegMRI.setDisabled(False)
-
-            self.radioButton_21.setVisible(val)
-            self.radioButton_21_1.setVisible(val)
-            self.radioButton_21_2.setVisible(val)
-            self.radioButton_21_3.setVisible(val)
-
-            for k in [4, 5, 6, 12]:
-                name = 'openGLWidget_' + str(k)
-                slider = getattr(self, 'horizontalSlider_' + str(k))
-                label = getattr(self, 'label_' + str(k))
-                label.setVisible(val)
-                slider.setVisible(val)
-                widget = getattr(self, name)
-                widget.setVisible(val)
-                widget.imType = imtype
-
-        self.init_state()
-
-        if use_dialog or fileObj is not None:
-            if not isinstance(fileObj, list):
-                fileObj = ['', '']
-                opts = QtWidgets.QFileDialog.DontUseNativeDialog
-                dialg = QFileDialogPreview(self, "Open File", settings.DEFAULT_USE_DIR, self._filters, options=opts,
-                                           index=self._last_index_select_image_mri, last_state=self._last_state_preview)
-                dialg.setFileMode(QtWidgets.QFileDialog.ExistingFile)
-
-                parent_size = self.size()
-                dialog_width = int(parent_size.width() * 0.6)
-                dialog_height = int(parent_size.height() * 0.7)
-                dialg.resize(dialog_width, dialog_height)
-
-
-                if dialg.exec_() == QFileDialogPreview.Accepted:
-                    fileObj = dialg.getFileSelected()
-                    fileObj[1] = dialg.selectedNameFilter()
-
-                if not fileObj[0]:
-                    return False
-
-                self._last_state_preview = dialg.checkBox_preview.isChecked()
-                index = dialg._combobox_type.currentIndex()
-            else:
-                [fileObj, index] = fileObj
-
-            if index == 2:
-                imtype = 'mri'
-                #readImMRI, Info = self.readD(fileObj, 't1', target_system='IPL')
-                readImMRI, Info = self.readD(fileObj, 't1', target_system='RAS')
-            else:
-                imtype = 'eco'
-                print('Please optimze the trage system')
-                if index == 0:
-                    readImMRI, Info = self.readD(fileObj, 'neonatal', target_system='SPR')
-                elif index == 1:
-                    readImMRI, Info = self.readD(fileObj, 'fetal', target_system='PLI')
-                else:
-                    return False
-
-            if Info[2].lower() != 'success':
-                return False
-            else:
-                self.readImMRI = readImMRI
-            self._last_index_select_image_mri = index
-
-        if hasattr(self, 'readImECO'):
-            if hasattr(self.readImECO, 'npImage'):
-                for k in [0,1,2]:
-                    name = 'openGLWidget_' + str(k + 1)
-                    widget = getattr(self, name)
-                    widget.setVisible(True)
-
-                self.updateDispEco(self.readImECO.npImage, self.readImECO.npSeg, initialState=True)
-
-        if use_dialog:
-            self.actionComboBox_visible.setVisible(False)
-            self.actionComboBox_visible.setDisabled(True)
-        else:
-            Info = None
-            txt = self.actionComboBox.currentText()
-
-            if txt:
-                Info = self.readImMRI.UpdateAnotherDim(int(float(txt)) - 1)
-
-            if hasattr(self.readImMRI, '_fileDicom'):
-                self.filenameMRI = self.readImMRI._fileDicom
-
-            if Info is None:
-                Info = [True, True, 'success']
-                if not hasattr(self, '_format'):
-                    self._format = 'NIFTI'
-
-            readImMRI = self.readImMRI
-
-        if Info[2].lower() != 'success':
-            return False
-        else:
-            self.readImMRI = readImMRI
-
-        if hasattr(self.readImMRI, 'ims') and use_dialog:
-            _num_dims = self.readImECO._num_dims
-            if _num_dims > 1:
-                try:
-                    self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-                except:
-                    pass
-                self.actionComboBox.clear()
-                for r in range(_num_dims):
-                    self.actionComboBox.addItem("{}".format(r + 1))
-
-                self.actionComboBox_visible.setDisabled(False)
-                self.actionComboBox_visible.setVisible(True)
-                self.actionComboBox.setObjectName("View2")
-
-                try:
-                    self.actionComboBox.currentTextChanged.connect(self.changeVolume)
-                except:
-                    pass
-
-        setVisible(True)
-
-        if hasattr(self.readImMRI, 'npImage'):
-            self.format_mri = self._format
-
-            if fileObj is not None:
-                if hasattr(self.readImMRI, '_fileDicom'):
-                    self.filenameMRI = self.readImMRI._fileDicom
-                else:
-                    self.filenameMRI = basename(fileObj[0])
-
-            if self.filenameEco:
-                file_out = 'US: {}, MRI: {}'.format(self.filenameEco, self.filenameMRI)
-            else:
-                file_out = 'MRI: {}'.format(self.filenameMRI)
-
-            self.iminfo_dialog.updata_name_iminfo(self.filenameMRI, 1)
-
-            if hasattr(self.readImMRI, 'im_metadata'):
-                self.iminfo_dialog.set_tag_value(self.readImMRI, ind=1)
-
-            """
-            from melage.utils.utils import update_color_scheme
-            if rhasattr(self, 'readImECO.npSeg'):
-                update_color_scheme(self, self.readImMRI.npSeg, self.readImECO.npSeg, dialog=False)
-            else:
-                update_color_scheme(self, self.readImMRI.npSeg, dialog=False)
-            """
-
-            ls = manually_check_tree_item(self, '9876')
-            self.changeColorPen(self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0]))
-
-            if self.readImMRI.npImage is not None:
-                self.tabWidget.setTabVisible(2, True)
-
-
-                widgets_num = [4, 5, 6, 11]
-                for k in widgets_num:
-                    widget_name = 'openGLWidget_' + str(k)
-                    widget = getattr(self, widget_name)
-                    widget.resetInit()
-                    widget.initialState()
-                    #if 'Affine' in self.readImMRI.im_metadata:
-                    #    widget.affine = self.readImMRI.im_metadata['Affine']
-                    widget.affine = getattr(self.readImMRI, "im_metadata", {}).get("Affine", widget.affine)
-
-                self.updateDispMRI(self.readImMRI.npImage, self.readImMRI.npSeg, initialState=True,
-                                   tract=self.readImMRI.tract)
-                self.changedTab()
-                self.reset_view_pages(index=1)
-
-                if use_dialog:
-
-                    self.HistImage.UpdateName(None, self.filenameMRI)
-                    self.iminfo_dialog.UpdateName(None, self.filenameMRI)
-                    info1, color1 = [[[fileObj[0]], fileObj[1]], 2, 1], [1, 1, 0]
-                    update_image_sch(self, info=info1, color=color1, loaded=True)
-
-
-                    clean_parent_image2(self, fileObj[0], 'View 2', index_view=1)
-
-            self.setNewImage2.emit(self.readImMRI.npImage.shape[:3])
-            self.readInfo(Info)
-            self.reset_view_pages(index=1)
-
-            self._rotationAngleMRI_coronal = 0
-            self._rotationAngleMRI_axial = 0
-            self._rotationAngleMRI_sagittal = 0
-
-            self.t2_5.setValue(0)
-            self.toolBar2.setDisabled(False)
-
-            txt = compute_volume(self.readImMRI, self.filenameMRI, [9876], in_txt=self.openedFileName.text(),
-                                 ind_screen=1)
-            self.openedFileName.setText(txt)
-
-        else:
-            setVisible(False)
-
-        self.activateGuidelines(self._last_state_guide_lines)
-
-
-        for plugin in self.plugin_widgets:
-            data_context = self.get_current_image_data()
-            plugin.update_data_context(data_context)
-        for ind in range(2):
-            save_var = '_immri_bedl_{}'.format(ind)
-            save_var_seg = '_immri_bedl_seg_{}'.format(ind)
-            setattr(self, save_var, None)
-            setattr(self, save_var_seg, None)
-
-        return True
-        
     def warning_msgbox(self, text= None): # warning message box
         if text is None:
             text = 'There is an error.'
@@ -7979,68 +7266,45 @@ class Ui_Main(dockWidgets, openglWidgets):
             filters[0], filters[index_sel] = filters[index_sel], filters[0]
             self._filters = ';;'.join(filters)
             #if type == 'eco':
-            #    self.filenameEco = basename(fileObj[0])
+            #    self.filenameView1 = basename(fileObj[0])
             #else:
-            #    self.filenameMRI = basename(fileObj[0])
-            filename = basename(fileObj[0])
+            #    self.filenameView2 = basename(fileObj[0])
+            file_read_name = fileObj[0]
+            filename = basename(file_read_name)
             _, file_extension = os.path.splitext(fileObj[0])
             self.file_extension = file_extension
             self.setCursor(QtCore.Qt.WaitCursor)
-            readIM = readData(type=type, target_system=target_system)
+            readIM = readData(target_system=target_system)
             format = 'None'
             try:
-                if type == 'eco':
-                    if 'vol' in outfile_format: # Kretz data
-                        Info = readIM.readKretz(join(settings.DEFAULT_USE_DIR, filename))
-                        format = 'VOL'
-                    elif 'nii' in outfile_format: # read NIFTI
-                        Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NIFTI'
-                    elif 'nrrd' in outfile_format: # Read NRRD
-                        Info = readIM.readNRRD(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NRRD'
-                    elif 'dcm' in outfile_format: # READ DICOM
-                        Info = readIM.readDICOM(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'DICOM'
-                    elif "video" in outfile_format:
-                        Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NIFTI'
-                    else:
-                        Info = [False, False, 'No file']
-                    if Info[1]==True:
-                        self._format = format
-
+                if 'vol' in outfile_format: # Kretz data
+                    Info = readIM.readKretz(join(settings.DEFAULT_USE_DIR, filename))
+                    format = 'VOL'
+                elif 'nii' in outfile_format: # read NIFTI
+                    Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
+                    format = 'NIFTI'
+                elif 'nrrd' in outfile_format: # Read NRRD
+                    Info = readIM.readNRRD(join(settings.DEFAULT_USE_DIR, filename), type)
+                    format = 'NRRD'
+                elif 'dcm' in outfile_format or "dicomdir" in outfile_format: # READ DICOM
+                    Info = readIM.readDICOM(join(settings.DEFAULT_USE_DIR, filename), type)
+                    format = 'DICOM'
+                elif "video" in outfile_format:
+                    Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
+                    format = 'Video'
                 else:
-                    if 'vol' in outfile_format: # Kretz data
-                        Info = readIM.readKretz(join(settings.DEFAULT_USE_DIR, filename))
-                        format = 'VOL'
-                    elif 'nii' in outfile_format: # read NIFTI
-                        Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NIFTI'
-                    elif "video" in outfile_format:
-                        Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NIFTI'
-                    elif 'dicom' in outfile_format: # READ DICOM
-                        Info = readIM.readDICOM(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'DICOM'
-                        if hasattr(readIM, '_fileDicom'):
-                            self.filenameMRI = readIM._fileDicom
-                    elif 'nrrd' in outfile_format: # Read NRRD
-                        Info = readIM.readNRRD(join(settings.DEFAULT_USE_DIR, filename), type)
-                        format = 'NRRD'
-                    else:
-                        Info = [False, False, 'No file']
-                if Info[1] == True:
+                    Info = [False, False, 'No file']
+                if Info[1]==True:
                     self._format = format
-
                 self.setCursor(QtCore.Qt.ArrowCursor)
             except Exception as e:
                 print(e)
                 Info = [False, False, 'No file']
             self.setCursor(QtCore.Qt.ArrowCursor)
-            return readIM, Info
+
+            return readIM, Info, file_read_name
         else:
-            return [], [False, False, 'No file']
+            return [], [False, False, 'No file'], None
 
 
 

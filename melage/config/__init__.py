@@ -5,8 +5,8 @@ from sys import platform
 
 ADULT_WEIGHTS_FILE = 'New_model_latest_SegMulti_current.pth'
 INFANT_WEIGHTS_FILE = 'New_model_latest_SegMulti_current_neo.pth'
-__VERSION__ = '2.0.0'
-VERSION_DATE = 'Dec 19 2025'
+__VERSION__ = '2.1.1'
+VERSION_DATE = 'Dec 30 2025'
 class SettingsManager:
     """
     A singleton class to manage all application settings.

@@ -26,8 +26,6 @@ if platform=='darwin':
     from melage.rendering.helpers.Shaders_120 import vsrc, fsrc, fsrcPaint, vsrcPaint
 else:
     from melage.rendering.helpers.Shaders_330 import vsrc, fsrc, fsrcPaint, vsrcPaint
-
-from melage.utils.utils import LargestCC
 from sklearn.mixture import GaussianMixture
 
 
@@ -112,7 +110,15 @@ class GLWidget(QOpenGLWidget):
         else:
             self.imSeg = None
 
+        # Safe Defaults
 
+        self.brightness = 0.0  # Default: 0.0 (-1, 1)
+        self.contrast = 1.0  # Default: 1.0 (Range 0.0 to 5)
+        #self.saturation = 1.0  # Default: 1.0
+        self.gamma = 1.0  # Default: 1.0 (Range 0.1 to 3)
+        self.structure = 0.0  # Adds a little definition (Range: 0.0 to 2.0)
+        self.denoise = 0.0  # Removes a little grain (Range: 0.0 to 1.0)
+        self.activateSobel = 0 # activate sobel filter
         self.initialState()
         self.resetInit()
 
@@ -182,18 +188,13 @@ class GLWidget(QOpenGLWidget):
         Initial state parameters
         :return:
         """
-        self.BandPR1 = 0.0 # bandpass radius 1
-        self.BandPR2 = 0.0 # bandpass radius 2
-        self.contrast = 1.0 # image contrast
-        self.brightness = 0.0 # image brightness
-        self.activateSobel = 0 # activate sobel filter
-        self.thresholdSobel = 1 # activate sobel threshold
+
         self.n_colors = 1 # number of colors
         self.tract = None # tractography
         self._selected_seg_color = 1 # selected segmentation color
         self._n_colors_previous = np.inf # number of colors previous
         self.width_line_tract = 3 # width line tractography
-        self.hamming = False # use hamming filter
+        self.enable_endo_enhance = False # use enable_endo_enhance filter
         self.widthPen = 0.0 # width pen
         self.senderPoints = None # sender points
         self.senderWindow = None # sender window
@@ -558,9 +559,10 @@ class GLWidget(QOpenGLWidget):
             xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
         loc = self.affine @ np.array(xyz)
         xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(loc[0], loc[1], loc[2]))
-        if color>0:
+
+        try:
             name_area = QAction(f"{self.color_name[color-1]}")
-        else:
+        except:
             name_area = QAction(f"Unknown")
         send_action = QAction("Send to Table")
         interploateadd_action = QAction("Add to interploation")
@@ -1121,98 +1123,111 @@ class GLWidget(QOpenGLWidget):
                 r +=1
         print(r)
 
+
     def drawImagePre(self):
         """
         Draw Image pre-requisites
-        :return:
         """
-        #glPushMatrix()
-        #glPushAttrib(
-          #  GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT | GL_LINE_BIT | GL_ENABLE_BIT
-           # | GL_DEPTH_BUFFER_BIT)
-
-
-        ################## static GL data ##################
-        # use the program object
+        # Use the program object
         glUseProgram(self.program[0].programId())
-        #self.program[0].link()
-        #self.program[0].bind()
-        # set rotation view translation matrix
-        # model-view-projection matrix
-        #glUniformMatrix4fv(self.vertModelViewAttrId, 1, GL_FALSE, mvpMatrix)
-        # texture
+
+        # --- 1. Matrix Setup (Model-View-Projection) ---
         m = QMatrix4x4()
+        m.ortho(self.left, self.right, self.top, self.bottom, -1, 1)
 
-        m.ortho( self.left, self.right, self.top, self.bottom, -1, 1 )
-
-        m.translate(self.imWidth/2, self.imHeight/2, 0.0)
-
+        # Handle rotation/translation centered on the image
+        m.translate(self.imWidth / 2, self.imHeight / 2, 0.0)
         m.rotate(self.zRot / 16.0, 0.0, 0.0, 1.0)
-
-        m.translate(-self.imWidth/2, -self.imHeight/2, 0.0)
+        m.translate(-self.imWidth / 2, -self.imHeight / 2, 0.0)
 
         self.mvpMatrix = m.copyDataTo()
 
-
+        # Send Matrix to Shader
         glUniformMatrix4fv(self.program[0].vertModelViewAttrId, 1, GL_FALSE, self.mvpMatrix)
 
-        glUniform1fv(self.program[0].u_transformSizeID, 1,self.imWidth)
-        glUniform1fv(self.program[0].u_subtransformSizeID, 1, self.imHeight)
 
-        #self.program[0].setUniformValue('g_matModelView', m)
+        #Send Matrix to Paint Shader (NEW REQUIRED STEP)
+        # Assuming self.paintProgram is where you compiled vsrcPaint
+        #glUseProgram(self.program[0].programId())
+        #loc = glGetUniformLocation(self.program[0].programId(), "g_matModelView")
+        #glUniformMatrix4fv(loc, 1, GL_FALSE, self.mvpMatrix)
+        # Switch back to image program to continue drawing the image
+        #glUseProgram(self.program[0].programId())
+        # --- 2. Image Processing Parameters (The Fix) ---
 
-        # thresholding
-        threshold_loc = glGetUniformLocation(self.program[0].programId(), "threshold")
-        glUniform1f(threshold_loc, 0)
+        # BRIGHTNESS (u_brightness)
+        # Range: -1.0 (black) to 1.0 (white). Default: 0.0
+        loc = glGetUniformLocation(self.program[0].programId(), "u_brightness")
+        if loc >= 0: glUniform1f(loc, self.brightness)
 
-        # contrast
-        contrast_loc = glGetUniformLocation(self.program[0].programId(), "contrastMult")
-        glUniform1f(contrast_loc, 1)
+        # CONTRAST (u_contrast)
+        # Range: 0.0 (grey) to 5.0 (high contrast). Default: 1.0
+        loc = glGetUniformLocation(self.program[0].programId(), "u_contrast")
+        if loc >= 0: glUniform1f(loc, self.contrast)
 
-        # brightness
-        brightnessAdd_loc = glGetUniformLocation(self.program[0].programId(), "brightnessAdd")
-        glUniform1f(brightnessAdd_loc, self.brightness)
+        loc = glGetUniformLocation(self.program[0].programId(), "u_nbi")
+        if loc >= 0: glUniform1f(loc, self.structure)
 
-        # soble filter
-        activateSobel_loc = glGetUniformLocation(self.program[0].programId(), "sobel")
-        glUniform1i(activateSobel_loc, self.activateSobel)
-        activateSobel_loc = glGetUniformLocation(self.program[0].programId(), "sobel_threshold")
-        glUniform1f(activateSobel_loc, self.thresholdSobel)
+        #loc = glGetUniformLocation(self.program[0].programId(), "u_structure")
+        #if loc >= 0: glUniform1f(loc, self.structure)
 
-        minRad_loc = glGetUniformLocation(self.program[0].programId(), "iResolution")
-        glUniform2fv(minRad_loc, 1, [self.width(), self.height()])
-        maxRad_loc = glGetUniformLocation(self.program[0].programId(), "maxRadius")
-        glUniform1f(maxRad_loc, self.thresholdSobel)
 
-        ilum_loc = glGetUniformLocation(self.program[0].programId(), "Ilum")
-        glUniform1f(maxRad_loc, 0.8)
+        # Denoise (Smoothness)
+        loc = glGetUniformLocation(self.program[0].programId(), "u_denoise")
+        if loc >= 0: glUniform1f(loc, self.denoise)
 
-        mouse_pos_loc = glGetUniformLocation(self.program[0].programId(), "mousePos")
-        glUniform2fv(mouse_pos_loc, 1, [self.lastPos.x(), self.height()-self.lastPos.y()] )
+        # SATURATION (u_saturation)
+        # Range: 0.0 (B&W) to 5.0 (super color). Default: 1.0
+        #loc = glGetUniformLocation(self.program[0].programId(), "u_saturation")
+        #if loc >= 0: glUniform1f(loc, self.saturation)
 
-        # deinterlace
-        deinterlace = [self.imHeight, 0, 0]
-        deinterlace_loc = glGetUniformLocation(self.program[0].programId(), "deinterlace")
-        glUniform3fv(deinterlace_loc, 1, deinterlace)
+        # GAMMA (u_gamma)
+        # Range: 0.1 to 3.0. Default: 1.0. Corrects lighting curve.
+        loc = glGetUniformLocation(self.program[0].programId(), "u_gamma")
+        if loc >= 0: glUniform1f(loc, self.gamma)
 
+        # --- 3. Sobel / Edge Detection ---
+        #loc = glGetUniformLocation(self.program[0].programId(), "sobel")
+        #if loc >= 0: glUniform1i(loc, self.activateSobel)
+
+        #loc = glGetUniformLocation(self.program[0].programId(), "sobel_threshold")
+        #if loc >= 0: glUniform1f(loc, self.denoise)
+
+
+
+        # --- 4. Misc / Legacy Uniforms ---
+        # These might not be used in the new simple shader, but keeping them prevents crashes
+        loc = glGetUniformLocation(self.program[0].programId(), "iResolution")
+        if loc >= 0: glUniform2fv(loc, 1, [self.width(), self.height()])
+
+        loc = glGetUniformLocation(self.program[0].programId(), "mousePos")
+        if loc >= 0: glUniform2fv(loc, 1, [self.lastPos.x(), self.height() - self.lastPos.y()])
+
+        # --- 4. Endoscopy Improvement  ---
+        loc = glGetUniformLocation(self.program[0].programId(), "u_improve_endoscopy")
+        #print(self.enable_endo_enhance)
+        if loc >= 0:
+            glUniform1i(loc, self.enable_endo_enhance)
+
+        # --- 6. Draw Geometry ---
         self.program[0].enableAttributeArray(self.program[0].vertTexCoordAttrId)
         self.program[0].setAttributeArray(self.program[0].vertTexCoordAttrId, self.coord)
+
         self.program[0].enableAttributeArray(self.program[0].vertPosAttrId)
         self.program[0].setAttributeArray(self.program[0].vertPosAttrId, self.vertex)
 
         glEnable(GL_TEXTURE_2D)
-
         glActiveTexture(GL_TEXTURE0)
-
         glBindTexture(GL_TEXTURE_2D, self.textureID)
-        glEnableClientState(GL_VERTEX_ARRAY)
+
+        # Draw
         glDrawArrays(GL_QUADS, 0, 4)
+
+        # Cleanup
+        glBindTexture(GL_TEXTURE_2D, 0)
         glDisable(GL_TEXTURE_2D)
-        glDisableClientState(GL_VERTEX_ARRAY)
-        #glBindTexture(GL_TEXTURE_2D, 0)
         self.program[0].disableAttributeArray(self.program[0].vertTexCoordAttrId)
         self.program[0].disableAttributeArray(self.program[0].vertPosAttrId)
-
 
     def drawImageEnd(self):
         glUseProgram(0)  # necessary to release the program
@@ -2278,7 +2293,57 @@ class GLWidget(QOpenGLWidget):
         glPopAttrib()
         glPopMatrix()
 
+    def DrawLines(self, points, colorv=[1, 0, 0, 1], width_line=1):
+        """
+        Draw 2D lines on top of the image (ignores Z-depth of points).
+        """
+        if not points:
+            return
 
+        glPushMatrix()
+        # Save current state (lighting, depth, etc.) to restore later
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+
+        # 1. Setup Shader
+        glUseProgram(self.program[1].programId())
+        glUniformMatrix4fv(self.program[1].vertModelViewAttrId, 1, GL_FALSE, self.mvpMatrix)
+
+        # Pass color to shader
+        color_location = glGetUniformLocation(self.program[1].programId(), "my_color")
+        if color_location != -1:
+            glUniform4fv(color_location, 1, colorv)
+
+        # 2. Setup 2D Drawing State
+        glDisable(GL_TEXTURE_2D)  # Disable texture so lines are solid color
+        glDisable(GL_LIGHTING)  # Disable lighting for flat colors
+        glDisable(GL_DEPTH_TEST)  # CRITICAL: Always draw ON TOP of the image
+        glEnable(GL_LINE_SMOOTH)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        # Stipple pattern (dashed lines) setup
+        glEnable(GL_LINE_STIPPLE)
+        glLineStipple(1, 0x00FF)
+        glLineWidth(width_line)
+
+        # 3. Draw Geometry
+        glBegin(GL_LINE_STRIP)
+
+        # Set standard OpenGL color as fallback
+        glColor4fv(colorv)
+
+        for p in points:
+            # p is [x, y, sliceNum]
+            # We ONLY use x and y. We force Z to 0.0 to draw on the screen plane.
+            glVertex2f(p[0], p[1])
+
+        glEnd()
+
+        # 4. Cleanup
+        glDisable(GL_LINE_STIPPLE)
+        glUseProgram(0)
+        glPopAttrib()
+        glPopMatrix()
     def DrawLines(self, points, colorv=[1,0,0, 1], width_line= 1):
         """
         Draw lines on the screen
@@ -2313,7 +2378,7 @@ class GLWidget(QOpenGLWidget):
         glBegin( GL_LINE_STRIP )  # These vertices form a closed polygon
         glColor3f(1.0, 1.0, 0.0)  # Red
         for (x, y, z) in points:
-            glVertex3f(x, y, z)
+            glVertex2f(x, y)
         glEnd()
 
         glUseProgram(0)
@@ -2435,8 +2500,6 @@ class GLWidget(QOpenGLWidget):
 
         # --- 1. PREPARE IMAGE DATA (CPU) ---
         activate_kspace = False
-        if self.BandPR1 > 0 or self.contrast != 1.0 or self.hamming:
-            activate_kspace = True
 
         # Fast Copy
         imslice = self.imSlice.copy()
@@ -2444,75 +2507,15 @@ class GLWidget(QOpenGLWidget):
         # Handle RGB input check
         is_rgb = (imslice.ndim == 3 and imslice.shape[2] in [3, 4])
 
-        # [HEAVY MATH BLOCK - KSPACE]
-        # Kept mostly same, but protected by logic checks
-        if activate_kspace and not is_rgb:
-            # Check cache for KSpace
-            if self.sliceNum in self._kspaces:
-                kspace = np.copy(self._kspaces[self.sliceNum])
-            else:
-                kspace = fftshift(fft(ifftshift(imslice)))
-                self._kspaces[self.sliceNum] = np.copy(kspace)
-
-            # BandPass Filter
-            if self.BandPR1 > 0:
-                # Note: Imports inside function are slow. Move 'from melage...' to top of file if possible.
-                from melage.utils.utils import computeAnisotropyElipse
-
-                # Re-calculating grids every frame is slow.
-                # Ideally, cache 'x, y' grids in __init__ if image size is constant.
-                rows, cols = kspace.shape
-                a, b = rows // 2, cols // 2
-                y, x = np.ogrid[-a:rows - a, -b:cols - b]
-
-                r = np.hypot(rows, cols) / 2 * (self.BandPR1 / 2)
-                r2 = self.BandPR2 * r  # Note: your code had r2=0 overriding this immediately?
-
-                self.insideElipse = computeAnisotropyElipse(kspace)
-
-                # Create Masks
-                mask = self.insideElipse(x, y, r)
-
-                # Apply Filter
-                # Optimized to avoid double indexing
-                kspace[mask] *= (self.BandPR2 - 0.5) * 2
-
-            # Contrast
-            if self.contrast != 1.0:
-                cx, cy = kspace.shape[0] // 2, kspace.shape[1] // 2
-                kspace[cx - 2:cx + 2, cy - 2:cy + 2] *= self.contrast
-
-            # Hamming
-            if self.hamming:
-                if kspace.ndim == 2:
-                    h_x, h_y = kspace.shape
-                    window = np.outer(np.hamming(h_x), np.hamming(h_y))
-                    kspace *= window
-                else:
-                    h_x, h_y, _ = kspace.shape
-                    window = np.outer(np.hamming(h_x), np.hamming(h_y))
-                    kspace *= window[..., None]
-
-            # Visualization Logic (IFFT)
-            imslice = np.absolute(fftshift(ifft(ifftshift(kspace))))
 
         # --- 2. PREPARE SEGMENTATION BLEND (CPU) ---
 
-        # Standardize imslice to RGB for display
-        # Check threshold logic
-        if self.n_colors > 1:
-            if (self.sliceNum not in self._threshold_image or
-                    self.n_colors != self._n_colors_previous or activate_kspace):
-                self.create_histogram(imslice, self.n_colors)
-                self._n_colors_previous = self.n_colors
 
-            imslice_seg = self._threshold_image[self.sliceNum].copy()
+        # If grayscale, make RGB so we can draw colored segmentation on it
+        if imslice.ndim == 2:
+            imslice_seg = cv2.cvtColor(imslice.astype(np.uint8), cv2.COLOR_GRAY2RGB)
         else:
-            # If grayscale, make RGB so we can draw colored segmentation on it
-            if imslice.ndim == 2:
-                imslice_seg = cv2.cvtColor(imslice.astype(np.uint8), cv2.COLOR_GRAY2RGB)
-            else:
-                imslice_seg = imslice.copy()  # Work on copy
+            imslice_seg = imslice.copy()  # Work on copy
 
         if self.showSeg and hasattr(self, 'segSlice') and self.segSlice is not None:
             try:

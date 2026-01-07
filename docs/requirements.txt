@@ -1,0 +1,4 @@
+sphinx>=5.0
+sphinx-rtd-theme
+# Add any other heavy libraries your code imports if mocking fails,
+# but usually mocking handles the rest.

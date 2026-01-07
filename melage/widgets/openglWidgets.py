@@ -413,7 +413,7 @@ class openglWidgets():
 
 
 
-    def create_view1_tab(self, colorsCombinations):
+    def create_view1_tab_old(self, colorsCombinations):
         self.segmentationTab = QtWidgets.QWidget()
         self.segmentationTab.setObjectName("segmentationTab")
         self.gridLayout_seg = QtWidgets.QGridLayout(self.segmentationTab)
@@ -521,14 +521,7 @@ class openglWidgets():
         self.verticalLayout = QtWidgets.QVBoxLayout(self.widget)
         self.verticalLayout.setObjectName("verticalLayout")
 
-        self.label_points = QtWidgets.QLabel(self.widget)
-        self.label_points.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_points.setObjectName("label_points")
-        #self.label_points.setSizePolicy(sizePolicy)
-        #self.label_points.setFixedSize(QtCore.QSize(width_3d, 100))
-        txt = 'Sagittal:' + '0' + ', Coronal: ' + '0' + ', Axial: ' + '0'
-        self.label_points.setText(txt)
-        self.verticalLayout.addWidget(self.label_points)
+
         spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout.addItem(spacerItem)
         self.gridLayout_seg.addWidget(self.splitter_main_view1, 0, 0, 1, 1)
@@ -578,7 +571,347 @@ class openglWidgets():
 
         self.tabWidget.addTab(self.segmentationTab, "")
 
+
+
+
+
+
+    def set_view_mode_show_all_view1(self):
+        """
+        Mode 1: Show Everything (80% Left, 20% Right)
+        """
+        # 1. Make components visible
+        self.radio_row_widget_view1.setVisible(True)
+        self.right_panel_widget_view1.setVisible(True)
+
+        # 2. Force Splitter Sizes
+        # We give the left side 4 parts and right side 1 part (approx 80/20)
+        total_w = self.splitter_main_view1.width()
+        if total_w == 0: total_w = 1000  # Fallback if not rendered yet
+        self.splitter_main_view1.setSizes([int(total_w * 0.8), int(total_w * 0.2)])
+
+    def set_view_mode_focused_view1(self):
+        """
+        Mode 2: Focused View (100% Left OpenGL, No Radio Buttons)
+        """
+        # 1. Hide components
+        self.radio_row_widget_view1.setVisible(False)
+        self.right_panel_widget_view1.setVisible(False)
+
+        # 2. Force Splitter Sizes
+        # We give the left side ALL the width, and right side 0
+        # Even though right side is hidden, this helps reset the handle position
+        total_w = self.splitter_main_view1.width()
+        self.splitter_main_view1.setSizes([total_w, 0])
+
+    def create_view1_tab(self, colorsCombinations):
+
+
+        self.segmentationTab = QtWidgets.QWidget()
+        self.segmentationTab.setObjectName("segmentationTab")
+
+        # Main Layout
+        self.gridLayout_seg_1 = QtWidgets.QGridLayout(self.segmentationTab)
+        self.gridLayout_seg_1.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_seg_1.setObjectName("gridLayout_seg")
+
+        # --- Main Splitter (Divides Left and Right Panels) ---
+        self.splitter_main_view1 = QtWidgets.QSplitter(self.segmentationTab)
+        self.splitter_main_view1.setOrientation(QtCore.Qt.Horizontal)
+        self.splitter_main_view1.setChildrenCollapsible(
+            False)  # Prevents widgets from disappearing completely unless we hide them
+        self.splitter_main_view1.setObjectName("splitter_main")
+
+        # ========================================================
+        # LEFT SIDE SETUP
+        # ========================================================
+        self.left_panel_widget_view1 = QtWidgets.QWidget(self.splitter_main_view1)
+
+        # Main Layout for Left Panel (Vertical)
+        self.left_panel_layout_view1 = QtWidgets.QVBoxLayout(self.left_panel_widget_view1)
+        self.left_panel_layout_view1.setContentsMargins(0, 0, 0, 0)
+        self.left_panel_layout_view1.setSpacing(0)
+
+        # 1. Main OpenGL Widget (Expanding)
+        self.openGLWidget_11 = GLWidget(colorsCombinations, self.left_panel_widget_view1, imdata=None,
+                                        currentWidnowName='coronal', type='eco', id=11)
+
+        sizePolicy_gl = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy_gl.setHorizontalStretch(1)
+        sizePolicy_gl.setVerticalStretch(1)
+        self.openGLWidget_11.setSizePolicy(sizePolicy_gl)
+        self.openGLWidget_11.setMaximumSize(16777215, 16777215)
+        self.openGLWidget_11.setObjectName("openGLWidget_11")
+        self.openGLWidget_11.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+        self.left_panel_layout_view1.addWidget(self.openGLWidget_11, 1)
+
+        # 2. Controls Container
+        self.controls_container_view1 = QtWidgets.QWidget()
+        self.controls_container_view1.setObjectName("controls_container")
+
+        # Vertical Layout for Controls: [Label] -> [Slider Row] -> [Radio Row]
+        self.controls_layout_view1 = QtWidgets.QVBoxLayout(self.controls_container_view1)
+        self.controls_layout_view1.setContentsMargins(5, 5, 5, 5)
+        self.controls_layout_view1.setSpacing(2)  # Small spacing between Label and Slider
+
+        # Don't let controls expand vertically
+        self.controls_container_view1.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+
+        # --- A. Label (Top, Centered) ---
+        self.label_11 = QtWidgets.QLabel("Slice Info")
+        self.label_11.setAlignment(QtCore.Qt.AlignCenter)  # Center the text
+        self.label_11.setMinimumSize(QtCore.QSize(10, 15))
+        self.label_11.setObjectName("label_11")
+
+        # Add Label directly to vertical layout
+        self.controls_layout_view1.addWidget(self.label_11)
+
+        # --- B. Slider Row (Button + Slider) ---
+        self.slider_row_widget_view1 = QtWidgets.QWidget()
+        layout_hbox_slider = QtWidgets.QHBoxLayout(self.slider_row_widget_view1)
+        layout_hbox_slider.setContentsMargins(0, 0, 0, 0)
+        layout_hbox_slider.setSpacing(5)
+
+        # Play Button
+        self.btn_play_view1 = QtWidgets.QPushButton()
+        self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        self.btn_play_view1.setFixedSize(25, 25)
+        self.btn_play_view1.clicked.connect(partial(self.toggle_video_playback, 0))
+        self.btn_play_view1.setVisible(False)
+
+        # Slider
+        self.horizontalSlider_11 = QtWidgets.QScrollBar()
+        self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_11.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        layout_hbox_slider.addWidget(self.btn_play_view1)
+        layout_hbox_slider.addWidget(self.horizontalSlider_11)
+
+        self.video_timer_view1 = QtCore.QTimer(self)
+        self.video_timer_view1.timeout.connect(partial(self.advance_video_frame, 0))
+        # Add Slider Row to vertical layout
+        self.controls_layout_view1.addWidget(self.slider_row_widget_view1)
+
+        # --- C. Radio Buttons Row ---
+        self.radio_row_widget_view1 = QtWidgets.QWidget()
+        self.radio_row_widget_view1.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+        layout_hbox_radios = QtWidgets.QHBoxLayout(self.radio_row_widget_view1)
+        layout_hbox_radios.setContentsMargins(0, 5, 0, 0)  # Add a little top margin to separate from slider
+
+        self.radioButton_4 = QtWidgets.QCheckBox("Overlay")
+        self.radioButton_4.setChecked(True)
+        self.radioButton_1 = QtWidgets.QRadioButton("Option 1")
+        self.radioButton_1.setChecked(True)
+        self.radioButton_2 = QtWidgets.QRadioButton("Option 2")
+        self.radioButton_3 = QtWidgets.QRadioButton("Option 3")
+
+        layout_hbox_radios.addWidget(self.radioButton_4)
+        layout_hbox_radios.addWidget(self.radioButton_1)
+        layout_hbox_radios.addWidget(self.radioButton_2)
+        layout_hbox_radios.addWidget(self.radioButton_3)
+        layout_hbox_radios.addStretch()
+
+        # Add Radio Row to vertical layout
+        self.controls_layout_view1.addWidget(self.radio_row_widget_view1)
+
+        # Add the entire controls container to the main left panel
+        self.left_panel_layout_view1.addWidget(self.controls_container_view1, 0)
+
+        # ========================================================
+        # RIGHT SIDE SETUP
+        # ========================================================
+        self.right_panel_widget_view1 = QtWidgets.QWidget(self.splitter_main_view1)
+        self.right_panel_layout_view1 = QtWidgets.QVBoxLayout(self.right_panel_widget_view1)
+        self.right_panel_layout_view1.setContentsMargins(0, 0, 0, 0)
+
+        self.openGLWidget_14 = glScientific(colorsCombinations, self.right_panel_widget_view1, id=1)
+        self.openGLWidget_14.initiate_actions()
+        self.openGLWidget_14.setSizePolicy(sizePolicy_gl)  # Use same greedy policy
+
+        self.right_panel_layout_view1.addWidget(self.openGLWidget_14)
+
+        # Add to splitter
+        self.splitter_main_view1.addWidget(self.left_panel_widget_view1)
+        self.splitter_main_view1.addWidget(self.right_panel_widget_view1)
+
+        # Add to Tab
+        self.gridLayout_seg_1.addWidget(self.splitter_main_view1, 0, 0, 1, 1)
+        self.tabWidget.addTab(self.segmentationTab, "MRI Segmentation")
+
+        # Start in full mode
+        self.set_view_mode_show_all_view1()
+
+
+
+
+    def set_view_mode_show_all_view2(self):
+        """
+        Mode 1: Show Everything (80% Left, 20% Right)
+        """
+        # 1. Make components visible
+        self.radio_row_widget.setVisible(True)
+        self.right_panel_widget.setVisible(True)
+
+        # 2. Force Splitter Sizes
+        # We give the left side 4 parts and right side 1 part (approx 80/20)
+        total_w = self.splitter_main_view2.width()
+        if total_w == 0: total_w = 1000  # Fallback if not rendered yet
+        self.splitter_main_view2.setSizes([int(total_w * 0.8), int(total_w * 0.2)])
+
+    def set_view_mode_focused_view2(self):
+        """
+        Mode 2: Focused View (100% Left OpenGL, No Radio Buttons)
+        """
+        # 1. Hide components
+        self.radio_row_widget.setVisible(False)
+        self.right_panel_widget.setVisible(False)
+
+        # 2. Force Splitter Sizes
+        # We give the left side ALL the width, and right side 0
+        # Even though right side is hidden, this helps reset the handle position
+        total_w = self.splitter_main_view2.width()
+        self.splitter_main_view2.setSizes([total_w, 0])
+
     def create_view2_tab(self, colorsCombinations):
+        self.MRISegTab = QtWidgets.QWidget()
+        self.MRISegTab.setObjectName("segmentationTab")
+
+        # Main Layout
+        self.gridLayout_seg_2 = QtWidgets.QGridLayout(self.MRISegTab)
+        self.gridLayout_seg_2.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_seg_2.setObjectName("gridLayout_seg")
+
+        # --- Main Splitter (Divides Left and Right Panels) ---
+        self.splitter_main_view2 = QtWidgets.QSplitter(self.MRISegTab)
+        self.splitter_main_view2.setOrientation(QtCore.Qt.Horizontal)
+        self.splitter_main_view2.setChildrenCollapsible(
+            False)  # Prevents widgets from disappearing completely unless we hide them
+        self.splitter_main_view2.setObjectName("splitter_main")
+
+        # ========================================================
+        # LEFT SIDE SETUP
+        # ========================================================
+        self.left_panel_widget = QtWidgets.QWidget(self.splitter_main_view2)
+
+        # Main Layout for Left Panel (Vertical)
+        self.left_panel_layout = QtWidgets.QVBoxLayout(self.left_panel_widget)
+        self.left_panel_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_panel_layout.setSpacing(0)
+
+        # 1. Main OpenGL Widget (Expanding)
+        self.openGLWidget_12 = GLWidget(colorsCombinations, self.left_panel_widget, imdata=None,
+                                        currentWidnowName='coronal', type='mri', id=12)
+
+        sizePolicy_gl = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy_gl.setHorizontalStretch(1)
+        sizePolicy_gl.setVerticalStretch(1)
+        self.openGLWidget_12.setSizePolicy(sizePolicy_gl)
+        self.openGLWidget_12.setMaximumSize(16777215, 16777215)
+        self.openGLWidget_12.setObjectName("openGLWidget_11")
+        self.openGLWidget_12.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+        self.left_panel_layout.addWidget(self.openGLWidget_12, 1)
+
+        # 2. Controls Container
+        self.controls_container = QtWidgets.QWidget()
+        self.controls_container.setObjectName("controls_container")
+
+        # Vertical Layout for Controls: [Label] -> [Slider Row] -> [Radio Row]
+        self.controls_layout = QtWidgets.QVBoxLayout(self.controls_container)
+        self.controls_layout.setContentsMargins(5, 5, 5, 5)
+        self.controls_layout.setSpacing(2)  # Small spacing between Label and Slider
+
+        # Don't let controls expand vertically
+        self.controls_container.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+
+        # --- A. Label (Top, Centered) ---
+        self.label_12 = QtWidgets.QLabel("Slice Info")
+        self.label_12.setAlignment(QtCore.Qt.AlignCenter)  # Center the text
+        self.label_12.setMinimumSize(QtCore.QSize(10, 15))
+        self.label_12.setObjectName("label_11")
+
+        # Add Label directly to vertical layout
+        self.controls_layout.addWidget(self.label_12)
+
+        # --- B. Slider Row (Button + Slider) ---
+        self.slider_row_widget = QtWidgets.QWidget()
+        layout_hbox_slider = QtWidgets.QHBoxLayout(self.slider_row_widget)
+        layout_hbox_slider.setContentsMargins(0, 0, 0, 0)
+        layout_hbox_slider.setSpacing(5)
+
+        # Play Button
+        self.btn_play_view2 = QtWidgets.QPushButton()
+        self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        self.btn_play_view2.setFixedSize(25, 25)
+        self.btn_play_view2.clicked.connect(partial(self.toggle_video_playback, 1))
+        self.btn_play_view2.setVisible(False)
+
+        # Slider
+        self.horizontalSlider_12 = QtWidgets.QScrollBar()
+        self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_12.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        layout_hbox_slider.addWidget(self.btn_play_view2)
+        layout_hbox_slider.addWidget(self.horizontalSlider_12)
+
+        self.video_timer_view2 = QtCore.QTimer(self)
+        self.video_timer_view2.timeout.connect(partial(self.advance_video_frame, 1))
+        # Add Slider Row to vertical layout
+        self.controls_layout.addWidget(self.slider_row_widget)
+
+        # --- C. Radio Buttons Row ---
+        self.radio_row_widget = QtWidgets.QWidget()
+        self.radio_row_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+        layout_hbox_radios = QtWidgets.QHBoxLayout(self.radio_row_widget)
+        layout_hbox_radios.setContentsMargins(0, 5, 0, 0)  # Add a little top margin to separate from slider
+
+        self.radioButton_21 = QtWidgets.QCheckBox("Overlay")
+        self.radioButton_21.setChecked(True)
+        self.radioButton_21_1 = QtWidgets.QRadioButton("Option 1")
+        self.radioButton_21_1.setChecked(True)
+        self.radioButton_21_2 = QtWidgets.QRadioButton("Option 2")
+        self.radioButton_21_3 = QtWidgets.QRadioButton("Option 3")
+
+        layout_hbox_radios.addWidget(self.radioButton_21)
+        layout_hbox_radios.addWidget(self.radioButton_21_1)
+        layout_hbox_radios.addWidget(self.radioButton_21_2)
+        layout_hbox_radios.addWidget(self.radioButton_21_3)
+        layout_hbox_radios.addStretch()
+
+        # Add Radio Row to vertical layout
+        self.controls_layout.addWidget(self.radio_row_widget)
+
+        # Add the entire controls container to the main left panel
+        self.left_panel_layout.addWidget(self.controls_container, 0)
+
+        # ========================================================
+        # RIGHT SIDE SETUP
+        # ========================================================
+        self.right_panel_widget = QtWidgets.QWidget(self.splitter_main_view2)
+        self.right_panel_layout = QtWidgets.QVBoxLayout(self.right_panel_widget)
+        self.right_panel_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.openGLWidget_24 = glScientific(colorsCombinations, self.right_panel_widget, id=1)
+        self.openGLWidget_24.initiate_actions()
+        self.openGLWidget_24.setSizePolicy(sizePolicy_gl)  # Use same greedy policy
+
+        self.right_panel_layout.addWidget(self.openGLWidget_24)
+
+        # Add to splitter
+        self.splitter_main_view2.addWidget(self.left_panel_widget)
+        self.splitter_main_view2.addWidget(self.right_panel_widget)
+
+        # Add to Tab
+        self.gridLayout_seg_2.addWidget(self.splitter_main_view2, 0, 0, 1, 1)
+        self.tabWidget.addTab(self.MRISegTab, "MRI Segmentation")
+
+        # Start in full mode
+        self.set_view_mode_show_all_view2()
+
+
+
+    def create_view2_tab_old(self, colorsCombinations):
         self.MRISegTab = QtWidgets.QWidget()
         self.MRISegTab.setObjectName("segmentationTab")
         self.gridLayout_seg_2 = QtWidgets.QGridLayout(self.MRISegTab)
@@ -615,11 +948,7 @@ class openglWidgets():
         self.label_12.setAlignment(QtCore.Qt.AlignCenter)
         self.label_12.setObjectName("label_11")
 
-        #self.horizontalSlider_12 = QtWidgets.QScrollBar(self.splitter_slider_view2)
-        #self.horizontalSlider_12.setSizePolicy(sizePolicy)
-        #self.horizontalSlider_12.setMaximumSize(QtCore.QSize(self.width(), self.height() // 44))
-        #self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
-        #self.horizontalSlider_12.setObjectName("horizontalSlider_11")
+
         
         
         
@@ -725,14 +1054,6 @@ class openglWidgets():
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.widget_2)
         self.verticalLayout_2.setObjectName("verticalLayout")
 
-        self.label_points_2 = QtWidgets.QLabel(self.widget_2)
-        self.label_points_2.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_points_2.setObjectName("label_points")
-        # self.label_points_2.setSizePolicy(sizePolicy)
-        # self.label_points_2.setFixedSize(QtCore.QSize(width_3d, 100))
-        txt = 'Sagittal:' + '0' + ', Coronal: ' + '0' + ', Axial: ' + '0'
-        self.label_points_2.setText(txt)
-        self.verticalLayout_2.addWidget(self.label_points_2)
         spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_2.addItem(spacerItem)
         self.gridLayout_seg_2.addWidget(self.splitter_main_view2, 0, 0, 1, 1)

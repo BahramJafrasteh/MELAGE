@@ -1,291 +1,221 @@
+import textwrap
 
 __AUTHOR__ = 'Bahram Jafrasteh'
 
-# vTexCoord=[0.0,0.0,  1.0,0.0,  1.0,1.0,  0.0,1.0]
-# vVertices= [-1.0,-1.0,  1.0,-1.0,  1.0,1.0,  -1.0,1.0]
-
-# self.coord = [(0, 0), (0, 1), (1, 1), (1, 0)]
-# self.vertex = [(0, 0), (0, self.imHeight), (self.imWidth, self.imHeight), (self.imWidth, 0)]
-
+# ---------------------------------------------------------
+# Vertex Shader (Main)
+# ---------------------------------------------------------
 vsrc = """
-#version 330 
-in vec2 in_Vertex;
-in vec2 vertTexCoord;
+#version 330 core
+
+layout(location = 0) in vec2 in_Vertex;
+layout(location = 1) in vec2 vertTexCoord;
+
 out vec2 fragTexCoord;
+
 uniform mat4 g_matModelView;
-void main(void)
-{
-gl_Position = vec4(in_Vertex, 0.0, 1.0)*g_matModelView;
 
-fragTexCoord = vertTexCoord;
+void main(void) {
+    gl_Position = vec4(in_Vertex, 0.0, 1.0)*g_matModelView;
+
+    fragTexCoord = vertTexCoord;
 }
 """
+# ---------------------------------------------------------
+# Fragment Shader (Image Processing)
+# ---------------------------------------------------------
+import textwrap
 
-fsrc = """
-#version 330
-#extension GL_ARB_explicit_uniform_location : enable
-#extension GL_ARB_explicit_attrib_location : enable
+import textwrap
 
-//GPU FFT using a Stockham formulation
-#define HORIZONTAL
+import textwrap
 
-//precision mediump float;
+fsrc = textwrap.dedent("""
+    #version 330 core
 
-const float PI = 3.14159265359;
-uniform float u_transformSize;
-uniform float u_subtransformSize;
+    in vec2 fragTexCoord;
+    out vec4 fragColor;
 
+    // --- INPUTS ---
+    uniform sampler2D tex;
+    uniform vec2 iResolution;
 
+    // --- CONTROLS ---
+    // 0.0 = Off, 1.0 = Max Effect
+    uniform float u_denoise;    // Smoothing (reduces grain)
+    uniform float u_structure;  // Gentle detail boost (better than sharpen)
 
+    // Color Grading
+    uniform float u_brightness;     
+    uniform float u_contrast;       
+    uniform float u_saturation;     
+    uniform float u_gamma;          
 
-uniform sampler2D u_input;
-uniform sampler2D tex;
-uniform float threshold;
-uniform	  float			contrastMult;		/* IN: contrast multiplier */
-uniform	  float			brightnessAdd;		/* IN: brightness summand */			
-uniform	  vec3			deinterlace;		/* IN: de-interlacing information:
-												   s .. interlacing offset [pixel/texture size]
-												   t .. texture size [pixel]
-												   p .. mirror y axis, if 1.0 */
-uniform vec2 mousePos;
-uniform vec2 iResolution;
-uniform float maxRadius;
-uniform float Ilum;
+    uniform float u_nbi;
 
-const float	fZero= 0.0;
-const float	fOne= 1.0;
-const float	fTwo= 2.0;
-const float	fColScal= 256.0;
-const float Epsilon= 1e-10;
+    // Standard Luma
+    const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722); 
 
 
-in vec2 fragTexCoord;
-out vec4 fragColor;
 
+    // --- SORTING UTILS FOR MEDIAN FILTER ---
+#define s2(a, b) temp = a; a = min(a, b); b = max(temp, b);
+#define mn3(a, b, c) s2(a, b); s2(a, c); s2(b, c);
+#define mx3(a, b, c) s2(a, b); s2(a, c); s2(b, c);
 
-uniform	 int sobel;
-uniform float sobel_threshold;
+#define mnmx4(a, b, c, d) s2(a, b); s2(c, d); s2(a, c); s2(b, d);
+#define mnmx5(a, b, c, d, e) s2(a, b); s2(c, d); mn3(a, c, e); mx3(b, d, e);
+#define mnmx6(a, b, c, d, e, f) s2(a, d); s2(b, e); s2(c, f); mn3(a, b, c); mx3(d, e, f);
 
+// High-performance 3x3 Median 
+// This effectively removes the "black grid" from fiber scopes
+vec3 applyMedianFilter(sampler2D t, vec2 uv, vec2 px) {
+    vec3 v[9];
 
-vec2 multiplyComplex (vec2 a, vec2 b) {
-    return vec2(a[0] * b[0] - a[1] * b[1], a[1] * b[0] + a[0] * b[1]);
-}
-
-vec4 fft(vec2 vUV, float u_transformSize, float u_subtransformSize){
-    #ifdef HORIZONTAL
-        float index = vUV.x * u_transformSize - 0.5;
-    #else
-        float index = vUV.y * u_transformSize - 0.5;
-    #endif
-
-    float evenIndex = floor(index / u_subtransformSize) * (u_subtransformSize * 0.5) + mod(index, u_subtransformSize * 0.5);
-
-    //transform two complex sequences simultaneously
-    #ifdef HORIZONTAL
-        vec4 even = texture2D(u_input, vec2(evenIndex + 0.5, gl_FragCoord.y) / u_transformSize).rgba;
-        vec4 odd = texture2D(u_input, vec2(evenIndex + u_transformSize * 0.5 + 0.5, gl_FragCoord.y) / u_transformSize).rgba;
-    #else
-        vec4 even = texture2D(u_input, vec2(gl_FragCoord.x, evenIndex + 0.5) / u_transformSize).rgba;
-        vec4 odd = texture2D(u_input, vec2(gl_FragCoord.x, evenIndex + u_transformSize * 0.5 + 0.5) / u_transformSize).rgba;
-    #endif
-
-    float twiddleArgument1D = -2.0 * PI * (index / u_subtransformSize);
-    vec2 twiddle1D = vec2(cos(twiddleArgument1D), sin(twiddleArgument1D));
-
-    vec2 outputA = even.xy + multiplyComplex(twiddle1D, odd.xy);  //even.xy
-    vec2 outputB = even.zw + multiplyComplex(twiddle1D, odd.zw); //even.zw
-
-    //gl_gl_FragColor
-    return vec4(outputA,outputB);
-}
-
-vec4 sobel_kernel(sampler2D tex, vec2 coord)
-{
-	float w = maxRadius / iResolution.x;
-	float h = maxRadius / iResolution.y;
-
-	vec3 BL = texture2D(tex, coord + vec2( -w, -h)).rgb;
-	vec3 BM = texture2D(tex, coord + vec2(0.0, -h)).rgb;
-	vec3 BR = texture2D(tex, coord + vec2(  w, -h)).rgb;
-	vec3 ML = texture2D(tex, coord + vec2( -w, 0.0)).rgb;
-	vec3 MM = texture2D(tex, coord).rgb;
-	vec3 MR = texture2D(tex, coord + vec2(  w, 0.0)).rgb;
-	vec3 TL = texture2D(tex, coord + vec2( -w, h)).rgb;
-	vec3 TM = texture2D(tex, coord + vec2(0.0, h)).rgb;
-	vec3 TR = texture2D(tex, coord + vec2(  w, h)).rgb;
-	vec3 GradX = -TL + TR - 2.0 * ML + 2.0 * MR - BL + BR;
-    vec3 GradY = TL + 2.0 * TM + TR - BL - 2.0 * BM - BR;
-    return vec4 (length(vec2(GradX.r, GradY.r)), length(vec2(GradX.g, GradY.g)), length(vec2(GradX.b, GradY.b)), 1);
-	//vec4 sobel_edge_h = n[2] + (2.0*n[5]) + n[8] - (n[0] + (2.0*n[3]) + n[6]);
-  	//vec4 sobel_edge_v = n[0] + (2.0*n[1]) + n[2] - (n[6] + (2.0*n[7]) + n[8]);
-
-}
-
-vec3 RGBtoHSV(in vec3 RGB)
-{
-    vec4  P   = (RGB.g < RGB.b) ? vec4(RGB.bg, -1.0, 2.0/3.0) : vec4(RGB.gb, 0.0, -1.0/3.0);
-    vec4  Q   = (RGB.r < P.x) ? vec4(P.xyw, RGB.r) : vec4(RGB.r, P.yzx);
-    float C   = Q.x - min(Q.w, Q.y);
-    float H   = abs((Q.w - Q.y) / (6.0 * C + Epsilon) + Q.z);
-    vec3  HCV = vec3(H, C, Q.x);
-    float S   = HCV.y / (HCV.z + Epsilon);
-    return vec3(HCV.x, S, HCV.z);
-}
-vec3 HSVtoRGB(in vec3 HSV)
-{
-    float H   = HSV.x;
-    float R   = abs(H * 6.0 - 3.0) - 1.0;
-    float G   = 2.0 - abs(H * 6.0 - 2.0);
-    float B   = 2.0 - abs(H * 6.0 - 4.0);
-    vec3  RGB = clamp( vec3(R,G,B), 0.0, 1.0 );
-    return ((RGB - 1.0) * HSV.y + 1.0) * HSV.z;
-}
-
-mat3 kernel1 = mat3 (1.0, 0.0, -1.0,
-2.0, 0.0, 2.0,
-1.0, 0.0, -1.0);
-mat3 kernel2 = mat3 (1.0, 2.0, 1.0,
-0.0, 0.0, 0.0,
--1.0, -2.0, -1.0);
-
-float toGrayscale(vec3 source) {
-float average = (source.x+source.y+source.z)/3.0;
-return average;
-}
-
-
-float doConvolution(mat3 kernel) {
-float sum = 0.0;
-float current_pixelColor = toGrayscale(texture2D(tex,fragTexCoord).xyz);
-float xOffset = float(1)/1024.0;
-float yOffset = float(1)/768.0;
-float new_pixel00 = toGrayscale(texture2D(tex, vec2(fragTexCoord.x-xOffset,fragTexCoord.y-yOffset)).xyz);
-float new_pixel01 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x,fragTexCoord.y-yOffset)).xyz);
-float new_pixel02 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x+xOffset,fragTexCoord.y-yOffset)).xyz);
-vec3 pixelRow0 = vec3(new_pixel00,new_pixel01,new_pixel02);
-float new_pixel10 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x-xOffset,fragTexCoord.y)).xyz);
-float new_pixel11 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x,fragTexCoord.y)).xyz);
-float new_pixel12 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x+xOffset,fragTexCoord.y)).xyz);
-vec3 pixelRow1 = vec3(new_pixel10,new_pixel11,new_pixel12);
-float new_pixel20 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x-xOffset,fragTexCoord.y+yOffset)).xyz);
-float new_pixel21 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x,fragTexCoord.y+yOffset)).xyz);
-float new_pixel22 = toGrayscale(texture2D(tex,vec2(fragTexCoord.x+xOffset,fragTexCoord.y+yOffset)).xyz);
-vec3 pixelRow2 = vec3(new_pixel20,new_pixel21,new_pixel22);
-vec3 mult1 = (kernel[0]*pixelRow0);
-vec3 mult2 = (kernel[1]*pixelRow1);
-vec3 mult3 = (kernel[2]*pixelRow2);
-sum= mult1.x+mult1.y+mult1.z+mult2.x+mult2.y+mult2.z+mult3.x+mult3.y+mult3.z;
-return sum;
-
-}
-
-
-void main(void)
-{
-int gaussianBlue = 0;
-
-if (sobel== 1) //soble kernel
-    {
-    vec4 color0 = texture2D(tex, fragTexCoord);
-vec4 bw = vec4(vec3(color0.r, color0.g, color0.b), color0.a);
-vec2 uv = gl_FragCoord.xy/iResolution.xy;
-vec2 mousePosition= mousePos/iResolution.xy;
-  float dist = distance(mousePosition, uv);
-  float distx = abs(mousePosition.x-uv.x);
-  float disty = abs(mousePosition.y-uv.y);
-  float mixAmount = clamp((dist - 0.0) / 0.2, 0., 1.);
-  //color0.r += mixAmount;
-  //vec4 mouseColor= texture2D(tex, mousePosition.xy); 
-  //float distcolor = distance(color0.rgb, mouseColor.rgb);
-  //float mixAmountc = clamp((distcolor - 0.0) / (1.0-maxRadius), 0., 1.);
-  //color0 = mix(color0, bw, mixAmount);
-  //color0 = mix(color0, bw, mixAmountc);
-  //color0.r += mixAmountc;
-//float luminanceM = dot (vec3(0.114 ,0.587,0.299 ),mouseColor.rgb);
-
-vec4 sobelk = sobel_kernel(tex, fragTexCoord.st);       
-
-
-    float luminance = dot (vec3(0.114 ,0.587,0.299 ),color0.rgb);
-
-    if(luminance<sobel_threshold)
-           fragColor = vec4(color0.rgba); 
-
-    else   
-    {   
-        //if ( (distx <  0.08) && (disty < 0.04))
-         //   fragColor = vec4(0.0,1,0,1);
-        //else
-        //    fragColor = vec4(color0.rgba); 
-        color0.r += sobelk.r;
-        color0.g = sobelk.g;
-        color0.b += sobelk.b;
-
+    // 1. Sample the 3x3 grid
+    for(int dX = -1; dX <= 1; ++dX) {
+        for(int dY = -1; dY <= 1; ++dY) {
+            vec2 offset = vec2(float(dX), float(dY));
+            v[(dX + 1) * 3 + (dY + 1)] = texture(t, uv + offset * px).rgb;
         }
-  fragColor = mix(color0, bw, mixAmount);
-
-    vec4 pixelColor = texture2D(tex, fragTexCoord);
-    float horizontalSum = 0.0;
-    float verticalSum = 0.0;
-    float averageSum = 0.0;
-    horizontalSum = doConvolution(kernel1);
-    verticalSum = doConvolution(kernel2);
-    if( (verticalSum > sobel_threshold)|| (horizontalSum >sobel_threshold)||(verticalSum < -sobel_threshold)|| (horizontalSum <-sobel_threshold))
-        averageSum = pixelColor.x;
-    else
-        averageSum = 1.0;
-    fragColor = vec4(averageSum,averageSum,averageSum,1.0);
-
-}
-else
-{
-	vec4 pixelColor = texture2D(tex, fragTexCoord);
-
-    pixelColor.rgb /= pixelColor.a;
-
-    // first apply brightness
-    pixelColor.rgb += brightnessAdd;
-
-    // then apply contrast
-    pixelColor.rgb = ((pixelColor.rgb - 0.5) * max(contrastMult, 0.0)) + 0.5;
-
-    // Return final pixel color
-    pixelColor.rgb *= pixelColor.a;
-
-    vec3 current_Color;
-
-    current_Color = vec3(pixelColor.r, pixelColor.g, pixelColor.b);
-
-    if (threshold>0)
-    {
-        float luminance = dot (vec3(0.114 ,0.587,0.299 ),current_Color);
-        if(luminance<threshold)
-            fragColor = vec4(1.0);
-        else
-            fragColor = vec4(0.0);
-    }
-    else
-    {
-        //vec3 col_hsv = RGBtoHSV(current_Color);
-        //uniform float     u_saturate;
-        //float     u_saturate;
-        //u_saturate = 10.0;
-        //col_hsv.y *= (u_saturate * 2.0);
-        //vec3 col_rgb = HSVtoRGB(col_hsv.rgb);
-        //fragColor = vec4(col_rgb.rgb, fOne);    
-        fragColor =	vec4(current_Color, fOne);
-
-        //fragColor = fft(gl_FragCoord.xy, u_transformSize,u_subtransformSize);
     }
 
+    vec3 temp;
 
-}    
+    // 2. Optimized Sorting Network for 9 elements
+    // This sorts the pixel array to find the true "middle" color
+    s2(v[1], v[2]); s2(v[4], v[5]); s2(v[7], v[8]);
+    s2(v[0], v[1]); s2(v[3], v[4]); s2(v[6], v[7]);
+    s2(v[1], v[2]); s2(v[4], v[5]); s2(v[7], v[8]);
+    s2(v[0], v[3]); s2(v[5], v[8]); s2(v[4], v[7]);
+    s2(v[3], v[6]); s2(v[1], v[4]); s2(v[2], v[5]);
+    s2(v[4], v[7]); s2(v[4], v[2]); s2(v[6], v[4]);
+    s2(v[4], v[2]);
+
+    // v[4] is now the median value
+    return v[4];
 }
-"""
 
+
+    vec3 applyNBI(vec3 color) {
+        // Physical NBI uses 415nm (Blue) and 540nm (Green) light.
+        // Digital approximation: Drop Red, map Green->Red, Blue->Green+Blue
+
+        // 1. Grayscale extraction heavily weighted to blue/green
+        float hemoglobin = dot(color, vec3(0.0, 0.6, 0.4));
+
+        // 2. Create a "false color" map
+        vec3 nbiColor = vec3(
+            color.g * 1.2,  // Map Green channel to Red output (enhances surface vessels)
+            color.b * 1.1,  // Map Blue to Green
+            color.b * 1.5   // Boost Blue for deep contrast
+        );
+
+        // 3. Mix based on intensity to keep it viewable
+        return mix(color, nbiColor, u_nbi);
+    }
+
+    // --- COLOR GRADING HELPER ---
+    vec3 applyColorGrade(vec3 color) {
+        vec3 res = color;
+
+        // 1. Saturation
+        float intensity = dot(res, LUMA);
+        float sat = 1.0; 
+        // You can link this to a uniform if you wish
+        res = mix(vec3(intensity), res, sat);
+
+        // 2. Contrast
+        float cont = (u_contrast == 0.0) ? 1.0 : u_contrast;
+        res = (res - 0.5) * cont + 0.5;
+
+        // 3. Brightness
+        res = res + u_brightness;
+
+        // 4. Gamma
+        float gam = (u_gamma == 0.0) ? 1.0 : u_gamma;
+        if (gam > 0.0) res = pow(max(res, vec3(0.0)), vec3(1.0 / gam));
+
+        return res;
+    }
+
+    void main(void) {
+        vec2 px = (iResolution.x > 0.0) ? (1.0 / iResolution) : vec2(1.0/1024.0, 1.0/768.0);
+
+        // ------------------------------------------------
+        // 1. DENOISE (Gaussian Smoothing)
+        // ------------------------------------------------
+        // We sample the center and 4 neighbors to create a smooth base.
+        vec3 c  = texture(tex, fragTexCoord).rgb;
+        //vec3 n  = texture(tex, fragTexCoord + vec2( 0.0, -px.y)).rgb;
+        //vec3 s  = texture(tex, fragTexCoord + vec2( 0.0,  px.y)).rgb;
+        //vec3 e  = texture(tex, fragTexCoord + vec2( px.x,  0.0)).rgb;
+        //vec3 w  = texture(tex, fragTexCoord + vec2(-px.x,  0.0)).rgb;
+
+        // Calculate a blurred version
+        //vec3 blurred = (c * 4.0 + n + s + e + w) * 0.125;
+        vec3 blurred = applyMedianFilter(tex, fragTexCoord, px);
+
+        // Mix: If u_denoise is 0.0, we use original 'c'. 
+        // If u_denoise is 1.0, we use 'blurred'.
+        // Suggested default for Endoscopy: 0.3
+        vec3 base = mix(c, blurred, u_denoise);
+
+        // ------------------------------------------------
+        // 2. STRUCTURE (Unsharp Mask on the SMOOTH base)
+        // ------------------------------------------------
+        // We calculate detail using the *smoothed* image vs the *blurred* image.
+        // This prevents us from sharpening the noise (grain).
+        // Simple neighbor check for edges
+        vec3 n = texture(tex, fragTexCoord + vec2(0.0, -px.y)).rgb;
+        vec3 s = texture(tex, fragTexCoord + vec2(0.0, px.y)).rgb;
+        vec3 e = texture(tex, fragTexCoord + vec2(px.x, 0.0)).rgb;
+        vec3 w = texture(tex, fragTexCoord + vec2(-px.x, 0.0)).rgb;
+
+        vec3 neighbors = (n + s + e + w) * 0.25;
+
+        vec3 detail = base - neighbors;
+
+        // Apply detail. 
+        // u_structure: 0.0 = Flat, 2.0 = High Definition
+        // Suggested default: 0.5
+        vec3 structured = base + detail * u_structure;
+
+
+        // 3. VASCULAR ENHANCEMENT (NBI)
+            if (u_nbi > 0.0) {
+                structured = applyNBI(structured);
+            }
+
+        // ------------------------------------------------
+        // 3. GLARE COMPRESSION (Tone Mapping)
+        // ------------------------------------------------
+        // Instead of painting over glare, we dampen the brightest pixels.
+        // This recovers texture in wet areas without artifacts.
+        float lum = dot(structured, LUMA);
+        if (lum > 0.8) {
+            // Softly compress highlights above 0.8 luminance
+            float compression = 1.0 - smoothstep(0.8, 1.2, lum) * 0.3;
+            structured *= compression;
+        }
+
+
+
+        // ------------------------------------------------
+        // 4. FINAL COLOR GRADING
+        // ------------------------------------------------
+        vec3 finalColor = applyColorGrade(structured);
+
+        fragColor = vec4(finalColor, 1.0);
+    }
+""")
+# ---------------------------------------------------------
+# Vertex Shader (Paint/Points)
+# ---------------------------------------------------------
 vsrcPaint = """
 #version 330 
-in vec2 in_Vertex;
+// FORCE location 0 so glVertex2f finds the right input
+layout(location = 0) in vec2 in_Vertex;
 uniform mat4 g_matModelView;
 out vec4 positionGL;
 void main(void)
@@ -297,18 +227,16 @@ gl_PointSize = 200.0;
 }
 """
 
-fsrcPaint = """
-#version 330 
+# ---------------------------------------------------------
+# Fragment Shader (Paint/Points)
+# ---------------------------------------------------------
+fsrcPaint = textwrap.dedent("""
+    #version 330 core
 
-uniform vec4 my_color;
-out vec4 FragColor;
-in vec4 positionGL;
+    uniform vec4 my_color;
+    out vec4 FragColor;
 
-
-
-void main(void)
-{
-FragColor = my_color;
-
-}
-"""
+    void main(void) {
+        FragColor = my_color;
+    }
+""")

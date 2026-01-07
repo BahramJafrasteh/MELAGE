@@ -81,27 +81,36 @@ class VideoLabelProxy:
         print(f"\nSaved successfully.")
 
     def _worker(self):
-        """Background thread filling the OrderedDict."""
+        """Background thread filling the OrderedDict. Optimized to prevent CPU spikes."""
         while not self.stop_event.is_set():
-            # Check size without blocking
+            # 1. Check Condition (Atomic/Locked)
             with self.lock:
-                full = (len(self.buffer) >= self.buffer_size)
+                # Sleep if buffer is full OR we reached the end of the video
+                should_sleep = (len(self.buffer) >= self.buffer_size) or \
+                               (self.worker_idx >= self.shape[2])
 
-            if full:
-                time.sleep(0.005)
+            # 2. SLEEP if Idle (Crucial Fix)
+            # This prevents the "while True: continue" busy loop at the end of the video
+            if should_sleep:
+                time.sleep(0.01)
                 continue
 
+            # 3. Read & Process
             with self.lock:
-                if self.worker_idx >= self.shape[2]:  # End of video
+                # Double-check index in case it changed while sleeping
+                if self.worker_idx >= self.shape[2]:
                     continue
 
                 ret, frame = self._cap.read()
+
                 if ret:
                     # OPTIMIZATION: Convert to 2D immediately to save RAM
                     if frame.ndim == 3:
-                        frame = frame[:, :, 0]
+                        # Taking just one channel is faster than cvtColor for labels
+                        # Assuming grayscale/binary info is replicated across channels
+                        frame = frame[..., 0]
 
-                    # Store in Dict (Instant Access)
+                        # Store in Dict (Instant Access)
                     self.buffer[self.worker_idx] = frame
 
                     # FIFO Removal: Remove oldest if full
@@ -110,7 +119,14 @@ class VideoLabelProxy:
 
                     self.worker_idx += 1
                 else:
+                    # Read failed (EOF or corrupt frame)
                     pass
+
+            # 4. Handle Read Failure Sleep
+            # If ret was False, we sleep outside the lock to avoid hammering the disk
+            if not ret:
+                time.sleep(0.01)
+
 
     def get_frame(self, index):
         """
@@ -142,7 +158,11 @@ class VideoLabelProxy:
 
                 ret, frame = self._cap.read()
                 if ret:
-                    if frame.ndim == 3: frame = frame[:, :, 0]
+                    if frame.ndim == 3:
+                        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        #_, frame = cv2.threshold(frame, 127, 255, cv2.THRESH_BINARY)
+                        #frame = frame//255
+                        frame = frame[...,0]
                     self.buffer[index] = frame
                     self.worker_idx += 1
                     return frame
@@ -237,33 +257,46 @@ class VideoArrayProxy:
     def _worker(self):
         """Background thread filling the OrderedDict."""
         while not self.stop_event.is_set():
-            # Check size without blocking for long
+            # 1. Check Buffer Size
             with self.lock:
-                full = (len(self.buffer) >= self.buffer_size)
+                # If buffer is full, we stop "producing"
+                # If we are at the end of the video, we also stop "producing"
+                should_sleep = (len(self.buffer) >= self.buffer_size) or \
+                               (self.worker_idx >= self.frames)
 
-            if full:
-                time.sleep(0.005)  # Tiny sleep to yield CPU
+            # 2. SLEEP if there is nothing to do (Crucial Fix!)
+            # Prevents 100% CPU usage loop at the end of video
+            if should_sleep:
+                time.sleep(0.01)
                 continue
 
+            # 3. Read Frame
             with self.lock:
+                # Double-check index inside lock (in case a seek happened during sleep)
                 if self.worker_idx >= self.frames:
                     continue
 
                 ret, frame = self._cap.read()
-                if ret:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                    # Store in Dict (Instant Access)
+                if ret:
+                    # Success: Process frame
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     self.buffer[self.worker_idx] = frame
 
-                    # Maintain Size: Remove the OLDEST item if we exceeded limit
-                    # popitem(last=False) removes the first item inserted (FIFO)
+                    # FIFO Maintenance: Pop oldest
                     while len(self.buffer) > self.buffer_size:
                         self.buffer.popitem(last=False)
 
                     self.worker_idx += 1
                 else:
+                    # Failure (End of File): Release Lock & Sleep
+                    # This prevents the 'else: pass' tight loop
                     pass
+
+            # If read failed (EOF), sleep a bit to avoid hammering the disk/CPU
+            if not ret:
+                time.sleep(0.01)
+
 
     def get_frame(self, index):
         """
@@ -323,5 +356,5 @@ class VideoArrayProxy:
             return self.get_frame(frame_idx)[full_slice[0], full_slice[1]]
 
         if isinstance(frame_idx, slice):
-            # ... (slice handling logic same as before) ...
+            # ... (slice handling logic) ...
             return np.zeros((1, 1, 1, 3), dtype=np.uint8)

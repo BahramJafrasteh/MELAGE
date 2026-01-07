@@ -36,7 +36,6 @@ class readData():
         self._npSeg = None
         self._num_dims = 3
         self.current_frame = 0
-        self.type = type
         self.isChunkedVideo = False
         #if type=='t1':
         #    self.target_system = target_system#'IPL'

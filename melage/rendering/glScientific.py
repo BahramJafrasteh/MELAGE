@@ -314,14 +314,28 @@ class glScientific(GLViewWidget):
         """
         if self._seg_im is None:
             return
-        filter = (
+
+        opts = QFileDialog.DontUseNativeDialog
+        filter_str = (
             "Standard Screen Res (*.png);;"
             "High Res (1000px) (*.png);;"
             "High Res (2000px) (*.png);;"
-            "High Res (3000px) (*.png);;"
+            "High Res (3000px) (*.png)"
         )
+
+        # Define exactly which one you want as the default
+        default_filter = "Standard Screen Res (*.png)"
+
         opts = QFileDialog.DontUseNativeDialog
-        fileObj, selected_filter = QFileDialog.getSaveFileName(self, "Open File", self.source_dir, filter, options=opts)
+
+        fileObj, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save File",
+            self.source_dir,
+            filter=filter_str,
+            initialFilter=default_filter,  # This sets the primary selection
+            options=opts
+        )
         if fileObj == '':
             return
         filename = fileObj + '.png'
@@ -342,6 +356,9 @@ class glScientific(GLViewWidget):
             scale = 6000 / max(init_width, init_height)
             width = int(init_width * scale)
             height = int(init_width * scale)
+        else:
+            width = width+1
+            height = height+1
 
         self.setFixedWidth(int(width))
         self.setFixedHeight(int(height))
@@ -623,7 +640,7 @@ class glScientific(GLViewWidget):
         elev = self.opts['elevation']
         azim = self.opts['azimuth']
         dist = self.opts['distance']
-
+        azim = azim % 360
         info_text = f"Elev: {elev:.1f}\nAzim: {azim:.1f}\nDist: {dist:.1f}"
 
         # 3. Draw 2D Text Overlay
@@ -786,7 +803,83 @@ class glScientific(GLViewWidget):
         tr.frustum(left, right, bottom, top, nearClip, farClip)
         return tr
 
-    def _compute_coordinates(self, ev, z=None):
+    def ray_cast_value(self, ev):
+        """
+        Manually shoots a ray from the mouse position into the dataset
+        to find the first non-zero voxel (simulating a depth read).
+        """
+        # 1. Get the Ray Start (Near Plane) and End (Far Plane)
+        # We use your existing helper to get World Coordinates at z=0 and z=1
+        p_start, _ = self._compute_coordinates(ev, z=0.0, exact=True)
+        p_end, _ = self._compute_coordinates(ev, z=1.0, exact=True)
+
+        # Convert to numpy arrays for vector math
+        p0 = np.array(p_start[:3])
+        p1 = np.array(p_end[:3])
+
+        # 2. Calculate Direction and Steps
+        # Length of the ray through the world
+        vector = p1 - p0
+        length = np.linalg.norm(vector)
+        if length == 0: return None, None
+
+        direction = vector / length
+
+        # Determine step size (0.5 ensures we don't skip voxels)
+        step_size = 0.5
+        # Limit the search distance (e.g., to the diagonal of the volume)
+        max_dist = np.linalg.norm(self.maxXYZ) * 2.0
+
+        # 3. March along the ray
+        current_dist = 0.0
+
+        # Get array bounds
+        d_max, h_max, w_max = self._seg_im.shape[:3]
+
+        while current_dist < max_dist:
+            # Current World Coordinate
+            p_curr = p0 + direction * current_dist
+
+            # --- Apply Your Coordinate Transforms (World -> Voxel) ---
+            # NOTE: These must match exactly the inverse of how you display them.
+            # Based on your gotoLoc logic:
+            # vox_z = max[0] - world_z
+            # vox_x = max[2] - world_x
+            # vox_y = world_y
+
+            vox_z_idx = int(self.maxXYZ[0] - p_curr[2])
+            vox_x_idx = int(self.maxXYZ[2] - p_curr[0])
+            vox_y_idx = int(p_curr[1])
+
+            # 4. Check Bounds
+            if (0 <= vox_x_idx < d_max) and \
+                    (0 <= vox_y_idx < h_max) and \
+                    (0 <= vox_z_idx < w_max):
+
+                # 5. Check Data Intensity
+                # Accessing self._seg_im[x, y, z]
+                # We check the Alpha channel (index 3) if it exists, or value > 0
+                voxel_val = self._seg_im[vox_x_idx, vox_y_idx, vox_z_idx]
+
+                # Assuming RGBA (4 channels) or Scalar
+                hit = False
+                if isinstance(voxel_val, np.ndarray) and voxel_val.shape[0] > 3:
+                    # Check Alpha channel (transparency)
+                    if voxel_val[3] > 0:
+                        hit = True
+                elif voxel_val > 0:
+                    hit = True
+
+                if hit:
+                    # FOUND IT!
+                    # Return the raw World Coordinate of the hit
+                    return np.array([p_curr[0], p_curr[1], p_curr[2], 1.0])
+
+            current_dist += step_size
+
+        return None
+
+    def _compute_coordinates(self, ev, z=None, exact=False):
         """
         Convert 2D Mouse Position + Depth (Z) -> 3D World Coordinates.
         """
@@ -800,11 +893,11 @@ class glScientific(GLViewWidget):
         # 2. Background Handling
         # If z is 1.0 (Background) or 0.0 (Near clip), use the last valid depth
         # This allows drawing "in the air" near the object.
-        if z == 1.0 or z == 0.0:
-            z = self._lastZ
-        else:
-            # Update last valid depth for next time
-            self._lastZ = z
+        if not exact:
+            if z == 1.0 or z == 0.0:
+                z = self._lastZ
+            else:
+                self._lastZ = z
 
         # 3. Normalized Device Coordinates (NDC)
         # Convert x,y from Pixels (0 to Width) to NDC (-1 to +1)
@@ -1000,17 +1093,38 @@ class glScientific(GLViewWidget):
 
 
         #print(points)
+                # --- GOTO LOC Logic (Updated) ---
         elif self._gotoLoc:
-            #points[0] -= 1
-            #points[-1] -= 1
+            points = self.ray_cast_value(ev)
+
+            if points is None:
+                # Ray missed the volume (clicked background)
+                return
+
+            # 2. Apply Coordinate System Transformations
+            # Convert OpenGL World coordinates back to your Voxel/Array coordinates.
+            # (Based on the logic you provided)
+
+            # Invert Z (Voxel X comes from World Z)
             points[2] = self.maxXYZ[0] - points[2]
+
+            # Invert X (Voxel Z comes from World X)
             points[0] = self.maxXYZ[2] - points[0]
-            if self.GLV._ax==0:
-                windowName = 'sagittal'
-            elif self.GLV._ax == 1:
-                windowName = 'coronal'
-            elif self.GLV._ax == 2:
-                windowName = 'axial'
+
+            # Note: points[1] (Y) usually maps directly to Voxel Y, unless flipped.
+            # If you need Y flipping, uncomment: points[1] = self.maxXYZ[1] - points[1]
+
+            # 3. Determine Axis Name for the signal
+            windowName = 'sagittal'  # Default
+            if hasattr(self.GLV, '_ax'):
+                if self.GLV._ax == 0:
+                    windowName = 'sagittal'
+                elif self.GLV._ax == 1:
+                    windowName = 'coronal'
+                elif self.GLV._ax == 2:
+                    windowName = 'axial'
+
+            # 4. Emit the signal with the calculated surface point
             self.point3dpos.emit(points, windowName)
         else:
             self.point3dpos.emit(points, None)

@@ -775,12 +775,12 @@ def read_segmentation_file(self, file, reader, update_color_s=True):
     if not all([i == j for i, j in zip(reader.npImage.shape, data.shape)]):
         return data, True, False
     data_add = None
-    if rhasattr(self,'readImECO.npSeg'):
-        if reader != self.readImECO:
-            data_add = self.readImECO.npSeg
-    if rhasattr(self, 'readImMRI.npSeg'):
-        if reader != self.readImMRI:
-            data_add = self.readImMRI.npSeg
+    if rhasattr(self,'readView1.npSeg'):
+        if reader != self.readView1:
+            data_add = self.readView1.npSeg
+    if rhasattr(self, 'readView2.npSeg'):
+        if reader != self.readView2:
+            data_add = self.readView2.npSeg
     uq = np.unique(data)
     if uq.shape[0]>255:
         if data.max()>80:
@@ -1215,11 +1215,11 @@ def make_all_seg_visibl(self):
         widget = getattr(self, name)
         widget.colorInd = ind
         if k in [14]:
-            widget.paint(self.readImECO.npSeg,
-                         self.readImECO.npImage, None)
+            widget.paint(self.readView1.npSeg,
+                         self.readView1.npImage, None)
         elif k in [24]:
-            widget.paint(self.readImMRI.npSeg,
-                         self.readImMRI.npImage, None)
+            widget.paint(self.readView2.npSeg,
+                         self.readView2.npImage, None)
         else:
             widget.colorObject = colorPen
             #widget.colorInd = len(self.colorsCombinations)
@@ -1613,7 +1613,7 @@ def _read_standard_color(file):
             if not clean_line:
                 continue
 
-            parts = clean_line.split()
+            parts = re.split(r'[,\t\s]+', clean_line)
 
             # Standard Format: ID Name R G B (A)
             # We need at least ID, Name, R, G, B (5 parts)
@@ -1668,7 +1668,7 @@ def _read_heuristic_color(file):
                 continue
             try:
                 # Clean line
-                spl = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l[:-1]).split() if r != '']
+                spl = list(filter(None, re.split(r'[,\t\s"]+', l.strip())))
                 spl_1 = spl[1:]  # Skip first element (usually ID)
 
                 if len(spl_1) > 3:
@@ -1702,7 +1702,8 @@ def _read_heuristic_color(file):
         # Extract names
         color_name = []
         for l in clean_lines:
-            tokens = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l.strip()).split()]
+            #tokens = [r.replace('"', '') for r in re.sub(r'\s+', ' ', l.strip()).split()]
+            tokens = list(filter(None, re.split(r'[,\t\s"]+', l.strip())))
             if len(tokens) > indices_non_numeric:
                 prefix = tokens[0]
                 suffix = tokens[indices_non_numeric]
@@ -1713,12 +1714,12 @@ def _read_heuristic_color(file):
                 color_name.append(cur_name)
 
         # Extract IDs
-        indices_el = [int(re.sub(r'\s+', ' ', l).split()[0]) for l in clean_lines]
+        indices_el = [int(l.replace(',', ' ').replace('"', '').split()[0]) for l in clean_lines if l.strip()]
 
         # Extract RGB/RGBA
         rgb_data = []
         for l in clean_lines:
-            tokens = [r for r in re.sub(r'\s+', ' ', l).split()]
+            tokens = list(filter(None, re.split(r'[,\t\s"]+', l.strip())))
             vals = [float(s) for s in tokens[index_colr_start:index_colr_end]]
             rgb_data.append(vals)
 
@@ -2011,8 +2012,8 @@ def find_avail_widgets(self):
     """
     prefix = 'openGLWidget_'
     widgets = [1, 2, 3, 4, 5, 6, 11, 12]
-    widgets_mri = [4, 5, 6, 12, 24]
-    widgets_eco = [11, 1, 2, 3, 14]
+    widgets_view2 = [4, 5, 6, 12, 24]
+    widgets_view1 = [11, 1, 2, 3, 14]
     _eco = False
     _mri = False
 
@@ -2020,16 +2021,16 @@ def find_avail_widgets(self):
         name = prefix + str(k)
         widget = getattr(self, name)
         if widget.isVisible():
-            if k in widgets_eco:
+            if k in widgets_view1:
                 _eco = True
-            elif k in widgets_mri:
+            elif k in widgets_view2:
                 _mri = True
     if _eco and _mri:
         widgets = widgets
     elif _eco:
-        widgets = widgets_eco
+        widgets = widgets_view1
     elif _mri:
-        widgets = widgets_mri
+        widgets = widgets_view2
     return widgets
 
 ###################### set cursors ######################
@@ -2695,36 +2696,41 @@ def point_in_contour(segSlice, point, color):
 ######extract attributes from widget and assign it to the dictionary######################
 
 
-
 def getAttributeWidget(widget, nameWidget, dic):
     """
     Extract attributes from widget and assign it to the dictionary.
     Safe for lists containing Widgets.
     """
 
-    def IsSafeList(val):
-        """Check if a list contains only safe, pickle-able items"""
-        if not isinstance(val, list):
+    def IsSafe(val):
+        """
+        Recursively checks if a value (or collection) is safe to save.
+        Returns False if it contains QObjects, QWidgets, or QActions.
+        """
+        # 1. Explicitly reject Qt Objects
+        if isinstance(val, (QtCore.QObject, QtWidgets.QWidget, QtWidgets.QAction, QtWidgets.QLabel,
+                            QtWidgets.QFrame)):
             return False
-        if len(val) == 0:
-            return True
-        # If the list contains Qt Objects (Widgets), DO NOT save it
-        for item in val:
-            if isinstance(item, (QtCore.QObject, QtWidgets.QWidget)):
-                return False
-        return True
 
-    def IsKnownType(val):
-        # Check basic primitives
-        if val is None: return True
+        # 2. Allow Primitives
+        if val is None:
+            return True
         if isinstance(val, (int, float, str, bool, np.ndarray, tuple, Qt.GlobalColor)):
             return True
-        # Check dictionaries
-        if isinstance(val, (dict, defaultdict)):
-            return True
-        # Check Lists (using the safety check)
+
+        # 3. Check Lists (Recursive)
         if isinstance(val, list):
-            return IsSafeList(val)
+            # If empty, it's safe. If not, check every item.
+            if len(val) == 0: return True
+            return all(IsSafe(x) for x in val)
+
+        # 4. Check Dictionaries (Recursive) - THIS FIXES YOUR ISSUE
+        if isinstance(val, (dict, defaultdict)):
+            # Check every value in the dictionary
+            if len(val) == 0: return True
+            return all(IsSafe(v) for v in val.values())
+
+        # Reject anything else
         return False
 
     def updateDic(val, attr, at):
@@ -2732,7 +2738,7 @@ def getAttributeWidget(widget, nameWidget, dic):
             try:
                 if hasattr(val, el):
                     vl = getattr(val, el)()
-                    if IsKnownType(vl):
+                    if IsSafe(vl):
                         dic[nameWidget][at][el] = vl
             except Exception as e:
                 print(f'Update Dictionary Error for {at}: {e}')
@@ -2743,7 +2749,7 @@ def getAttributeWidget(widget, nameWidget, dic):
     for at in dir(widget):
         if at.startswith('_') or at == 'program':
             continue
-
+        success = False
         val = getattr(widget, at)
 
         # --- 1. HANDLE WIDGET TYPES ---
@@ -2751,106 +2757,48 @@ def getAttributeWidget(widget, nameWidget, dic):
             dic[nameWidget][at] = defaultdict(list)
             dic[nameWidget][at]['type'] = 'QSlider'
             updateDic(val, ['minimum', 'maximum', 'value', 'isHidden'], at)
+            success = 1
 
         elif isinstance(val, QtWidgets.QLabel):
             dic[nameWidget][at] = defaultdict(list)
             dic[nameWidget][at]['type'] = 'QLabel'
             updateDic(val, ['text', 'isHidden'], at)
+            success = 2
 
         elif isinstance(val, QtWidgets.QRadioButton):
             dic[nameWidget][at] = defaultdict(list)
             dic[nameWidget][at]['type'] = 'QRadioButton'
             updateDic(val, ['isHidden', 'isChecked'], at)
+            success = 3
 
-        elif type(val).__name__ == 'AnimatedToggle':  # Check by name to avoid import issues
+        elif type(val).__name__ == 'AnimatedToggle':
             dic[nameWidget][at] = defaultdict(list)
             dic[nameWidget][at]['type'] = 'AnimatedToggle'
             updateDic(val, ['isHidden', 'isChecked'], at)
+            success = 4
 
-        # NEW: Handle CollapsibleBox specifically
         elif type(val).__name__ == 'CollapsibleBox':
             dic[nameWidget][at] = defaultdict(list)
             dic[nameWidget][at]['type'] = 'CollapsibleBox'
-            # Save the expanded/collapsed state
-            # Assuming your class has .is_expanded() or checking the button
             is_expanded = val.toggle_button.isChecked() if hasattr(val, 'toggle_button') else False
             dic[nameWidget][at]['isExpanded'] = is_expanded
             dic[nameWidget][at]['isHidden'] = val.isHidden()
+            success = 5
 
         # --- 2. HANDLE VARIABLES (Ints, Lists, Arrays) ---
-        elif IsKnownType(val):
+        # The IsSafe check now correctly rejects dicts containing QObjects
+        elif IsSafe(val):
             # Special handling for 'items' which might be a dictionary
             if at == 'items' and isinstance(val, defaultdict):
                 val = list(val.keys())
                 at = 'items_names'
 
             dic[nameWidget][at] = val
+            success = 6
+
 
     return dic
 
-def getAttributeWidget2(widget, nameWidget, dic):
-    """
-    extract attributes from widget and assign it to the dictionary
-    Args:
-        widget:
-        nameWidget:
-        dic:
-
-    Returns:
-
-    """
-    def IsKnownType(val):
-        return type(val) == int or type(val) == np.ndarray or type(val) == list or val is None or type(
-            val) == float or type(val) == defaultdict or \
-               type(val) == Qt.GlobalColor or \
-               type(val) == str or type(val)==bool or \
-               type(val) == tuple
-
-
-    def updateDic(val, attr, at):
-        for el in attr:
-            try:
-                vl = getattr(val, el)()
-
-                if IsKnownType(vl):
-                    dic[nameWidget][at][el] = vl
-            except Exception as e:
-                print('Update Dictionary Error')
-                print(e)
-
-    dic[nameWidget] = defaultdict(list)
-    for at in dir(widget):
-        if at[0] == '_' or at == 'program':
-            continue
-        val = getattr(widget, at)
-        if type(val) == QtWidgets.QSlider: # slider
-
-            dic[nameWidget][at] = defaultdict(list)
-            dic[nameWidget][at]['type'] = 'QSlider'
-            attr = ['minimum', 'maximum', 'value', 'isHidden']
-            updateDic(val, attr, at)
-        elif type(val)== QtWidgets.QLabel:
-            dic[nameWidget][at] = defaultdict(list)
-            dic[nameWidget][at]['type'] = 'QLabel'
-            attr = ['text', 'isHidden']
-            updateDic(val, attr, at)
-        elif type(val)== QtWidgets.QRadioButton:
-            dic[nameWidget][at] = defaultdict(list)
-            dic[nameWidget][at]['type'] = 'QRadioButton'
-            attr = ['isHidden', 'isChecked']
-            updateDic(val, attr, at)
-        elif type(val)== AnimatedToggle:
-            dic[nameWidget][at] = defaultdict(list)
-            dic[nameWidget][at]['type'] = 'AnimatedToggle'
-            attr = ['isHidden', 'isChecked']
-            updateDic(val, attr, at)
-        elif IsKnownType(val):
-            if at=='items':
-                if type(val)==defaultdict:
-                    val = list(val.keys())
-                    at = 'items_names'
-            dic[nameWidget][at] = val
-    return dic
 
 ######extract attributes from a dictionary and assign it to a widget######################
 def loadAttributeWidget(widget, nameWidget, dic, progressbar):
@@ -3034,7 +2982,9 @@ def changeCoronalSagittalAxial(slider, widget, reader, windowName, indWind, labe
     try:
         widget.changeView(windowName, widget.zRot)
         widget.updateCurrentImageInfo(reader.npImage.shape)
+        slider.blockSignals(True)
         slider.setRange(0, reader.ImExtent[indWind])
+        slider.blockSignals(False)
         slider.setValue(reader.ImExtent[indWind] // 2)
         label.setText(str_conv(reader.ImExtent[indWind] // 2))
 
@@ -3220,10 +3170,7 @@ def addTreeRoot(treeItem, name, description, color):
     Returns:
 
     """
-    if name.lower()=='mri':
-        clr = 55
-    else:
-        clr = 155
+
     #for i in [0,1]:
     #    treeItem.setForeground(i,QtGui.QBrush(QtGui.QColor(color[0]*255, color[1]*255, color[2]*255, 255)))
     color = [int(c*255) for c in color]
@@ -3531,16 +3478,16 @@ def locateWidgets(sender, mainw):
     """
     if sender == mainw.openGLWidget_4 or sender == mainw.openGLWidget_5 or sender == mainw.openGLWidget_6:
         # mri Image
-        readerName = 'readImMRI'
-        reader = mainw.readImMRI
+        readerName = 'readView2'
+        reader = mainw.readView2
         widgets = []
         if mainw.tabWidget.currentIndex() == 0:
             widgets = [mainw.openGLWidget_4, mainw.openGLWidget_5, mainw.openGLWidget_6]
         return readerName, reader, widgets
     elif sender == mainw.openGLWidget_1 or sender == mainw.openGLWidget_2 or sender == mainw.openGLWidget_3 or sender == mainw.openGLWidget_11:
         # eco
-        readerName = 'readImECO'
-        reader = mainw.readImECO
+        readerName = 'readView1'
+        reader = mainw.readView1
         widgets = []
         #if mainw.tabWidget.currentIndex() == 0:
         widgets = [mainw.openGLWidget_1, mainw.openGLWidget_2, mainw.openGLWidget_3,mainw.openGLWidget_11]
@@ -3782,7 +3729,7 @@ def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lin
         # It reads 10GB of data for every pixel you draw.
         # SOLUTION: Just calculate the CURRENT FRAME volume for display.
 
-        spacing_vol = self.readImECO.ImSpacing[0] ** 3 / 1000
+        spacing_vol = self.readView1.ImSpacing[0] ** 3 / 1000
 
         # Only sum the current frame (Fast)
         if colorInd == 9876:
@@ -3794,7 +3741,7 @@ def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lin
             label_type = f"Label {colsel}"
 
         # Update Text
-        txt = f'File: {self.filenameEco} | Frame {int(iw)} {label_type} Vol: {vol:0.2f} cm\u00b3'
+        txt = f'File: {self.filenameView1} | Frame {int(iw)} {label_type} Vol: {vol:0.2f} cm\u00b3'
         self.openedFileName.setText(txt)
 
         if colorInd == 1500:
@@ -3854,20 +3801,20 @@ def update_last_video2(self, reader, colorInd, whiteInd_all, colorInd2, guide_li
             colsel = colorInd2
         else:
             colsel = colorInd
-        if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_eco]:
+        if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_view1]:
 
-            txt = 'File: {}'.format(self.filenameEco)
+            txt = 'File: {}'.format(self.filenameView1)
             if colorInd == 9876:
-                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg > 0).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg > 0).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
             else:
-                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg == colsel).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg == colsel).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
             self.openedFileName.setText(txt)
         else:
-            txt = 'File: {}'.format(self.filenameMRI)
+            txt = 'File: {}'.format(self.filenameView2)
             if colorInd==9876:
-                txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg > 0).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+                txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg > 0).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
             else:
-                txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg == colsel).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+                txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg == colsel).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
             self.openedFileName.setText(txt)
         if colorInd == 1500:
             self._lineinfo.append(WI)
@@ -3919,20 +3866,20 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
         colsel = colorInd2
     else:
         colsel = colorInd
-    if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_eco]:
+    if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_view1]:
 
-        txt = 'File: {}'.format(self.filenameEco)
+        txt = 'File: {}'.format(self.filenameView1)
         if colorInd == 9876:
-            txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg > 0).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+            txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg > 0).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
         else:
-            txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readImECO.npSeg == colsel).sum() * self.readImECO.ImSpacing[0] ** 3 / 1000)
+            txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg == colsel).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
         self.openedFileName.setText(txt)
     else:
-        txt = 'File: {}'.format(self.filenameMRI)
+        txt = 'File: {}'.format(self.filenameView2)
         if colorInd==9876:
-            txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg > 0).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+            txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg > 0).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
         else:
-            txt += ' TV (MRI) : {0:0.2f} cm\u00b3'.format((self.readImMRI.npSeg == colsel).sum() * self.readImMRI.ImSpacing[0] ** 3 / 1000)
+            txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg == colsel).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
         self.openedFileName.setText(txt)
     if colorInd == 1500:
         self._lineinfo.append(WI)
@@ -3962,7 +3909,7 @@ def select_proper_widgets(self):
             widgets.append(self.openGLWidget_3)
         widgets.append(self.openGLWidget_11)
     elif self.tabWidget.currentIndex() == 2:
-        wndnm = self.openGLWidget_11.currentWidnowName
+        wndnm = self.openGLWidget_12.currentWidnowName
         if wndnm.lower() == 'sagittal':
             widgets.append(self.openGLWidget_5)
         elif wndnm.lower() == 'coronal':

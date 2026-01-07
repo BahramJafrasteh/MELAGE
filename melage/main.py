@@ -60,11 +60,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
         
         if filePath == None:
             basefile = ''
-            if hasattr(self, 'readImECO'):
-                basefile =self.readImECO.basefile
+            if hasattr(self, 'readView1'):
+                basefile =self.readView1.basefile
             if basefile == '':
-                if hasattr(self, 'readImMRI'):
-                    basefile = self.readImMRI.basefile
+                if hasattr(self, 'readView2'):
+                    basefile = self.readView2.basefile
         else:
             basefile = filePath[0]
 
@@ -89,12 +89,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
                 widget =getattr(self, name+str(i+1))
                 dic = getAttributeWidget(widget, nameWidget, dic)
         self.progressBarSaving.setValue(40)
-        names = ['readImECO', 'readImMRI']
+        """
+        
+        names = ['readView1', 'readView2']
         for name in names:
             if hasattr(self, name):
                 readD = getattr(self, name)
                 #dic[name] = {}
                 dic = getAttributeWidget(readD, name, dic)
+        """
         table_items = []
         rows = self.table_widget_measure.rowCount()
         cols = self.table_widget_measure.columnCount()

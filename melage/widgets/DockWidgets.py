@@ -422,9 +422,9 @@ class dockWidgets():
                 title="Color & Contrast",
                 layout="vbox",
                 children=[
-                    Slider(id="t1_1", label="Brightness", label_id="lb_ft1_1", min_val=-100, max_val=100),
-                    Slider(id="t1_2", label="Contrast", label_id="lb_ft1_2", min_val=-100, max_val=100),
-                    Slider(id="t1_3", label="Opacity", label_id="lb_ft1_3", min_val=0, max_val=100),
+                    Slider(id="t1_1", label="Brightness", label_id="lb_ft1_1", min_val=-100, max_val=100, default=0),
+                    Slider(id="t1_2", label="Contrast", label_id="lb_ft1_2", min_val=1, max_val=500, default=100),
+                    Slider(id="t1_3", label="Gamma", label_id="lb_ft1_3", min_val=10, max_val=300, default=100),
                 ]
             ),
 
@@ -434,8 +434,8 @@ class dockWidgets():
                 title="Filters & Quality",
                 layout="vbox",
                 children=[
-                    Slider(id="t1_7", label="Sharpness", label_id="lb_ft1_7", min_val=0, max_val=100),
-                    Slider(id="t1_4", label="Smoothing", label_id="lb_ft1_4", min_val=0, max_val=100),
+                    Slider(id="t1_7", label="Vascular Enhancement", label_id="lb_ft1_7", min_val=0, max_val=100, default=0),
+                    Slider(id="t1_4", label="Denoise", label_id="lb_ft1_4", min_val=0, max_val=100, default=0),
                 ]
             ),
 
@@ -495,9 +495,9 @@ class dockWidgets():
                 title="Color & Contrast",
                 layout="vbox",
                 children=[
-                    Slider(id="t2_1", label="Brightness", label_id="lb_ft2_1", min_val=-100, max_val=100),
-                    Slider(id="t2_2", label="Contrast", label_id="lb_ft2_2", min_val=-100, max_val=100),
-                    Slider(id="t2_3", label="Opacity", label_id="lb_ft2_3", min_val=0, max_val=100),
+                    Slider(id="t2_1", label="Brightness", label_id="lb_ft2_1", min_val=-100, max_val=100, default=0),
+                    Slider(id="t2_2", label="Contrast", label_id="lb_ft2_2", min_val=0, max_val=500, default=100),
+                    Slider(id="t2_3", label="Gamma", label_id="lb_ft2_3", min_val=10, max_val=300, default=100),
                 ]
             ),
 
@@ -507,8 +507,8 @@ class dockWidgets():
                 title="Filters & Quality",
                 layout="vbox",
                 children=[
-                    Slider(id="t2_7", label="Sharpness", label_id="lb_ft2_7", min_val=0, max_val=100),
-                    Slider(id="t2_4", label="Smoothing", label_id="lb_ft2_4", min_val=0, max_val=100),
+                    Slider(id="t2_7", label="Vascular Enhancement", label_id="lb_ft2_7", min_val=0, max_val=100, default=0),
+                    Slider(id="t2_4", label="Denoise", label_id="lb_ft2_4", min_val=0, max_val=100, default=0),
                 ]
             ),
 
@@ -1056,38 +1056,8 @@ class dockWidgets():
 
         #self.MainDock.setWindowTitle(_translate("Main", "Main Windows"))
         self.dock_progressbar.setWindowTitle(_translate("Main", "Progress Bar"))
-
-        #self.dockSegmentationIntensity.setWindowTitle(_translate("Main", "Color intensity"))
-        self.lb_t1_4.setText(_translate("Main", "0"))
-        self.lb_t1_3.setText(_translate("Main", "0"))
-        self.lb_ft1_1.setText(_translate("Main", "Brightness"))
-
-
-        self.lb_t1_2.setText(_translate("Main", "0"))
-        self.lb_ft1_2.setText(_translate("Main", "Contrast"))
-        self.lb_ft1_3.setText(_translate("Main", "BandPass R1"))
-        self.lb_ft1_4.setText(_translate("Main", "Sobel"))
-        self.lb_ft1_5.setText(_translate("Main", "Rotate"))
-        self.lb_t1_1.setText(_translate("Main", "0"))
-
-        self.lb_ft2_1.setText(_translate("Main", "Brightness"))
-        self.lb_t2_1.setText(_translate("Main", "0"))
-        self.lb_ft2_2.setText(_translate("Main", "Contrast"))
-        self.lb_t2_2.setText(_translate("Main", "0"))
-        self.lb_ft2_3.setText(_translate("Main", "BandPass R1"))
-        self.lb_t2_3.setText(_translate("Main", "0"))
-        self.lb_ft2_4.setText(_translate("Main", "Sobel"))
-        self.lb_ft2_5.setText(_translate("Main", "Rotate"))
-        self.lb_t2_4.setText(_translate("Main", "0"))
-
-
         self.toggle1_1.setText(_translate("Main", "Toggle"))
-        self.lb_ft1_6.setText(_translate("Main", "Hamming"))
-        self.lb_ft2_6.setText(_translate("Main", "Hamming"))
-        self.lb_ft1_7.setText(_translate("Main", "BandPass R2"))
-        self.lb_t1_7.setText(_translate("Main", "0"))
-        self.lb_ft2_7.setText(_translate("Main", "BandPass R2"))
-        self.lb_t2_7.setText(_translate("Main", "0"))
+
 
         self.page1_rot_cor.setItemText(0, _translate("Main", "Coronal"))
         self.page1_rot_cor.setItemText(1, _translate("Main", "Sagittal"))
@@ -1427,15 +1397,15 @@ class dockWidgets():
                 possible_color_name, possible_color_index_rgb, _ = read_txt_color(filen, from_one=False, mode='None')
             except:
                 return
-            #if not (hasattr(self, 'readImECO') and hasattr(self, 'readImMRI')):
+            #if not (hasattr(self, 'readView1') and hasattr(self, 'readView2')):
 
             ind_avail = [9876]
             try:
-                ind_avail += list(np.unique(self.readImECO.npSeg))
+                ind_avail += list(np.unique(self.readView1.npSeg))
             except:
                 pass
             try:
-                ind_avail += list(np.unique(self.readImMRI.npSeg))
+                ind_avail += list(np.unique(self.readView2.npSeg))
             except:
                 pass
             if 0 in ind_avail:
@@ -1513,14 +1483,14 @@ class dockWidgets():
 
                 if num in [13]:
                     try:
-                        widget.paint(self.readImECO.npSeg,
-                                           self.readImECO.npImage, None)
+                        widget.paint(self.readView1.npSeg,
+                                           self.readView1.npImage, None)
                     except:
                         pass
                 elif num in [23]:
                     try:
-                        widget.paint(self.readImMRI.npSeg,
-                          self.readImMRI.npImage, None)
+                        widget.paint(self.readView2.npSeg,
+                          self.readView2.npImage, None)
                     except:
                         pass
                 widget.update()
@@ -1547,8 +1517,8 @@ class dockWidgets():
     def reset_view_pages(self, index=0):
         if index==0:
             self.t1_1.setValue(0)
-            self.t1_2.setValue(0)
-            self.t1_3.setValue(0)
+            self.t1_2.setValue(100)
+            self.t1_3.setValue(100)
             self.t1_4.setValue(0)
             self.t1_5.setValue(0)
             self.t1_7.setValue(0)
@@ -1556,8 +1526,8 @@ class dockWidgets():
             self.toggle1_1.setChecked(False)
         elif index==1:
             self.t2_1.setValue(0)
-            self.t2_2.setValue(0)
-            self.t2_3.setValue(0)
+            self.t2_2.setValue(100)
+            self.t2_3.setValue(100)
             self.t2_4.setValue(0)
             self.t2_5.setValue(0)
             self.t2_7.setValue(0)
