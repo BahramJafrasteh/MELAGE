@@ -1,7 +1,24 @@
 import os
 import sys
 from unittest.mock import MagicMock
+import os
+import sys
+import shutil
 
+# -- Project setup -----------------------------------------------------------
+
+# AUTOMATIC COPY: Copy the root README.md to the docs folder
+# This bypasses the "file outside source directory" error.
+readme_src = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'README.md'))
+readme_dst = os.path.abspath(os.path.join(os.path.dirname(__file__), 'README.md'))
+
+if os.path.exists(readme_src):
+    shutil.copyfile(readme_src, readme_dst)
+    print(f"Copied {readme_src} to {readme_dst}")
+else:
+    print(f"Warning: README.md not found at {readme_src}")
+
+# ... rest of your conf.py configuration ...
 # 1. Path setup: Points to your main project folder so it can find your code
 sys.path.insert(0, os.path.abspath('../..')) # Use '../..' if conf.py is in docs/source
 # OR use os.path.abspath('..') if conf.py is directly in docs/
