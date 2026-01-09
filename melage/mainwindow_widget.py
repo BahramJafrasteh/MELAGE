@@ -1171,11 +1171,12 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuImport.addAction(self.actionImportSegView1)
         self.menuImport.addAction(self.actionImportSegView2)
 
-        self.menuExport.addAction(self.actionExportImView2)
         self.menuExport.addAction(self.actionExportImView1)
+        self.menuExport.addAction(self.actionExportSegView1)
+
 
         self.menuExport.addSeparator()
-        self.menuExport.addAction(self.actionExportSegView1)
+        self.menuExport.addAction(self.actionExportImView2)
         self.menuExport.addAction(self.actionExportSegView2)
 
         self.menuFile.addAction(self.actionNew)
@@ -1559,12 +1560,12 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionNew.triggered.connect(self.newProject)
         self.actionCloseView1.triggered.connect(self.CloseView1)
         self.actionCloseView2.triggered.connect(self.CloseView2)
-        self.actionImportSegView2.triggered.connect(partial(self.importData, 'View2_SEG'))
-        self.actionImportSegView1.triggered.connect(partial(self.importData, 'View1_SEG'))
-        self.actionExportImView1.triggered.connect(partial(self.exportData, 'View1_IM'))
-        self.actionExportSegView1.triggered.connect(partial(self.exportData, 'View1_SEG'))
-        self.actionExportImView2.triggered.connect(partial(self.exportData, 'View2_IM'))
-        self.actionExportSegView2.triggered.connect(partial(self.exportData, 'View2_SEG'))
+        self.actionImportSegView2.triggered.connect(partial(self.importData, 'view2_seg'))
+        self.actionImportSegView1.triggered.connect(partial(self.importData, 'view1_seg'))
+        self.actionExportImView1.triggered.connect(partial(self.exportData, 'view1_im'))
+        self.actionExportSegView1.triggered.connect(partial(self.exportData, 'view1_seg'))
+        self.actionExportImView2.triggered.connect(partial(self.exportData, 'view2_im'))
+        self.actionExportSegView2.triggered.connect(partial(self.exportData, 'view2_seg'))
         self.actionScreenS.triggered.connect(self.showScreenShotWindow)
         self.actionLoad.triggered.connect(self.loadProject)
         self.actionFile_info.triggered.connect(self.showInfoWindow)
@@ -5873,13 +5874,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         # --- 1. CONFIGURATION MAPPING ---
         # Maps the input 'type' string to the actual object attributes
         config_map = {
-            'View1_IM': {'reader': 'readView1', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
+            'view1_im': {'reader': 'readView1', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
                      'check': '_check_status_warning_view1'},
-            'View1_SEG': {'reader': 'readView1', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
+            'view1_seg': {'reader': 'readView1', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
                       'check': '_check_status_warning_view1'},
-            'View2_IM': {'reader': 'readView2', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
+            'view2_im': {'reader': 'readView2', 'attr': 'npImage', 'suffix': '_new', 'dtype': np.float32,
                       'check': '_check_status_warning_view2'},
-            'View2_SEG': {'reader': 'readView2', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
+            'view2_seg': {'reader': 'readView2', 'attr': 'npSeg', 'suffix': '_seg', 'dtype': np.int16,
                        'check': '_check_status_warning_view2'},
         }
 
@@ -6098,158 +6099,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         return full_vol
 
-    def exportData2(self, type):
-        """
-        Export data
-        :param type:
-        :return:
-        """
-
-        def save_as_image(reader, file, img, format=0, type_im = 'mri', cs=['RAS', 'AS']):
-
-            try:
-                self.dock_progressbar.setVisible(True)
-                self.setEnabled(False)
-
-                self.progressBarSaving.setValue(0)
-                if format==1:
-                    save_3d_img(reader, file, img, 'tif', type_im=type_im, cs=cs)
-                    export_tables(self, file[:-7] + "_table")
-                elif format==0:
-
-                    save_3d_img(reader, file, img, format='nifti', type_im=type_im, cs=cs)
-                    export_tables(self, file+"_table")
-
-                self.setEnabled(True)
-                self.dock_progressbar.setVisible(False)
-                self.progressBarSaving.setValue(0)
-            except Exception as e:
-                self.setEnabled(True)
-                self.dock_progressbar.setVisible(False)
-                self.progressBarSaving.setValue(0)
-                print('save 3d image')
-
-        def save_video(reader, output_path):
-            """
-            Saves segmentation as a Lossless Grayscale AVI using original video's FPS.
-            """
-            if not output_path.endswith('.avi'):
-                output_path = output_path.rsplit('.', 1)[0] + '.avi'
-
-            # 1. GET FPS FROM PARENT VIDEO (Critical)
-            # Assuming parent_video_proxy stored the cap info or has access to it.
-            # If you didn't store it in __init__, we can read it again quickly.
-            fps = 30.0  # Default fallback
-            if hasattr(reader.video_im, 'fps'):
-                fps = reader.video_im.fps
-            else:
-                # Quick check if we need to retrieve it manually
-                temp_cap = cv2.VideoCapture(self.video_im.file_path)
-                fps = temp_cap.get(cv2.CAP_PROP_FPS)
-                temp_cap.release()
-
-            print(f"Saving to {output_path} at {fps} FPS...")
-
-            fourcc = cv2.VideoWriter_fourcc(*'png ')  # Lossless
-
-            writer = cv2.VideoWriter(
-                output_path,
-                fourcc,
-                fps,  # <--- Use the exact source FPS
-                (reader.video_im.shape[1], reader.video_im.shape[0]),
-                isColor=False
-            )
-
-            if not writer.isOpened():
-                print(f"Error: Could not open writer for {output_path}")
-                return
-
-            for i in range(reader.video_im.shape[2]):
-                mask_2d = reader.video_im.get_frame(i)
-                writer.write(mask_2d)
-                if i % 50 == 0: print(f"Saving frame {i}/{reader.video_im.shape[2]}", end='\r')
-
-            writer.release()
-            print(f"\nSaved successfully.")
-
-
-
-        filters = "NifTi (*.nii *.nii.gz *.mgz);;tif(*.tif)"
-        opts = QtWidgets.QFileDialog.DontUseNativeDialog
-        currentCS = 'RAS'
-        if type.lower()=='View1_IM':
-            status = self._check_status_warning_view1()
-            if not status:
-                return
-            try:
-                #fl = '.'.join(self.filenameView1.split('.')[:-1])
-                fl = self.filenameView1
-                flfmt = [el for el in self._availableFormats if el in self.filenameView1]
-                flfmt = flfmt[flfmt.index(max(flfmt))]
-                fl = fl.replace(flfmt, '')
-                newn = fl + '_new'
-            except:
-                newn = ''
-            if hasattr(self.readView1, 'source_system'):
-                currentCS = self.readView1.source_system
-            fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
-            if fileObj[0] != '':
-                save_as_image(self.readView1, fileObj[0], self.readView1.npImage.astype(np.float32), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
-        elif type.lower()=='View1_SEG':
-            status = self._check_status_warning_view1()
-            if not status:
-                return
-            try:
-                #fl = '.'.join(self.filenameView1.split('.')[:-1])
-                fl = self.filenameView1
-                flfmt = [el for el in self._availableFormats if el in self.filenameView1]
-                flfmt = flfmt[flfmt.index(max(flfmt))]
-                fl = fl.replace(flfmt, '')
-                newn = fl + '_seg'
-            except:
-                newn = ''
-            if hasattr(self.readView1, 'source_system'):
-                currentCS = self.readView1.source_system
-            fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
-            if fileObj[0] != '':
-                save_as_image(self.readView1, fileObj[0], self.readView1.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), type_im='eco', cs=cs)
-        elif type.lower()=='View2_IM':
-            status = self._check_status_warning_view2()
-            if not status:
-                return
-            try:
-                #fl = '.'.join(self.filenameView2.split('.')[:-1])
-                fl = self.filenameView2
-                flfmt = [el for el in self._availableFormats if el in self.filenameView2]
-                flfmt = flfmt[flfmt.index(max(flfmt))]
-                fl = fl.replace(flfmt, '')
-                newn = fl + '_new'
-            except:
-                newn = ''
-            if hasattr(self.readView2, 'source_system'):
-                currentCS = self.readView2.source_system
-            fileObj, currentCS = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
-            if fileObj[0] != '':
-                save_as_image(self.readView2, fileObj[0], self.readView2.npImage.astype(np.float32),format=filters.split(';;').index(fileObj[1]), cs=currentCS)
-        elif type.lower()=='View2_SEG':
-            status = self._check_status_warning_view2()
-            if not status:
-                return
-            try:
-                fl = self.filenameView2
-                flfmt = [el for el in self._availableFormats if el in self.filenameView2]
-                flfmt = flfmt[flfmt.index(max(flfmt))]
-                fl = fl.replace(flfmt, '')
-                #fl = '.'.join(self.filenameView2.split('.')[:-1])
-                newn = fl + '_seg'
-            except:
-                newn = ''
-
-            if hasattr(self.readView2, 'source_system'):
-                currentCS = self.readView2.source_system
-            fileObj, cs = self._filesave_dialog(filters, opts, newn, currentCS=currentCS)
-            if fileObj[0]!='':
-                save_as_image(self.readView2, fileObj[0], self.readView2.npSeg.astype(np.int16), format=filters.split(';;').index(fileObj[1]), cs=cs)
 
 
 
@@ -6259,12 +6108,12 @@ class Ui_Main(dockWidgets, openglWidgets):
         :param type_image:
         :return:
         """
-        if type_image.lower()=='View1_SEG':
+        if type_image.lower()=='view1_seg':
             if hasattr(self, 'readView1'):
                 if hasattr(self.readView1, 'npImage'):
                     self.readView1.npSeg = self.readView1.npImage*0
                     self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
-        elif type_image.lower()=='View2_SEG':
+        elif type_image.lower()=='view2_seg':
             if hasattr(self, 'readView2'):
                 if hasattr(self.readView2, 'npImage'):
                     self.readView2.npSeg = self.readView2.npImage*0

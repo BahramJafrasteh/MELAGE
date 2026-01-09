@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "2.0.5"
+version = "2.0.6"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"

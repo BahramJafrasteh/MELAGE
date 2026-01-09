@@ -149,17 +149,19 @@ Create a script file to automatically activate the environment and run the app.
 
  1. Download installer (Intel)
     ```bash
-    curl -O [https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+    curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
     ```
     ... OR ...
     
     Download installer (Apple M1/M2 Silicon)
     ```bash
-    curl -O [https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh)
+    curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
     ```
  3. Run installer
     ```bash
     bash Miniconda3-latest-MacOSX-x86_64.sh
+    # or
+    bash Miniconda3-latest-MacOSX-arm64.sh
     ```
  4. Refresh shell
     ```bash
@@ -247,11 +249,14 @@ Alternatively
 # Create env
 conda create -n melage-gui python=3.10 -c conda-forge -y
 
+
 # Activate
 conda activate melage-gui
 
 # Install PyQt5
 conda install -c conda-forge pyqt=5 -y
+# Install antspyx (Optioanl) to avoid pip install melage failed for any reason)
+conda install -c conda-forge antspyx
 
 # Install melage
 pip install melage
@@ -1067,4 +1072,5 @@ Stable releases and updates of **MELAGE** are available on the [GitHub Releases 
 - 🧪 **Pre-releases / beta versions**: For testing new features and providing feedback.  
 
 Stay updated by watching the repository for new release notifications.
+
 

@@ -1,0 +1,2 @@
+[console_scripts]
+melage = melage.melage:main
