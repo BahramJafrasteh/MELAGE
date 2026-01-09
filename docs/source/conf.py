@@ -13,7 +13,7 @@ readme_src = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'READ
 readme_dst = os.path.abspath(os.path.join(os.path.dirname(__file__), 'README.md'))
 
 if os.path.exists(readme_src):
-    shutil.copyfile(readme_src, readme_dst)
+#    shutil.copyfile(readme_src, readme_dst)
     print(f"Copied {readme_src} to {readme_dst}")
 else:
     print(f"Warning: README.md not found at {readme_src}")
