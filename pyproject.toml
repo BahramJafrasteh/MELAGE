@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "melage"
+version = "2.1.34"
+description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Bahram Jafrasteh", email = "b.jafrasteh@gmail.com" }
+]
+keywords = ["neuroimaging", "MRI", "ultrasound", "segmentation", "visualization", "neonatal", "medical-imaging", "deep learning"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License", 
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# Core runtime deps kept broad; pin versions later if needed
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "Pillow",
+    "PyQt5",
+    "PyOpenGL",
+    "opencv-python-headless", # Basic image processing
+    "nibabel",                # Basic Medical IO
+    "pydicom",                # Basic Medical IO
+    "scikit-image",           # Basic image processing
+    "scikit-learn",           # Basic ML
+    "shapely",
+    "SimpleITK",
+    "antspyx"
+]
+
+
+[project.optional-dependencies]
+# install with: pip install melage[dl]
+ai = [
+    "torch",
+     "einops",                 # Likely needed for core array manipulation
+]
+bet = [
+ "numba",
+ "trimesh",
+ ]
+
+
+# Advanced Registration & Processing
+# (ANTs is the #1 cause of install failures on Windows)
+processing = [
+    "vtk"        # Very heavy, keep optional if you only use it for specific tools
+]
+reports = [
+    "dominate"
+]
+
+# Install everything: pip install melage[all]
+all = [
+    "melage[ai,processing,reports]"
+]
+
+
+# install with: pip install melage[bids]
+bids = ["pybids>=0.16", "bids-validator>=1.14; python_version<'3.12'"]
+# install with: pip install melage[dev]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.4",
+  "mypy>=1.8",
+  "build>=1.2",
+  "twine>=5.0",
+]
+
+[project.scripts]
+melage = "melage.melage:main"
+
+[project.urls]
+Homepage = "https://github.com/BahramJafrasteh/MELAGE"
+Repository = "https://github.com/BahramJafrasteh/MELAGE"
+Issues = "https://github.com/BahramJafrasteh/MELAGE/issues"
+Documentation = "https://github.com/BahramJafrasteh/MELAGE#readme"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests", "tests.*", "docs", "examples"]
+
+# If you ship non-Python assets under melage/, add patterns here (and in MANIFEST.in)
+[tool.setuptools.package-data]
+# Include configs and scripts; explicitly exclude large model weights
+melage = [
+    "data/**",
+    "resource/**",
+    "plugins/sam/configs/**",
+    "plugins/sam/checkpoints/download_ckpts.sh",
+    "py.typed",
+]
+
+# Optional: type hints marker if you have them
+[tool.pyright]
+pythonVersion = "3.11"
+
+# (Optional) Ruff config if you use Ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "UP"]

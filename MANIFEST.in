@@ -1,0 +1,17 @@
+include README.md
+include LICENSE
+recursive-include assets *
+recursive-include melage *.py
+recursive-include melage *.json
+recursive-include melage *.yaml
+recursive-include melage *.yml
+recursive-include melage *.txt
+recursive-include melage *.sh
+recursive-include data *
+# Exclude large binary model weights — users download these separately
+global-exclude *.pt
+global-exclude *.pth
+global-exclude *.pyc
+global-exclude *_bu.py
+global-exclude *_bu2.py
+prune melage/plugins/sam/weights

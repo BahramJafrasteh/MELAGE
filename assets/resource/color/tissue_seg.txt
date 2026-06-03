@@ -1,0 +1,4 @@
+    20000   255    0    0        1  1  1    "CSF"
+    24     0  255    0        1  1  1    "Cortical gray matter"
+    10000     0    0  255        1  1  1    "White matter"
+    4000   255  255    0        1  1  1    "Background"

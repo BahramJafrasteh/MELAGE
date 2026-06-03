@@ -1,0 +1,10 @@
+torch
+numpy
+scikit-image
+monai
+matplotlib
+scikit-learn
+scipy
+nibabel
+voxelmorph
+pkbar
