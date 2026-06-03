@@ -44,7 +44,10 @@ fsrc = textwrap.dedent("""
     // 0.0 = Off, 1.0 = Max Effect
     uniform float u_denoise;    // Smoothing (reduces grain)
     uniform float u_structure;  // Gentle detail boost (better than sharpen)
-
+    
+    uniform float u_isVideoRange;   // 1.0 = Expand 16-235 video to 0-255, 0.0 = Raw Data
+    uniform float u_glareComp;      // 1.0 = Enable wet tissue glare compression, 0.0 = Off
+    
     // Color Grading
     uniform float u_brightness;     
     uniform float u_contrast;       
@@ -119,87 +122,97 @@ vec3 applyMedianFilter(sampler2D t, vec2 uv, vec2 px) {
     vec3 applyColorGrade(vec3 color) {
         vec3 res = color;
 
-        // 1. Saturation
-        float intensity = dot(res, LUMA);
-        float sat = 1.0; 
-        // You can link this to a uniform if you wish
-        res = mix(vec3(intensity), res, sat);
-
-        // 2. Contrast
+        // 1. Contrast — pivot at 0.5 so mid-grey stays unchanged
         float cont = (u_contrast == 0.0) ? 1.0 : u_contrast;
         res = (res - 0.5) * cont + 0.5;
 
-        // 3. Brightness
-        res = res + u_brightness;
+        // 2. Brightness — additive shift, clamped to keep values in [0,1]
+        res = clamp(res + u_brightness, 0.0, 1.0);
 
-        // 4. Gamma
+        // 3. Gamma — only applied when not 1.0 (no-op guard avoids pow(0,neg) edge case)
         float gam = (u_gamma == 0.0) ? 1.0 : u_gamma;
-        if (gam > 0.0) res = pow(max(res, vec3(0.0)), vec3(1.0 / gam));
+        if (gam != 1.0) res = pow(max(res, vec3(0.0)), vec3(1.0 / gam));
 
-        return res;
+        // Final clamp — ensures any floating-point overshoot is eliminated
+        return clamp(res, 0.0, 1.0);
     }
 
     void main(void) {
         vec2 px = (iResolution.x > 0.0) ? (1.0 / iResolution) : vec2(1.0/1024.0, 1.0/768.0);
 
         // ------------------------------------------------
-        // 1. DENOISE (Gaussian Smoothing)
+        // 0. SAMPLE AND RANGE EXPANSION
         // ------------------------------------------------
-        // We sample the center and 4 neighbors to create a smooth base.
-        vec3 c  = texture(tex, fragTexCoord).rgb;
-        //vec3 n  = texture(tex, fragTexCoord + vec2( 0.0, -px.y)).rgb;
-        //vec3 s  = texture(tex, fragTexCoord + vec2( 0.0,  px.y)).rgb;
-        //vec3 e  = texture(tex, fragTexCoord + vec2( px.x,  0.0)).rgb;
-        //vec3 w  = texture(tex, fragTexCoord + vec2(-px.x,  0.0)).rgb;
+        vec3 c = texture(tex, fragTexCoord).rgb;
 
-        // Calculate a blurred version
-        //vec3 blurred = (c * 4.0 + n + s + e + w) * 0.125;
+        // If loading standard MP4s, expand Limited Range (16-235) to Full Range (0-255)
+        if (u_isVideoRange > 0.5) {
+            c = clamp((c - (16.0 / 255.0)) * (255.0 / 219.0), 0.0, 1.0);
+        }
+
+        // ------------------------------------------------
+        // 1. DENOISE (Gaussian Smoothing / Median)
+        // ------------------------------------------------
+        // Note: applyMedianFilter also needs the range expansion if it samples directly.
+        // For a perfectly accurate pipeline, you'd modify applyMedianFilter to expand inside its loop,
+        // but applying it to 'c' here is a good start if u_denoise is low.
         vec3 blurred = applyMedianFilter(tex, fragTexCoord, px);
+        
+        if (u_isVideoRange > 0.5) {
+             blurred = clamp((blurred - (16.0 / 255.0)) * (255.0 / 219.0), 0.0, 1.0);
+        }
 
-        // Mix: If u_denoise is 0.0, we use original 'c'. 
-        // If u_denoise is 1.0, we use 'blurred'.
-        // Suggested default for Endoscopy: 0.3
         vec3 base = mix(c, blurred, u_denoise);
 
         // ------------------------------------------------
-        // 2. STRUCTURE (Unsharp Mask on the SMOOTH base)
+        // 2. STRUCTURE (Unsharp Mask — 8-neighbour Laplacian)
+        // 8 neighbours weighted equally: avoids the cross-shaped artefacts
+        // that appear on diagonal edges when only 4 neighbours are used.
         // ------------------------------------------------
-        // We calculate detail using the *smoothed* image vs the *blurred* image.
-        // This prevents us from sharpening the noise (grain).
-        // Simple neighbor check for edges
-        vec3 n = texture(tex, fragTexCoord + vec2(0.0, -px.y)).rgb;
-        vec3 s = texture(tex, fragTexCoord + vec2(0.0, px.y)).rgb;
-        vec3 e = texture(tex, fragTexCoord + vec2(px.x, 0.0)).rgb;
-        vec3 w = texture(tex, fragTexCoord + vec2(-px.x, 0.0)).rgb;
+        vec3 n  = texture(tex, fragTexCoord + vec2( 0.0,  -px.y)).rgb;
+        vec3 s  = texture(tex, fragTexCoord + vec2( 0.0,   px.y)).rgb;
+        vec3 e  = texture(tex, fragTexCoord + vec2( px.x,  0.0 )).rgb;
+        vec3 w  = texture(tex, fragTexCoord + vec2(-px.x,  0.0 )).rgb;
+        vec3 ne = texture(tex, fragTexCoord + vec2( px.x, -px.y)).rgb;
+        vec3 nw = texture(tex, fragTexCoord + vec2(-px.x, -px.y)).rgb;
+        vec3 se = texture(tex, fragTexCoord + vec2( px.x,  px.y)).rgb;
+        vec3 sw = texture(tex, fragTexCoord + vec2(-px.x,  px.y)).rgb;
 
-        vec3 neighbors = (n + s + e + w) * 0.25;
+        // Expand neighbours for video range if needed
+        if (u_isVideoRange > 0.5) {
+            float lo = 16.0 / 255.0;
+            float sc = 255.0 / 219.0;
+            n  = clamp((n  - lo) * sc, 0.0, 1.0);
+            s  = clamp((s  - lo) * sc, 0.0, 1.0);
+            e  = clamp((e  - lo) * sc, 0.0, 1.0);
+            w  = clamp((w  - lo) * sc, 0.0, 1.0);
+            ne = clamp((ne - lo) * sc, 0.0, 1.0);
+            nw = clamp((nw - lo) * sc, 0.0, 1.0);
+            se = clamp((se - lo) * sc, 0.0, 1.0);
+            sw = clamp((sw - lo) * sc, 0.0, 1.0);
+        }
 
+        // Weighted average: cardinal neighbours × 2, diagonal × 1 (≈ Gaussian kernel)
+        vec3 neighbors = (n + s + e + w) * 2.0 + (ne + nw + se + sw);
+        neighbors /= 12.0;
         vec3 detail = base - neighbors;
-
-        // Apply detail. 
-        // u_structure: 0.0 = Flat, 2.0 = High Definition
-        // Suggested default: 0.5
         vec3 structured = base + detail * u_structure;
 
-
-        // 3. VASCULAR ENHANCEMENT (NBI)
-            if (u_nbi > 0.0) {
-                structured = applyNBI(structured);
-            }
+        // VASCULAR ENHANCEMENT (NBI)
+        if (u_nbi > 0.0) {
+            structured = applyNBI(structured);
+        }
 
         // ------------------------------------------------
         // 3. GLARE COMPRESSION (Tone Mapping)
         // ------------------------------------------------
-        // Instead of painting over glare, we dampen the brightest pixels.
-        // This recovers texture in wet areas without artifacts.
-        float lum = dot(structured, LUMA);
-        if (lum > 0.8) {
-            // Softly compress highlights above 0.8 luminance
-            float compression = 1.0 - smoothstep(0.8, 1.2, lum) * 0.3;
-            structured *= compression;
+        if (u_glareComp > 0.5) {
+            float lum = dot(structured, LUMA);
+            if (lum > 0.8) {
+                float compression = 1.0 - smoothstep(0.8, 1.2, lum) * 0.3;
+                structured *= compression;
+            }
         }
-
-
 
         // ------------------------------------------------
         // 4. FINAL COLOR GRADING

@@ -41,7 +41,7 @@ class readData():
         #    self.target_system = target_system#'IPL'
         #elif type == 'eco':
         self.target_system = target_system#'PLI'#'SPR'#'ARI'
-
+        self.label_current_frame = '0'
 
 
     def grid_date_gen(self, arr, dim_axial, dim_sagital, dim_coronal, bModeRadius):
@@ -394,34 +394,34 @@ class readData():
 
     def readDicomDirectory(self, file, type='econ'):
         """
-        Reading a dicom directory
-        :param file:
-        :param type:
-        :return:
+        Reading a DICOMDIR file.
+        Compatible with pydicom >= 2.1 (uses FileSet instead of the
+        removed read_dicomdir).
         """
-        from pydicom.filereader import dcmread
-        from pydicom.filereader import read_dicomdir
-        dicom_dir = read_dicomdir(file)
-        base_dir = os.path.dirname(file)
-        # go through the patient record and print information
+        from pydicom.fileset import FileSet
+
+        fs = FileSet(file)
+
+        # Group file paths by their parent directory — each directory is one series
+        series_dirs: dict = {}
+        for instance in fs:
+            file_path = str(instance.path)
+            series_dir = os.path.dirname(file_path)
+            series_dirs.setdefault(series_dir, []).append(file_path)
+
         series_DESC_total = []
         size_total = []
         file_total = []
-        for series in dicom_dir.patient_records[0].children[0].children:
 
-            image_records = series.children
-
-            image_filenames = [os.path.join(base_dir, *image_rec.ReferencedFileID)
-                               for image_rec in image_records]
-            file_reader = sitk.ImageFileReader()
-            base_dir_c = os.path.dirname(image_filenames[0])
-            if not os.path.isfile(image_filenames[0]):
+        for series_dir, file_paths in series_dirs.items():
+            if not file_paths or not os.path.isfile(file_paths[0]):
                 continue
 
-            file_reader.SetFileName(image_filenames[0])
+            file_reader = sitk.ImageFileReader()
+            file_reader.SetFileName(file_paths[0])
             file_reader.ReadImageInformation()
             try:
-                series_ID, r, c, series_DESC ='', 0, 0, 'Image'
+                series_ID, r, c, series_DESC = '', 0, 0, 'Image'
                 for i, el in enumerate(['0020|000e', '0028|0010', '0028|0011', '0008|103e']):
                     if el in file_reader.GetMetaDataKeys():
                         read = file_reader.GetMetaData(el)
@@ -434,18 +434,19 @@ class readData():
                         elif i == 3:
                             series_DESC = read
 
-                sorted_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(base_dir_c, series_ID)
+                sorted_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(series_dir, series_ID)
                 series_DESC_total.append(series_DESC)
                 size_total.append([r, c, len(sorted_file_names)])
                 file_total.append(sorted_file_names)
-
-            except:
+            except Exception:
                 continue
+
+        if not file_total:
+            return [False, False, 'No readable series found in DICOMDIR']
 
         from melage.utils.utils import create_combo_box_new
         combo = create_combo_box_new(series_DESC_total, size_total)
-        if combo.exec_() == combo.accept:
-            ind_sel = combo.selectedInd
+        combo.exec_()
         ind_sel = combo.selectedInd
         return self.readDICOM(file_total[ind_sel][0], type, ind_series=ind_sel)
 
@@ -739,6 +740,23 @@ class readData():
             if len(tag_imt)>=3:
                 self._dicom_image_type = tag_imt[2].lower()
 
+        # CT window/level from DICOM metadata (used by detect_modality_and_window)
+        self._ct_window_center = None
+        self._ct_window_width = None
+        keys = file_reader.GetMetaDataKeys()
+        if '0028|1050' in keys:
+            try:
+                self._ct_window_center = float(
+                    file_reader.GetMetaData('0028|1050').strip().split('\\')[0])
+            except ValueError:
+                pass
+        if '0028|1051' in keys:
+            try:
+                self._ct_window_width = float(
+                    file_reader.GetMetaData('0028|1051').strip().split('\\')[0])
+            except ValueError:
+                pass
+
         try:
             series_ID = file_reader.GetMetaData('0020|000e')
             try:
@@ -839,12 +857,17 @@ class readData():
         if hasattr(self, 'seg_ims') and hasattr(self.seg_ims, 'dataobj'):
             if hasattr(self.seg_ims.dataobj, 'close'):
                 self.seg_ims.dataobj.close()  # Closes label thread
+        if file.endswith('.png'):
+            file = os.path.dirname(file)
+        proxy_data = VideoLabelProxy(parent_video_proxy=self.video_im, label_path=file)
 
-        proxy_data = VideoLabelProxy(parent_video_proxy=self.video_im, label_file_path=file)
         ims = proxy_data
         if ims is None:
             print("Error reading video segmentation.")
-            return [False, False, 'Failed']
+            return 0, False, True
+        if not ims._is_valid:
+            print("There is an error please see the log message.")
+            return 0, False, True
 
         self.seg_ims = ims
         # Set the initial active segmentation slice (Chunk 0)
@@ -854,6 +877,16 @@ class readData():
 
         return [self.npSeg, True, 'Success']
 
+    def get_video_meta_data(self):
+        """
+        Get video meta data
+        :return:
+        """
+        if not hasattr(self, 'video_im'):
+            return None
+
+        return self.seg_ims.get_metadata()
+
     def readNIFTI(self, file, type = 'eco'):
         """
         Read file with nifti format
@@ -862,9 +895,13 @@ class readData():
         :return:
         """
         # --- STEP 1: Detect Format & Load ---
+
+        # --- STEP 1: Detect Format ---
         ext = file.lower().split('.')[-1]
+        video_exts = ['mp4', 'avi', 'mov', 'mkv']
+        image_exts = ['jpg', 'jpeg', 'png', 'bmp', 'tif', 'tiff']
         is_mp4 = False
-        if ext in ['mp4', 'avi', 'mov', 'mkv']:
+        if ext in video_exts:
             is_mp4 = True
             # Load video as if it were a NIfTI object
             if hasattr(self, 'ims') and hasattr(self.ims.dataobj, 'close'):
@@ -880,21 +917,58 @@ class readData():
             if ims is None:
                 print("Error reading video.")
                 return [False, False, 'Failed']
+        elif ext in image_exts:
+            # Image Sequence Load
+            main_dir = os.path.dirname(file)
+
+            # Get all valid images in the folder and sort them
+            file_list = sorted([
+                os.path.join(main_dir, f) for f in os.listdir(main_dir)
+                if f.lower().endswith(tuple(image_exts))
+            ])
+            if len(file_list) == 0:
+                print("No image files found in the directory.")
+                return [False, False, 'Failed']
+            # Load video as if it were a NIfTI object
+            if hasattr(self, 'ims') and hasattr(self.ims.dataobj, 'close'):
+                self.ims.dataobj.close()  # Closes video thread
+
+            if hasattr(self, 'seg_ims') and hasattr(self.seg_ims.dataobj, 'close'):
+                self.seg_ims.dataobj.close()  # Closes label thread
+
+
+            proxy_data = VideoArrayProxy(file_list)
+            affine = np.eye(4)
+            ims = proxy_data
+            if ims is None:
+                print("Error reading video.")
+                return [False, False, 'Failed']
+
         else:
             # Standard NIfTI Load
             ims = nib.load(file)
         is_video_proxy = isinstance(ims, VideoArrayProxy)
         dtype = ims.get_data_dtype()
-        if len(dtype)>0:
+        if len(dtype) > 0:
             print('structured array :{}'.format(dtype))
-            imsg = ims.get_fdata()
-            imsg = imsg.view((imsg.dtype[0], len(imsg.dtype.names)))
-            ims = nib.Nifti1Image(imsg, ims.affine, ims.header)
-            # Only squeeze if it is NOT our special Video Proxy.
-            # If we try to squeeze the proxy, it loads all 100GB of video and crashes.
 
+            # FIX 1: Use np.asanyarray(ims.dataobj).
+            # get_fdata() would convert to float, deleting the field names needed below.
+            imsg_raw = np.asanyarray(ims.dataobj)
+
+            # Efficiently turn (X, Y, Z) structured -> (X, Y, Z, 3) flat without copying memory
+            imsg_view = imsg_raw.view((imsg_raw.dtype[0], len(imsg_raw.dtype.names)))
+
+            # FIX 2: Do NOT pass ims.header.
+            # Let Nibabel create a new header for the new (X,Y,Z,3) shape.
+            ims = nib.Nifti1Image(imsg_view, ims.affine)
+
+            # Only squeeze if it is NOT our special Video Proxy.
+            # Checks if we have extra dimensions (e.g., shape is (X,Y,Z,1,3) -> want (X,Y,Z,3))
             if ims.ndim > 4 and not is_video_proxy:
-                ims = nib.Nifti1Image(ims.get_fdata().squeeze(), ims.affine, ims.header)
+                # We can safely use get_fdata() here because 'ims' is now a standard object
+                new_data = ims.get_fdata().squeeze()
+                ims = nib.Nifti1Image(new_data, ims.affine)
         self.ims = ims
         if is_video_proxy:
             print("Detected 5D Chunked Video")
@@ -905,7 +979,7 @@ class readData():
             self.video_im = ims
             self.current_frame = ims.shape[2]//2  # Start in middle frame
             frame0_data = self.video_im.get_frame(self.current_frame)
-
+            self.label_current_frame = self.video_im.get_label_frame(self.current_frame)
             # Create the visual object for the viewer
             self.im = frame0_data
 
@@ -983,6 +1057,7 @@ class readData():
 
         # 3. Update Image Slice
         frame_data = self.video_im.get_frame(self.current_frame)
+        self.label_current_frame = self.video_im.get_label_frame(self.current_frame)
         self.im = frame_data
         self.npImage = frame_data
         # 4. Update Segmentation Slice
@@ -990,7 +1065,7 @@ class readData():
         self.npSeg = seg_frame_data
         self.read_pars_video(reset_seg=False)
 
-    def commit_frame_segmentation_changes(self, npSeg, frame_index = None):
+    def commit_frame_segmentation_changes_old(self, npSeg, frame_index = None):
         """
         Saves the current visible 2D segmentation into the sparse proxy.
         Call this on mouseReleaseEvent.
@@ -1013,7 +1088,29 @@ class readData():
         if frame_index == self.current_frame:
             self.npSeg = new_mask.astype(np.uint8)
 
+    def commit_frame_segmentation_changes(self, npSeg, frame_index=None):
+        """
+        Saves the current visible 2D segmentation into the sparse proxy.
+        Call this on mouseReleaseEvent.
+        """
+        # 1. Check if we are in Video Mode
+        if not hasattr(self, 'seg_ims'):
+            return
 
+        # 2. Get frame index
+        if frame_index is None:
+            frame_index = self.current_frame
+        frame_index = int(frame_index)
+        print(f"Saving edits for Frame {frame_index}...")
+
+        # 3. Use the Proxy's setter (Triggers metadata updates & cleanup)
+        # The syntax [..., index] automatically maps to __setitem__
+        # and handles casting to uint8 internally.
+        self.seg_ims[..., frame_index] = npSeg
+
+        # 4. Update local view if needed
+        if frame_index == self.current_frame:
+            self.npSeg = npSeg.astype(np.uint8)
     def read_pars_video(self, reset_seg=True, adjust_for_show=True, im_new=None, seg_new=None):
         """
 
@@ -1095,12 +1192,16 @@ class readData():
         #    self.npImage = normalize_mri(data).astype(np.uint8)
         #else:
             #self.npImage = (255.0*(data - data.min())/(data.max()-data.min())).astype(np.uint8)
-        self.npImage = detect_modality_and_window(data)
+        self.npImage = detect_modality_and_window(
+            data,
+            window_center=getattr(self, '_ct_window_center', None),
+            window_width=getattr(self, '_ct_window_width', None),
+        )
         if reset_seg:
             shape = self.npImage.shape
             self.npSeg = np.zeros((shape[0], shape[1], shape[2]) ).astype('int')
         elif seg_new is not None:
-            self.npSeg = seg_new
+            self.npSeg = seg_new.transpose(2, 1, 0)[::-1, ::-1, ::-1]
         #self.npEdge = np.empty((0,3))
 
         self.ImDirection = nib.aff2axcodes(self.im.affine)
@@ -1300,6 +1401,67 @@ class readData():
             return self.readNIFTI(new_file, type=type)
             #self.npEdge = np.empty((0, 3))
         return [False, False, 'Failed']
+
+
+
+
+
+
+def load_image_core(file_path, target_system='IPL', type='eco'):
+    """
+    A unified function to load data without GUI dependencies.
+
+    Args:
+        file_path (str): Full path to the file.
+        target_system (str): Passed to readData.
+        type (str): 'eco' or other types used by readNIFTI etc.
+
+    Returns:
+        tuple: (readIM_object, Info_list, format_detected)
+    """
+
+    if not os.path.exists(file_path):
+        return None, [False, False, 'File not found'], None
+
+    filename = os.path.basename(file_path)
+    # Determine format based on extension (Headless doesn't have UI filters)
+    # This logic mimics the 'outfile_format' check in readD
+    ext = filename.lower()
+
+    readIM = readData(target_system=target_system)
+    format_detected = 'None'
+    Info = [False, False, 'No file']
+
+    try:
+        if any(x in ext for x in ['.vol']):
+            Info = readIM.readKretz(file_path)
+            format_detected = 'VOL'
+
+        elif any(x in ext for x in ['.nii', '.nii.gz', '.img', '.hdr']):
+            Info = readIM.readNIFTI(file_path, type)
+            format_detected = 'NIFTI'
+
+        elif any(x in ext for x in ['.nrrd', '.nhdr']):
+            Info = readIM.readNRRD(file_path, type)
+            format_detected = 'NRRD'
+
+        elif any(x in ext for x in ['.dcm', 'dicomdir']):
+            # DICOM often requires a folder, handle accordingly based on your readDICOM implementation
+            Info = readIM.readDICOM(file_path, type)
+            format_detected = 'DICOM'
+
+        elif any(x in ext for x in ['.mp4', '.avi', ".png", ".jpg", ".jpeg", ".mov", ".mkv"]):
+            Info = readIM.readNIFTI(file_path, type)  # Assuming video is handled like NIFTI per your snippet
+            format_detected = 'Video'
+
+        else:
+            Info = [False, False, 'Unknown format']
+
+    except Exception as e:
+        print(f"Error loading core: {e}")
+        Info = [False, False, 'Error']
+
+    return readIM, Info, format_detected
 
 if __name__ == "__main__":
     import os

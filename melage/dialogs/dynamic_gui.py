@@ -14,9 +14,8 @@ class DynamicDialog(QDialog):
     - Automatic Context Menus
     """
 
-    def __init__(self, schema, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.schema = schema
         self.widgets = {}  # Registry to find widgets by ID: self.widgets["my_id"]
 
         # 1. Setup Window Properties

@@ -317,14 +317,14 @@ class glScientific(GLViewWidget):
 
         opts = QFileDialog.DontUseNativeDialog
         filter_str = (
-            "Standard Screen Res (*.png);;"
             "High Res (1000px) (*.png);;"
             "High Res (2000px) (*.png);;"
-            "High Res (3000px) (*.png)"
+            "High Res (3000px) (*.png);;"
+            "Standard Screen Res (*.png);;"
         )
 
         # Define exactly which one you want as the default
-        default_filter = "Standard Screen Res (*.png)"
+        default_filter = "High Res (1000px) (*.png)"
 
         opts = QFileDialog.DontUseNativeDialog
 
@@ -1367,6 +1367,129 @@ class glScientific(GLViewWidget):
         self._rendered = 'image'
 
     def ShowContextMenu(self, pos):
+        """
+        Creates and displays the context menu for the 3D view.
+        Refactored for better logical grouping: Visuals, Tools, and Clipping.
+        """
+        # Main Menu
+        menu = QMenu("Edit", self)
+
+        # =========================================================
+        # SECTION 1: VISUAL APPEARANCE (Colors, Colormaps, Grid)
+        # =========================================================
+        self.visualsMenu = QMenu("Visual Appearance", self)
+
+        # --- 1.1 Background Color Submenu ---
+        self.bgColorMenu = QMenu('Background Color', self)
+
+        # Define colors (Label, RGB value)
+        bg_colors = [
+            ("Black", [0.05, 0.05, 0.05, 1]),
+            ("White", [1., 1., 1., 1]),
+            ("Gray", [0.3, 0.3, 0.3, 1]),
+            ("Green", [0.5, 1, 0.0, 1]),
+            ("Orange", [1, 0.7, 0.1, 1]),
+            ("Pink", [1, 0.41, 0.79, 1]),
+            ("Violet", [0.93, 0.51, 0.93, 1]),
+            ("Red", [0.98, 0.5, 0.44, 1]),
+            ("Blue", [0.25, 0.87, 0.82, 1]),
+            ("Yellow", [1, 0.87, 0.0, 1]),
+        ]
+
+        for label, color_val in bg_colors:
+            action = QAction(label, self)
+            action.triggered.connect(partial(self.changeBG, color_val))
+            self.bgColorMenu.addAction(action)
+
+        self.visualsMenu.addMenu(self.bgColorMenu)
+
+        # --- 1.2 Colormap Submenu (Renamed from Image Render) ---
+        self.imageRenderMenu = QMenu("Colormap", self)
+
+        # Define colormaps (Label, internal_name)
+        colormaps = [
+            ("Original", 'original'),
+            ("Gray", 'gray_r'),
+            ("Rainbow", 'gist_rainbow_r'),
+            ("JET", 'jet_r'),
+            ("Gnuplot", 'gnuplot2'),
+            ("Gnuplot Reverse", 'gnuplot_r'),
+        ]
+
+        for label, cmap_name in colormaps:
+            action = QAction(label, self)
+            action.triggered.connect(partial(self.update_cmap_image, cmap_name))
+            self.imageRenderMenu.addAction(action)
+
+        self.visualsMenu.addMenu(self.imageRenderMenu)
+
+        # --- 1.3 View Helpers (Axis/Grid) ---
+        self.visualsMenu.addSeparator()
+        self.visualsMenu.addAction(self.axis_action)
+        self.visualsMenu.addAction(self.grid_action)
+
+        # =========================================================
+        # SECTION 2: TOOLS (Segmentation & Painting)
+        # =========================================================
+        self.toolsMenu = QMenu("Tools", self)
+
+        # --- 2.1 Segmentation Submenu ---
+        self.segmentationMenu = QMenu('Segmentation', self)
+        self.segmentationMenu.addAction(self.im_seg_action)
+        self.segmentationMenu.addAction(self.seg_action)
+        self.toolsMenu.addMenu(self.segmentationMenu)
+
+        # --- 2.2 Painting Submenu ---
+        self.paintingMenu = QMenu('Painting', self)
+        self.paintingMenu.addAction(self.draw_action)
+        self.paintingMenu.addAction(self.clear_action)
+        self.toolsMenu.addMenu(self.paintingMenu)
+
+        # =========================================================
+        # SECTION 3: CLIPPING (Cut)
+        # =========================================================
+        self.CutMenu = QMenu('Clipping (Cut)', self)
+
+        # Define the action names and labels in a list
+        self.cut_actions_list = [
+            ('cut_remove_half_action', 'Remove Right Half'),
+            ('cut_remove_left_half_action', 'Remove Left Half'),
+            ('cut_remove_top_half_action', 'Remove Top Half'),
+            ('cut_remove_bottom_half_action', 'Remove Bottom Half'),
+            ('cut_remove_front_half_action', 'Remove Front Half'),
+            ('cut_remove_back_half_action', 'Remove Back Half'),
+            ('cut_remove_quarter_action', 'Remove Top-Right Quarter'),
+            ('cut_remove_eighth_action', 'Remove Top-Right Front Eighth')
+        ]
+
+        # Create actions dynamically
+        self.action_objects = {}
+        for action_name, label in self.cut_actions_list:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(False)
+            action.triggered.connect(partial(self.draw_art_action, action_name))
+            self.CutMenu.addAction(action)
+            self.action_objects[action_name] = action
+
+        # =========================================================
+        # BUILD FINAL MENU
+        # =========================================================
+        # Add the main groups
+        menu.addMenu(self.visualsMenu)
+        menu.addMenu(self.toolsMenu)
+        menu.addMenu(self.CutMenu)
+
+        menu.addSeparator()
+
+        # Add standalone actions
+        menu.addAction(self.goto_action)
+        menu.addAction(self.screenshot_action)
+
+        # Execute menu at cursor position
+        menu.exec_(self.mapToGlobal(pos))
+
+    def ShowContextMenu2(self, pos):
         # Main Edit Menu
         menu = QMenu("Edit")
 

@@ -1493,9 +1493,150 @@ def get_back_data(im, shape_initial, pad_zero, border_value):
     return im_fill
 
 
+import cv2
+import numpy as np
 
 
+def robust_magic_selection(im, initial_point, flood_tolerance=25):
+    """
+    Uses FloodFill to dynamically map the object's shape and intensities,
+    then refines the boundaries using GrabCut.
+    """
+    h, w = im.shape[:2]
 
+    # 1. Strict channel enforcement
+    if len(im.shape) == 2:
+        im_rgb = cv2.cvtColor(im.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+    elif im.shape[2] == 4:
+        im_rgb = cv2.cvtColor(im.astype(np.uint8), cv2.COLOR_RGBA2RGB)
+    else:
+        im_rgb = im.astype(np.uint8)
+
+    # 2. Smooth the image slightly so FloodFill ignores micro-noise and textures
+    blurred = cv2.GaussianBlur(im_rgb, (5, 5), 0)
+
+    # 3. Perform FloodFill to get an organic, content-aware initial map
+    # OpenCV requires the floodfill mask to be exactly 2 pixels larger than the image
+    ff_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+
+    # Tolerance defines how much the intensity/color can vary from the clicked point
+    lo_diff = (flood_tolerance, flood_tolerance, flood_tolerance)
+    hi_diff = (flood_tolerance, flood_tolerance, flood_tolerance)
+
+    # FLOODFILL_MASK_ONLY: Updates the mask without altering the visual image
+    # (1 << 8): Fills the mask with the value 1
+    flags = cv2.FLOODFILL_MASK_ONLY | cv2.FLOODFILL_FIXED_RANGE | (1 << 8)
+
+    x, y = initial_point
+    cv2.floodFill(blurred, ff_mask, (x, y), 0, lo_diff, hi_diff, flags)
+
+    # Extract the actual mask (remove OpenCV's mandatory 2-pixel padding)
+    base_object_mask = ff_mask[1:-1, 1:-1]
+
+    # If FloodFill failed to grab a meaningful area, fallback or exit gracefully
+    if np.sum(base_object_mask) < 10:
+        print("Click area too complex or isolated. Adjust tolerance.")
+        return None
+
+        # 4. Initialize GrabCut Mask using the organic FloodFill shape
+    # Start with everything as PROBABLE BACKGROUND
+    gc_mask = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
+
+    # Dilate the FloodFill mask to define the PROBABLE FOREGROUND
+    # This specifically captures the "missing patches" and "high intensities" just outside the fill
+    dilate_kernel = np.ones((15, 15), np.uint8)
+    probable_fg_area = cv2.dilate(base_object_mask, dilate_kernel, iterations=2)
+    gc_mask[probable_fg_area == 1] = cv2.GC_PR_FGD
+
+    # Erode the FloodFill mask to define the DEFINITE FOREGROUND
+    # This gives GrabCut an anchor of absolute certainty based on actual object colors
+    erode_kernel = np.ones((5, 5), np.uint8)
+    definite_fg_area = cv2.erode(base_object_mask, erode_kernel, iterations=1)
+    gc_mask[definite_fg_area == 1] = cv2.GC_FGD
+
+    # Mark the exact click point just to be absolutely safe
+    cv2.circle(gc_mask, (x, y), radius=2, color=cv2.GC_FGD, thickness=-1)
+
+    # 5. Run GrabCut
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
+
+    try:
+        cv2.grabCut(im_rgb, gc_mask, None, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_MASK)
+
+        # Extract the final foreground
+        segmented_area = np.where((gc_mask == cv2.GC_FGD) | (gc_mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
+
+        # Clean up final edges (removes stray pixels and fills tiny holes)
+        cleanup_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        segmented_area = cv2.morphologyEx(segmented_area, cv2.MORPH_OPEN, cleanup_kernel)
+        segmented_area = cv2.morphologyEx(segmented_area, cv2.MORPH_CLOSE, cleanup_kernel)
+
+        return segmented_area
+
+    except Exception as e:
+        print(f"GrabCut error: {e}")
+        return None
+
+
+def magic_selection_grabcut(im, initial_point, rect_size=150):
+    """
+    Uses OpenCV GrabCut initialized with a mask based on the clicked point.
+    """
+    h, w = im.shape[:2]
+
+    # 1. Strict channel enforcement
+    # GrabCut will crash or fail silently on 4-channel RGBA images.
+    if len(im.shape) == 2:
+        im_rgb = cv2.cvtColor(im.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+    elif im.shape[2] == 4:
+        im_rgb = cv2.cvtColor(im.astype(np.uint8), cv2.COLOR_RGBA2RGB)
+    else:
+        im_rgb = im.astype(np.uint8)
+
+    # Optional: Apply Bilateral Filter to smooth noise but preserve edges.
+    # This helps GrabCut's color clustering group similar RGB values better.
+    im_rgb = cv2.bilateralFilter(im_rgb, 9, 75, 75)
+
+    # 2. Allocate memory and start with a mask of PROBABLE BACKGROUND (2)
+    mask = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
+
+    x, y = initial_point
+
+    # 3. Define a larger PROBABLE FOREGROUND region (3)
+    # We increased the default rect_size to 150 to give the algorithm more room to breathe.
+    half_size = rect_size // 2
+    x1, y1 = max(0, x - half_size), max(0, y - half_size)
+    x2, y2 = min(w, x + half_size), min(h, y + half_size)
+
+    mask[y1:y2, x1:x2] = cv2.GC_PR_FGD
+
+    # 4. Mark the exact clicked point as DEFINITE FOREGROUND (1)
+    # This is the "magic" - it anchors the foreground color model exactly to the RGB you clicked.
+    cv2.circle(mask, (x, y), radius=3, color=cv2.GC_FGD, thickness=-1)
+
+    try:
+        # 5. Run GrabCut using MASK initialization instead of RECT
+        cv2.grabCut(im_rgb, mask, None, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_MASK)
+
+        # 6. Extract the foreground (1 = definite foreground, 3 = probable foreground)
+        segmented_area = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
+
+        # Apply morphology to fill in small holes
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        segmented_area = cv2.morphologyEx(segmented_area, cv2.MORPH_CLOSE, kernel)
+
+        # Ensure the actual clicked point wasn't filtered out by the morphology
+        if segmented_area[y, x] == 0:
+            return None
+
+        return segmented_area
+
+    except Exception as e:
+        print(f"GrabCut error: {e}")
+        return None
 def magic_selection(im, initial_point, connectivity = 4, tol = 60):
     #(int(realy), int(realx))
     h, w = im.shape[:2]
@@ -2060,7 +2201,7 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
     widget.enabledLine = False
     widget._magic_slice =  None # for magic coloring
     widget.setMouseTracking(False)
-    widget.makeObject()
+    #widget.makeObject()
     widget.update()
     if reptime <=1:
         if code == 0:
@@ -2924,6 +3065,34 @@ def setSliceSeg(widget, npSeg):
     widget.segSlice = segSlice
 
 ########Get current slider value##############
+def slice_position_mm(slice_idx, reader, active_dim):
+    """
+    Compute world position in mm for a given display slice index.
+
+    active_dim: 0 = axial (scrolls NIfTI Z), 1 = coronal (Y), 2 = sagittal (X).
+    The display array is always transpose(2,1,0)[::-1,::-1,::-1] relative to NIfTI,
+    so the NIfTI voxel index is (dim_size - 1 - slice_idx).
+    Returns a float (mm) or None if reader attributes are unavailable.
+    """
+    try:
+        world_axis = 2 - active_dim          # dim0→Z(2), dim1→Y(1), dim2→X(0)
+        extent_idx = 2 * world_axis + 1      # ImExtent[1]=dimX, [3]=dimY, [5]=dimZ
+        dim_size = reader.ImExtent[extent_idx]
+        nifti_idx = dim_size - 1 - slice_idx # undo display flip
+        return float(reader.ImOrigin[world_axis] + nifti_idx * reader.ImSpacing[world_axis])
+    except Exception:
+        return None
+
+
+def slice_label_text(slice_idx, reader=None, active_dim=None):
+    """Format a slider label as 'N  (X.X mm)' when affine info is available."""
+    pos = slice_position_mm(slice_idx, reader, active_dim) \
+          if (reader is not None and active_dim is not None) else None
+    if pos is not None:
+        return f"{slice_idx}  ({pos:.1f} mm)"
+    return str(slice_idx)
+
+
 def getCurrentSlider(slider, widget, value):
     """
     Get current slider value
@@ -2946,31 +3115,20 @@ def getCurrentSlider(slider, widget, value):
 
 
 
-def updateSight(slider, widget, reader, value, tol_slice=3):
-    """
-    Update slider and widget
-    Args:
-        slider:
-        widget:
-        reader:
-        value:
-        tol_slice:
-
-    Returns:
-
-    """
-
-
+def updateSight(slider, widget, reader, value, tol_slice=3, label=None):
+    """Update the OpenGL widget and, when provided, the slice-number label."""
     try:
-        sliceNum = getCurrentSlider(slider,
-                                    widget, value)
+        sliceNum = getCurrentSlider(slider, widget, value)
         widget.points = []
         widget.selectedPoints = []
 
-        widget.updateInfo(*getCurrentSlice(widget,
-                                                        reader.npImage, reader.npSeg,
-                                                        sliceNum, reader.tract, tol_slice=tol_slice), sliceNum, reader.npImage.shape,
-                          imSpacing = reader.ImSpacing)
+        widget.updateInfo(*getCurrentSlice(widget, reader.npImage, reader.npSeg,
+                                           sliceNum, reader.tract, tol_slice=tol_slice),
+                          sliceNum, reader.npImage.shape,
+                          imSpacing=reader.ImSpacing)
+
+        if label is not None:
+            label.setText(slice_label_text(sliceNum, reader, widget.activeDim))
 
         widget.update()
     except Exception as e:
@@ -2978,7 +3136,7 @@ def updateSight(slider, widget, reader, value, tol_slice=3):
         print('Impossible')
 
 ########Change from sagital to coronal and axial##############
-def changeCoronalSagittalAxial(slider, widget, reader, windowName, indWind, label, initialState = False, tol_slice=3):
+def changeCoronalSagittalAxial(slider, widget, reader, windowName, indWind, label, initialState=False, tol_slice=3):
     try:
         widget.changeView(windowName, widget.zRot)
         widget.updateCurrentImageInfo(reader.npImage.shape)
@@ -2986,15 +3144,19 @@ def changeCoronalSagittalAxial(slider, widget, reader, windowName, indWind, labe
         slider.setRange(0, reader.ImExtent[indWind])
         slider.blockSignals(False)
         slider.setValue(reader.ImExtent[indWind] // 2)
-        label.setText(str_conv(reader.ImExtent[indWind] // 2))
 
         sliceNum = slider.value()
+        # indWind 1=sagittal→activeDim2, 3=coronal→activeDim1, 5=axial→activeDim0
+        active_dim = (5 - indWind) // 2
+        label.setText(slice_label_text(sliceNum, reader, active_dim))
+
         widget.points = []
         widget.selectedPoints = []
 
-        widget.updateInfo(*getCurrentSlice(widget,reader.npImage, reader.npSeg,
-                                                         sliceNum, reader.tract, tol_slice=tol_slice), sliceNum, reader.npImage.shape, initialState=initialState,
-                          imSpacing = reader.ImSpacing)
+        widget.updateInfo(*getCurrentSlice(widget, reader.npImage, reader.npSeg,
+                                           sliceNum, reader.tract, tol_slice=tol_slice),
+                          sliceNum, reader.npImage.shape, initialState=initialState,
+                          imSpacing=reader.ImSpacing)
 
         widget.update()
     except Exception as e:
@@ -3653,7 +3815,7 @@ def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lin
     # 1. Get Frames involved in this update
     # (Assuming whiteInd_all is N x 3: [x, y, frame_idx])
     num_update = np.unique(whiteInd_all[:, 2])
-
+    num_update = [el.item() for el in num_update]
     for iw in num_update:
         # Get the specific frame (2D array)
         current_npseg = reader.seg_ims.get_frame(iw)
@@ -3744,78 +3906,6 @@ def update_last_video(self, reader, colorInd, whiteInd_all, colorInd2, guide_lin
         txt = f'File: {self.filenameView1} | Frame {int(iw)} {label_type} Vol: {vol:0.2f} cm\u00b3'
         self.openedFileName.setText(txt)
 
-        if colorInd == 1500:
-            self._lineinfo.append(WI)
-
-def update_last_video2(self, reader, colorInd, whiteInd_all, colorInd2, guide_lines = False):
-    """
-    update last
-    Args:
-        self:
-        reader:
-        colorInd:
-        whiteInd:
-        colorInd2:
-        guide_lines:
-
-    Returns:
-
-    """
-
-    num_update = np.unique(whiteInd_all[:, 2])
-    for iw in num_update:
-        current_npseg = reader.seg_ims.get_frame(iw)
-        whiteInd = whiteInd_all[whiteInd_all[:, 2] == iw, :]
-        whiteInd = whiteInd[:, [0,1]]
-
-        if colorInd != 0:
-            WI = whiteInd[np.where(current_npseg[tuple(zip(*whiteInd))] != colorInd)[0], :]
-            #WI = whiteInd
-            if WI.shape[0]< 1:
-                return
-            inds, us = _get_color_index(current_npseg, WI)
-            self._lastReaderSegCol.append(colorInd)
-            self._lastReaderSegInd.append([WI, inds, us, iw])
-
-            WI = whiteInd # to be commented to not check
-
-        else:
-            WI = getNoneZeroSeg(current_npseg, whiteInd, colorInd2, 9876)
-            if WI.shape[0]< 1:
-                return
-            self._lastReaderSegCol.append(colorInd)
-            inds, us = _get_color_index(current_npseg, WI)
-            self._lastReaderSegInd.append([WI, inds, us, iw])
-
-        self._lastReaderSegPrevCol.append(colorInd2)
-        self._undoTimes = 0
-        if len(self._lastReaderSegInd) > self._lastMax:
-            self._lastReaderSegCol = self._lastReaderSegCol[1:]
-            self._lastReaderSegInd = self._lastReaderSegInd[1:]
-            self._lastReaderSegPrevCol = self._lastReaderSegPrevCol[1:]
-        if guide_lines:
-            self._lastlines.append(WI)
-        current_npseg[tuple(zip(*WI))] = colorInd
-        reader.commit_frame_segmentation_changes(current_npseg, iw)
-        if colorInd == 0:
-            colsel = colorInd2
-        else:
-            colsel = colorInd
-        if self._sender in [getattr(self, 'openGLWidget_{}'.format(f)) for f in self.widgets_view1]:
-
-            txt = 'File: {}'.format(self.filenameView1)
-            if colorInd == 9876:
-                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg > 0).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
-            else:
-                txt += ' TV (US) : {0:0.2f} cm\u00b3'.format((self.readView1.npSeg == colsel).sum() * self.readView1.ImSpacing[0] ** 3 / 1000)
-            self.openedFileName.setText(txt)
-        else:
-            txt = 'File: {}'.format(self.filenameView2)
-            if colorInd==9876:
-                txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg > 0).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
-            else:
-                txt += ' TV (View2) : {0:0.2f} cm\u00b3'.format((self.readView2.npSeg == colsel).sum() * self.readView2.ImSpacing[0] ** 3 / 1000)
-            self.openedFileName.setText(txt)
         if colorInd == 1500:
             self._lineinfo.append(WI)
 
@@ -3986,43 +4076,45 @@ def get_global_crop_box(image_list, threshold=10):
     return cleaned_stack
 
 
-def detect_modality_and_window(data):
+def detect_modality_and_window(data, window_center=None, window_width=None):
     """
-    Analyzes the numpy array to guess the modality and returns
-    the prepared uint8 image.
+    Prepare a uint8 display image from raw voxel data.
+
+    For CT (detected by HU negative values), the DICOM-provided window is used
+    when available; otherwise a percentile-based auto-window is computed so the
+    display covers the full clinically relevant range of the acquisition.
+    For MRI and other modalities, robust percentile normalisation is applied.
     """
-    # 1. Check Dimensions
-    # 4D data is almost always MRI (fMRI, DTI, or Multi-phase)
     if data.ndim == 4:
-        print("Detected: 4D MRI/DTI")
-        # For visualization, we usually take the first volume or mean
-        # But per your logic, we might visualize one channel
-        return (255.0*(data - data.min())/(data.max()-data.min())).astype(np.uint8)
+        mn, mx = data.min(), data.max()
+        if mx > mn:
+            return (255.0 * (data - mn) / (mx - mn)).astype(np.uint8)
+        return np.zeros_like(data, dtype=np.uint8)
 
-    min_val = data.min()
-    max_val = data.max()
+    # CT detected by Hounsfield Unit signature (air = -1000 HU)
+    if data.min() < -200:
+        if window_center is not None and window_width is not None:
+            # Use scanner-provided window (most accurate for the acquisition protocol)
+            return apply_ct_window(data, window_center, window_width)
+        else:
+            # Auto-window: cover the useful HU range from the actual data,
+            # ignoring the top/bottom 2% to skip air pockets and metal artefacts.
+            p2  = float(np.percentile(data, 2))
+            p98 = float(np.percentile(data, 98))
+            return apply_ct_window(data,
+                                   window_center=(p2 + p98) / 2.0,
+                                   window_width=max(p98 - p2, 1.0))
 
-    # 2. Check for CT Signature (Negative Values)
-    # CT Air is -1000. If we see values significantly below 0, it's CT.
-    # We use -200 as a safe threshold to distinguish from noisy MRI background.
-    if min_val < -200:
-        print(f"Detected: CT (Range: {min_val} to {max_val})")
-        # Apply Soft Tissue Window (modify as needed)
-        return apply_ct_window(data, window_center=40, window_width=400)
-
-    # 3. Check for MRI Signature (Positive only, start at 0)
-    else:
-        print(f"Detected: MRI (Range: {min_val} to {max_val})")
-        return normalize_mri(data)
+    return normalize_mri(data)
 
 
-
-def apply_ct_window(data, window_center=40, window_width=400):
-    min_visible = window_center - (window_width / 2.0)
-    max_visible = window_center + (window_width / 2.0)
-    windowed = np.clip(data, min_visible, max_visible)
-    # Normalize 0-255
-    normalized = (windowed - min_visible) / (max_visible - min_visible)
+def apply_ct_window(data, window_center, window_width):
+    """Map HU data to uint8 using a standard radiological window."""
+    half = window_width / 2.0
+    lo = window_center - half
+    hi = window_center + half
+    windowed = np.clip(data, lo, hi)
+    normalized = (windowed - lo) / (hi - lo)
     return (normalized * 255.0).astype(np.uint8)
 
 
@@ -4189,8 +4281,9 @@ def export_tables(self, file):
              if itm is not None:
                 txt = itm.text()
                 dicts_0[r].append(txt)
-
-    with open(file + '.csv', 'w') as f:  # You will need 'wb' mode in Python 2.x
+    if not file.endswith('.csv'):
+        file = file+'.csv'
+    with open(file, 'w') as f:  # You will need 'wb' mode in Python 2.x
         f.write(','.join(headers)+'\n')
 
         for key in dicts_0.keys():

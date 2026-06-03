@@ -1,22 +1,15 @@
 __AUTHOR__ = 'Bahram Jafrasteh'
 
 
-from PyQt5.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QMenu, QAction, QVBoxLayout
-from PyQt5.QtCore import Qt
-from PyQt5 import QtCore
-from PyQt5.QtGui import QPixmap, QImage, qRgb
-import os
-from PyQt5 import QtWidgets
-from PyQt5.QtCore import pyqtSignal
 from melage.utils.utils import help_dialogue_open_image
-
-import os
-import numpy as np
-from PyQt5 import QtWidgets, QtCore, QtGui
-from PyQt5.QtWidgets import QFileDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage
 import re
+from PyQt5.QtGui import QPixmap, QImage
+import os
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtWidgets import (QFileDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                             QCheckBox, QSpinBox, QGridLayout, QComboBox, QWidget)
+from PyQt5.QtCore import Qt, pyqtSignal
+
 
 class QFileDialogPreview(QFileDialog):
     """
@@ -235,110 +228,214 @@ class QFileDialogPreview(QFileDialog):
     def getFilesSelected(self):
         return self._filesSelected
 
+
+
+
+
 class QFileSaveDialogPreview(QFileDialog):
     """
-    Customizing save dialogue
+    Customizing save dialogue to include Coordinate systems (RAS),
+    FPS controls, and a 'Segmented only' filter.
     """
     changCS = pyqtSignal()
-    def __init__(self, *args, check_state_csv, **kwargs):
-        QFileDialog.__init__(self, *args, **kwargs)
+
+    def __init__(self, parent=None, caption="", directory="", filter="", options=None, default_fps=30):
+        # Pass the standard arguments to the super init
+        super().__init__(parent, caption, directory, filter)
+        if options:
+            self.setOptions(options)
+
+        # --- Basic Setup ---
         self.setOption(QFileDialog.DontUseNativeDialog, True)
         self.setFileMode(QFileDialog.AnyFile)
         self.setAcceptMode(QFileDialog.AcceptSave)
-        #self.setViewMode(QFileDialog.Detail)
-        self.setWindowTitle('Saving image...')
+        self.setWindowTitle('Saving...')
+
+        # --- Sizing ---
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-
         sizePolicy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
         self.setSizePolicy(sizePolicy)
 
-
-
-        self.checkBox_csv = QtWidgets.QCheckBox(self)
-        self.checkBox_csv.setObjectName("checkBox")
-        self.checkBox_csv.setText('Save table')
-        self.checkBox_csv.setChecked(check_state_csv)
-
-        box = QHBoxLayout()
-        box.addWidget(self.checkBox_csv)
-
-        box.addStretch()
-
-        self.layout().addLayout(box, 4, 2, 1, 1)
-
         _translate = QtCore.QCoreApplication.translate
+        layout = self.layout()
+
+        # =========================================================
+        # 1. Segmented Only Option (Photos)
+        # =========================================================
+        self.checkBox_seg_only = QtWidgets.QCheckBox(self)
+        self.checkBox_seg_only.setObjectName("checkBox_seg_only")
+        self.checkBox_seg_only.setText('Segmented only')
+        self.checkBox_seg_only.setToolTip("Only save frames that contain segmentation labels")
+        self.checkBox_seg_only.setVisible(False)  # Default Hidden
 
 
-        #self.layout().addLayout(box, 4, 2, 1, 1)
+        if isinstance(layout, QGridLayout):
+            # Row 4, Column 2 (Right side)
+            layout.addWidget(self.checkBox_seg_only, 4, 2, 1, 1)
 
-        self.label = QtWidgets.QLabel(self)
-        self.label.setText(_translate("Dialog", "RAS"))
-        self.label.setAlignment(Qt.AlignCenter)
-        self.label.setObjectName("label")
-        self.label.setStyleSheet('color: Red')
+        # =========================================================
+        # 2. Coordinate Systems & Advanced Toggle (RAS - NIfTI)
+        # =========================================================
+        self.ras_container_widget = QtWidgets.QWidget(self)
+        ras_layout = QHBoxLayout(self.ras_container_widget)
+        ras_layout.setContentsMargins(0, 0, 0, 0)
 
-
+        self.label_ras = QtWidgets.QLabel(self)
+        self.label_ras.setText(_translate("Dialog", "RAS"))
+        self.label_ras.setAlignment(Qt.AlignCenter)
+        self.label_ras.setStyleSheet('color: Red')
 
         self.combbox_asto = QtWidgets.QComboBox(self)
-        self.combbox_asto.setObjectName("label")
-
-        for i , ss in enumerate(['as', 'to']):
+        for i, ss in enumerate(['as', 'to']):
             self.combbox_asto.setItemData(i, Qt.AlignCenter, Qt.TextAlignmentRole)
-            self.combbox_asto.addItem(" "*9+ss+" "*9)
+            self.combbox_asto.addItem(" " * 9 + ss + " " * 9)
 
         self._combobox_coords = QtWidgets.QComboBox(self)
-        self._combobox_coords.setObjectName("_combobox_coords")
+        self.systems = ['RAS', 'RSA', 'RPI', 'RPS', 'RIP', 'RIA', 'RSP', 'RSA',
+                        'LAS', 'LAI', 'LPI', 'LPS', 'LSA', 'LIA', 'LIP', 'LSP',
+                        'PIL', 'PIR', 'PSL', 'PSR', 'PLI', 'PRI', 'PLS', 'PRS',
+                        'AIL', 'AIR', 'ASL', 'ASR', 'ALI', 'ARI', 'ALS', 'ARS',
+                        'IPL', 'IPR', 'IAL', 'IAR', 'ILP', 'IRP', 'ILA', 'IRA',
+                        'SPL', 'SPR', 'SAL', 'SAR', 'SLP', 'SRP', 'SLA', 'SRA']
 
-
-
-        self.systems = ['RAS', 'RSA', 'RPI', 'RPS',
-                   'RIP', 'RIA', 'RSP', 'RSA',
-                    'LAS', 'LAI', 'LPI', 'LPS',
-                   'LSA', 'LIA', 'LIP', 'LSP',
-                   'PIL', 'PIR', 'PSL', 'PSR',
-                   'PLI', 'PRI', 'PLS', 'PRS',
-                   'AIL', 'AIR', 'ASL', 'ASR',
-                   'ALI', 'ARI', 'ALS', 'ARS',
-                   'IPL', 'IPR', 'IAL', 'IAR',
-                   'ILP', 'IRP', 'ILA', 'IRA',
-                   'SPL', 'SPR', 'SAL', 'SAR',
-                   'SLP', 'SRP', 'SLA', 'SRA'
-                   ]
-        for i , ss in enumerate(self.systems):
+        for i, ss in enumerate(self.systems):
             self._combobox_coords.setItemData(i, Qt.AlignCenter, Qt.TextAlignmentRole)
-            self._combobox_coords.addItem(" "*9+ss+" "*9)
+            self._combobox_coords.addItem(" " * 9 + ss + " " * 9)
+
         self._combobox_coords.setEnabled(False)
         self.combbox_asto.setEnabled(False)
 
-        #box = QHBoxLayout()
-        self.checkBox = QtWidgets.QCheckBox(self)
-        self.checkBox.setObjectName("checkBox")
-        self.checkBox.setText('Advanced')
+        self.checkBox_adv = QtWidgets.QCheckBox(self)
+        self.checkBox_adv.setText('Advanced')
+        self.checkBox_adv.stateChanged.connect(self.activate_combobox)
 
-        box = QHBoxLayout()
-        box.addWidget(self.checkBox)
-        box.addWidget(self.label)
-        box.addWidget(self.combbox_asto)
+        ras_layout.addWidget(self.checkBox_adv)
+        ras_layout.addWidget(self.label_ras)
+        ras_layout.addWidget(self.combbox_asto)
+        ras_layout.addWidget(self._combobox_coords)
 
+        self.ras_container_widget.setVisible(False)
 
+        if isinstance(layout, QGridLayout):
+            layout.addWidget(self.ras_container_widget, 4, 1, 1, 1)
 
-        #self.layout().addLayout(box, 4, 0, 1, 1)
+        # =========================================================
+        # 3. FPS Controls (Video)
+        # =========================================================
+        self.fps_container_widget = QtWidgets.QWidget(self)
+        fps_layout = QHBoxLayout(self.fps_container_widget)
+        fps_layout.setContentsMargins(0, 0, 0, 0)
 
-        box.addWidget(self._combobox_coords)
-        #box.addStretch()
-        self.layout().addLayout(box, 4, 1, 1, 1)
-        self.checkBox.stateChanged.connect(self.activate_combobox)
+        self.lbl_fps = QLabel("FPS:", self)
+        self.chk_default_fps = QCheckBox("Default", self)
+        self.chk_default_fps.setToolTip("Use default frame rate")
+        self.chk_default_fps.setChecked(True)
+
+        self.spin_fps = QSpinBox(self)
+        self.spin_fps.setRange(1, 120)
+        self.spin_fps.setValue(default_fps)
+        self.spin_fps.setEnabled(False)
+        self.spin_fps.setSuffix(" fps")
+
+        self.chk_default_fps.toggled.connect(self._toggle_fps_manual)
+
+        fps_layout.addWidget(self.lbl_fps)
+        fps_layout.addWidget(self.spin_fps)
+        fps_layout.addWidget(self.chk_default_fps)
+        fps_layout.addStretch()
+
+        if isinstance(layout, QGridLayout):
+            layout.addWidget(self.fps_container_widget, 5, 1, 1, 2)
+
+        # =========================================================
+        # 4. Connections & Logic
+        # =========================================================
+
+        # Extensions definitions
+        self.ext_video = ['.mp4', '.avi', '.mov', '.mkv', '.wmv']
+        self.ext_nifti = ['.nii', '.nii.gz']
+        self.ext_photo = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']
+
+        self.currentChanged.connect(self._update_ui_visibility)
+        self.filterSelected.connect(self._update_ui_visibility)
+
         self._fileSelected = ''
         self.fileSelected.connect(self.onFileSelected)
 
+        # --- FIXED INITIALIZATION ---
+        # Pass the incoming 'filter' string so the logic can see
+        # "Images (*.png *.jpg)" and activate the photo checkboxes immediately.
+        self._update_ui_visibility(filter.split(";;")[0])
 
+    # --- Methods ---
+
+    def _toggle_fps_manual(self, checked):
+        self.spin_fps.setEnabled(not checked)
+
+    def _update_ui_visibility(self, path_or_filter):
+        """
+        Determines which UI elements to show based on:
+        1. The 'Save as type' dropdown (Primary)
+        2. The currently selected file (Secondary)
+        """
+
+        # --- Build a robust string to check against ---
+        # 1. Start with the input argument (could be a path or a filter string)
+        check_str = str(path_or_filter).lower()
+
+        # 2. Add the currently selected Name Filter (The Dropdown)
+        # This is CRITICAL: It ensures options stay visible even when navigating folders
+        check_str += " " + self.selectedNameFilter().lower()
+
+        # 3. Add the currently selected file (if any)
+        # This helps if the user clicked a file that matches an extension
+        current_files = self.selectedFiles()
+        if current_files:
+            check_str += " " + current_files[0].lower()
+
+        # --- Check Types based on the combined string ---
+
+        # Video Logic
+        is_video = any(ext in check_str for ext in self.ext_video)
+        # Also check for explicit keywords in the filter name like "Video"
+        if "video" in check_str or "movie" in check_str:
+            is_video = True
+
+        # NIfTI Logic
+        is_nifti = any(ext in check_str for ext in self.ext_nifti)
+        if "nii" in check_str:
+            is_nifti = True
+
+        # Photo Logic
+        is_photo = any(ext in check_str for ext in self.ext_photo)
+        # Check if "image" or "photo" is in the filter name (optional safety net)
+        if "image" in check_str or "photo" in check_str:
+            is_photo = True
+
+        # --- Apply Visibility ---
+
+        # 1. Video -> FPS Controls
+        self.fps_container_widget.setVisible(is_video)
+
+        # 2. NIfTI -> RAS Options
+        self.ras_container_widget.setVisible(is_nifti)
+
+        # 3. Photo -> Segmented Only
+        self.checkBox_seg_only.setVisible(is_photo)
+
+        self.checkBox_seg_only.setChecked(is_photo)
+
+        # Auto-tick 'Segmented only' if it becomes visible and wasn't manually unchecked?
+        # (Optional: Logic below keeps it ticked if it's visible)
+        #if is_photo and not self.checkBox_seg_only.isChecked():
+        #    self.checkBox_seg_only.setChecked(True)
     def setCS(self, cs):
         try:
             index = [i for i, el in enumerate(self.systems) if el == cs][0]
             self._combobox_coords.setCurrentIndex(0)
-            self.label.setText(cs)
+            self.label_ras.setText(cs)
         except:
             pass
 
@@ -347,145 +444,19 @@ class QFileSaveDialogPreview(QFileDialog):
         self.combbox_asto.setEnabled(value)
 
     def getInfo(self):
-        return self._combobox_coords.currentText().strip(' '), self.combbox_asto.currentText().strip(' '), self.checkBox_csv.isChecked()
+        return (
+            self._combobox_coords.currentText().strip(' '),
+            self.combbox_asto.currentText().strip(' '),
+            self.spin_fps.value(),
+            self.chk_default_fps.isChecked(),
+            self.checkBox_seg_only.isChecked()
+        )
 
     def getFileSelected(self):
         return [self._fileSelected, '']
 
     def onFileSelected(self, file):
         self._fileSelected = file
-
-
-
-class QFileDialogPreview_or(QFileDialog):
-    """
-    Open dialogue preview
-    """
-    def __init__(self, *args, **kwargs):
-        if 'index' in kwargs:
-            index = kwargs['index']
-            kwargs.pop('index')
-        else:
-            index = 0
-        if 'last_state' in kwargs:
-            last_state = kwargs['last_state']
-            kwargs.pop('last_state')
-        else:
-            last_state = False
-
-
-        QFileDialog.__init__(self, *args, **kwargs)
-        self.setOption(QFileDialog.DontUseNativeDialog, True)
-        self.setFileMode(QFileDialog.ExistingFile)
-        self.setAcceptMode(QFileDialog.AcceptOpen)
-        #self.setViewMode(QFileDialog.Detail)
-        self.setWindowTitle('Load image...')
-
-        box = QVBoxLayout()
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
-        self.setSizePolicy(sizePolicy)
-
-        #self.setFixedSize(self.width() + 500, self.height())
-
-        self.mpPreview = QLabel("Preview", self)
-        #self.mpPreview.setFixedSize(500, 500)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        self.mpPreview.setMinimumSize(400, 400)
-        sizePolicy.setHeightForWidth(self.mpPreview.sizePolicy().hasHeightForWidth())
-        self.mpPreview.setSizePolicy(sizePolicy)
-        self.mpPreview.setAlignment(Qt.AlignCenter)
-        self.mpPreview.setObjectName("labelPreview")
-
-        self.checkBox_preview = QtWidgets.QCheckBox(self)
-        self.checkBox_preview.setObjectName("checkBox")
-        self.checkBox_preview.setText('Preview')
-        self.checkBox_preview.setChecked(last_state)
-
-        box.addWidget(self.mpPreview)
-        box.addWidget(self.checkBox_preview)
-        box2 = QHBoxLayout()
-        self._combobox_type = QtWidgets.QComboBox(self)
-        self._combobox_type.setObjectName("_combobox_coords")
-
-
-
-        self.systems = ['US (neonatal)', 'US (fetal)', 'MRI']
-        for i , ss in enumerate(self.systems):
-            self._combobox_type.setItemData(i, Qt.AlignCenter, Qt.TextAlignmentRole)
-            self._combobox_type.addItem(" "*9+ss+" "*9)
-        self._combobox_type.setCurrentIndex(index)
-        self.checkBox = QtWidgets.QCheckBox(self)
-        self.checkBox.setObjectName("checkBox")
-        self.checkBox.setText('Advanced')
-        self.checkBox.stateChanged.connect(self.activate_combobox)
-        box2.addWidget(self.checkBox)
-        box2.addWidget(self._combobox_type)
-
-
-        #box.addStretch()
-
-        self.layout().addLayout(box, 1, 3, 1, 1)
-        self.layout().addLayout(box2, 4, 1, 1, 1)
-
-
-        self.currentChanged.connect(self.onChange)
-        self.fileSelected.connect(self.onFileSelected)
-        self.filesSelected.connect(self.onFilesSelected)
-
-        self._fileSelected = None
-        self._filesSelected = None
-
-
-
-    def onChange(self, path):
-        #pixmap = QPixmap(path)
-        if not self.checkBox_preview.isChecked():
-            return
-        fileName, file_extension = os.path.splitext(path)
-        if file_extension ==  '.gz':
-            fileName, file_extension = os.path.splitext(fileName)
-        if not os.path.isfile(path):
-            return
-
-        try:
-            s = help_dialogue_open_image(path)
-            height, width,_ = s.shape
-
-            bytesPerLine = 3 * width
-            #qImg = QImage(normal.data, width, height, bytesPerLine, QImage.Format_RGB888)
-            #gray_color_table = [qRgb(i, i, i) for i in range(256)]
-            qImg = QImage(s.data, s.shape[1]//3, s.shape[0]//3, bytesPerLine, QImage.Format_RGB888)
-            #qImg.setColorTable(gray_color_table)
-            #from PyQt5.QtCore import QByteArray
-            #qb = QByteArray(np.ndarray.tobytes(s))
-            #qImg = QImage.fromData(qb)
-            pixmap01 = QPixmap.fromImage(qImg)
-            pixmap = QPixmap(pixmap01)
-            if(pixmap.isNull()):
-                self.mpPreview.setText("Preview")
-            else:
-                self.mpPreview.setPixmap(pixmap.scaled(self.mpPreview.width(), self.mpPreview.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                #self.mpPreview.setPixmap(pixmap)
-        except:
-            pass
-    def activate_combobox(self, value):
-        self._combobox_type.setEnabled(value)
-    def onFileSelected(self, file):
-        self._fileSelected = file
-
-    def onFilesSelected(self, files):
-        self._filesSelected = files
-
-    def getFileSelected(self):
-        return [self._fileSelected, '']
-
-    def getFilesSelected(self):
-        return self._filesSelected
 
 
 

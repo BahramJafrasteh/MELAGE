@@ -78,7 +78,7 @@ class esFCMLogic(DynamicDialog):
             """The main execution function."""
             self.progress_bar.setValue(10)
 
-            data = data_view.get_fdata().copy()
+            data = data_view.im.get_fdata().copy()
             if len(data.shape)<=1:
                 raise ValueError("Input image must be at least 2D NIfTI.")
 

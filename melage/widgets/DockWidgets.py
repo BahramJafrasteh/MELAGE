@@ -20,13 +20,34 @@ from melage.dialogs.helpers import QFileDialogPreview
 from melage.utils.utils import export_tables
 from PyQt5.QtWidgets import QMenu, QAction
 from collections import defaultdict
-
+import re
 colorNames =("#FFCC08","darkRed","red", "darkOrange", "orange", "#8b8b00","yellow",
              "darkGreen","green","darkCyan","cyan",
              "darkBlue","blue","magenta","darkMagenta", 'red')
 
 
+def is_valid_format(file_path, filters):
+    # 1. Extract the contents inside the parentheses (...)
+    #    This returns a list like ['*.nia *.nii ...', '*.vol ...', ...]
+    raw_patterns = re.findall(r'\((.*?)\)', filters)
 
+    valid_suffixes = []
+
+    # 2. Process each group
+    for group in raw_patterns:
+        # Split by space to get individual patterns (e.g., *.nii)
+        for pattern in group.split():
+            # Strip asterisks to get the actual suffix/name
+            # e.g., "*.nii.gz" -> ".nii.gz", "*DICOMDIR*" -> "DICOMDIR"
+            clean_suffix = pattern.replace('*', '')
+
+            # 3. Add to list (ignore empty strings from '**')
+            if clean_suffix:
+                valid_suffixes.append(clean_suffix.lower())
+
+    # 4. Check if the file path ends with any of the valid suffixes
+    #    We convert to lowercase to make it case-insensitive
+    return file_path.lower().endswith(tuple(valid_suffixes))
 
 class dockWidgets():
     """
@@ -178,18 +199,23 @@ class dockWidgets():
         """
         Called when the file is DROPPED.
         """
-        urls = event.mimeData().urls()
-        if urls:
-            # Convert URL to local system path (e.g., /home/user/image.nii)
-            file_path = urls[0].toLocalFile()
-            if file_path[-3:]=='.bn':
-                self.loadProject(file_path)
-            else:
-                self.browse_view1([[file_path, "None"], 2], use_dialog=False)
-            print(f"Dropped file: {file_path}")
+        try:
+            urls = event.mimeData().urls()
+            if urls:
+                # Convert URL to local system path (e.g., /home/user/image.nii)
+                file_path = urls[0].toLocalFile()
+                if file_path[-3:]=='.bn':
+                    self.loadProject(file_path)
+                elif is_valid_format(file_path, self._filters):
+                    new_file_name = os.path.basename(file_path.split('.')[0])
+                    dir_name = os.path.dirname(file_path)
+                    self.newProject([os.path.join(dir_name, new_file_name), "All" ])
 
-            # Call your loading function here
-            # e.g., self.load_new_image(file_path)
+                    self.browse_view1([file_path, self._filters], use_dialog=False)
+                print(f"Dropped file: {file_path}")
+        except:
+            pass
+
 
     def _dock_folder(self, Main):
         # ==============================================================================
@@ -425,7 +451,7 @@ class dockWidgets():
                 children=[
                     Slider(id="t1_1", label="Brightness", label_id="lb_ft1_1", min_val=-100, max_val=100, default=0),
                     Slider(id="t1_2", label="Contrast", label_id="lb_ft1_2", min_val=1, max_val=500, default=100),
-                    Slider(id="t1_3", label="Gamma", label_id="lb_ft1_3", min_val=10, max_val=300, default=100),
+                    Slider(id="t1_3", label="Gamma", label_id="lb_ft1_3", min_val=10, max_val=300, default=50),
                 ]
             ),
 
@@ -1107,8 +1133,16 @@ class dockWidgets():
             filters = "CSV (*.csv)"
             opts = QtWidgets.QFileDialog.DontUseNativeDialog
             try:
-                fileObj = self._filesave_dialog(filters, opts)
-                export_tables(self, fileObj[0])
+                # Show Dialog
+                if hasattr(self, 'full_path_view1'):
+                    base_name = os.path.basename(self.full_path_view1)
+                    base_name = base_name.split('.')[0]
+                    default_name = base_name+'.csv'
+                else:
+                    default_name = 'table.csv'
+                opts = QtWidgets.QFileDialog.DontUseNativeDialog
+                file_path, info_save = self._filesave_dialog(filters, opts, default_name)
+                export_tables(self, file_path[0])
             except Exception as e:
                 print(e)
         return

@@ -6,7 +6,7 @@ import os
 from PyQt5 import QtWidgets, QtCore, QtGui
 from melage.utils.utils import cursorPaint, zonePoint, cursorOpenHand, \
     try_disconnect, cursorErase,\
-    ConvertPToPolygons, ConvertPointsToPolygons, findIndexWhiteVoxels, generate_extrapoint_on_line, PermuteProperAxis, magic_selection,permute_axis
+    ConvertPToPolygons, ConvertPointsToPolygons, findIndexWhiteVoxels, generate_extrapoint_on_line, PermuteProperAxis, magic_selection,permute_axis, robust_magic_selection
 #import OpenGL.GL as gl
 from OpenGL.GL import *
 import sys
@@ -23,9 +23,12 @@ import math
 from collections import defaultdict
 from sys import platform
 if platform=='darwin':
+    print("Using Shaders_120")
     from melage.rendering.helpers.Shaders_120 import vsrc, fsrc, fsrcPaint, vsrcPaint
 else:
+    print("Using Shaders_330")
     from melage.rendering.helpers.Shaders_330 import vsrc, fsrc, fsrcPaint, vsrcPaint
+
 from sklearn.mixture import GaussianMixture
 
 
@@ -51,6 +54,8 @@ class GLWidget(QOpenGLWidget):
     mousePress = pyqtSignal(object) # if mouse pressed
     interpolate = pyqtSignal(object) # if interpolation is required
     intensity_change = pyqtSignal(object)
+    requestExport = pyqtSignal(int, str, object)  # Color ID, WindowName, Bounding Box/Center
+    requestMask = pyqtSignal(int, str)  # Color ID, WindowName
 
     def __init__(self, colorsCombinations, parent=None, currentWidnowName = 'sagittal',
                  imdata=None, type= 'eco',id=0
@@ -76,9 +81,11 @@ class GLWidget(QOpenGLWidget):
         self.N_rulerPoints = 0 # number of rulers used
         self.showAxis = False # show axis
         self.n_colors = 1 # number of colors used
-
+        self.isVideoRange = 01.0  # 1.0 for video, 0.0 for medical data
+        self.isGlareComp = 0.0  # 0.0 for video, 1.0 for medical data
         self._n_colors_previous = np.inf
         self.smooth = True # smoothing visualization
+        self._tex_dirty = False  # set True by makeObject; cleared after upload
         self._threshold_image = defaultdict(list) # thresholding image
         self._allowed_goto = False
         self._selected_seg_color = 1 # segmentation color
@@ -517,8 +524,6 @@ class GLWidget(QOpenGLWidget):
             self.startLinePoints = []
             self.LineChanged.emit([[], self.colorInd, True, False])
 
-
-
     def ShowContextMenu_contour(self, pos):
         """
         Context Menu for contouring including center of contouring, perimeter, interpolation, etc.
@@ -532,43 +537,57 @@ class GLWidget(QOpenGLWidget):
         color = self.segSlice[int(y), int(x)]
         try:
             if color in self.colorInds or 9876 in self.colorInds:
-                area, perimeter, centerXY, WI_index = point_in_contour(self.segSlice.copy(), (x,y), color)
-                area = (self.imSpacing[0]**2)*area
-                perimeter = (self.imSpacing[0])*perimeter
+                area, perimeter, centerXY, WI_index = point_in_contour(self.segSlice.copy(), (x, y), color)
+                area = (self.imSpacing[0] ** 2) * area
+                perimeter = (self.imSpacing[0]) * perimeter
             else:
                 area, perimeter, centerXY, WI_index = 0, 0, [0, 0], None
         except:
             area = 0.0
             perimeter = 0.0
             centerXY = [x, y]
+            WI_index = None
+
         self.penPoints = []
         area_action = QAction("Surface {:.2f} mm\u00b2".format(area))
         perimeter_action = QAction("Perimeter {:.2f} mm".format(perimeter))
 
-        #xyz = [x, y, self.sliceNum, 1]
+        # xyz = [x, y, self.sliceNum, 1]
         if self.currentWidnowName == 'sagittal':
-            #xyz = [xyz[1], xyz[0], xyz[2], 1]
+            # xyz = [xyz[1], xyz[0], xyz[2], 1]
             xyz = [self.sliceNum, centerXY[1], centerXY[0], 1]
         elif self.currentWidnowName == 'coronal':
-            #xyz = [xyz[1], xyz[2], xyz[0], 1]
+            # xyz = [xyz[1], xyz[2], xyz[0], 1]
             xyz = [centerXY[1], self.sliceNum, centerXY[0], 1]
         elif self.currentWidnowName == 'axial':
-            #xyz = [xyz[2], xyz[1], xyz[0], 1]
+            # xyz = [xyz[2], xyz[1], xyz[0], 1]
             xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
-        elif self.currentWidnowName== 'video':
+        elif self.currentWidnowName == 'video':
             xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
-        loc = self.affine @ np.array(xyz)
-        xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(loc[0], loc[1], loc[2]))
+
+        # Handle case where affine might be None before multiplication
+        if self.affine is not None:
+            loc = self.affine @ np.array(xyz)
+            xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(loc[0], loc[1], loc[2]))
+        else:
+            xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(xyz[0], xyz[1], xyz[2]))
 
         try:
-            name_area = QAction(f"{self.color_name[color-1]}")
+            name_area = QAction(f"{self.color_name[color - 1]}")
         except:
             name_area = QAction(f"Unknown")
+
         send_action = QAction("Send to Table")
         interploateadd_action = QAction("Add to interploation")
         apply_interpolation = QAction("Apply interploation")
-        #send_action.triggered.connect(partial(self.sendRulerValue, [area], 0))
+
+        # --- NEW ACTIONS ---
+        export_img_action = QAction("Export Segmented Image")
+        mask_img_action = QAction("Mask Image (Keep Only Selection)")
+
         remove_action.triggered.connect(self.emptyPenPoints)
+
+        # Build Menu
         menu.addAction(name_area)
         menu.addAction(xy_action)
         menu.addAction(area_action)
@@ -578,11 +597,24 @@ class GLWidget(QOpenGLWidget):
         menu.addAction(interploateadd_action)
         menu.addAction(apply_interpolation)
         menu.addSeparator()
+        menu.addAction(export_img_action)
+        menu.addAction(mask_img_action)
+
+        # Add new actions to menu (only enable if clicked on a valid color)
+        #if area > 0:
+            #menu.addAction(export_img_action)
+            #menu.addAction(mask_img_action)
+
+        menu.addSeparator()
         menu.addAction(remove_action)
+
+        # Execute Menu
         action = menu.exec_(self.mapToGlobal(pos))
+
+        # Handle Results
         if action == send_action:
-            #['ImType', 'Area', 'Perimeter', 'Slice', 'WindowName', 'CenterXY']
-            if area==0:
+            # ['ImType', 'Area', 'Perimeter', 'Slice', 'WindowName', 'CenterXY']
+            if area == 0:
                 return
             vals = []
             vals.append('{}'.format(color))
@@ -596,6 +628,7 @@ class GLWidget(QOpenGLWidget):
             vals.append(str(self.sliceNum))
             vals.append(self.currentWidnowName)
 
+            # xyz calculation repeated for formatting
             xyz = [x, y, self.sliceNum]
             if self.currentWidnowName == 'sagittal':
                 xyz = [xyz[1], xyz[0], xyz[2]]
@@ -607,13 +640,28 @@ class GLWidget(QOpenGLWidget):
             vals.append("{:.2f},{:.2f}".format(centerXY[0], centerXY[1]))
             vals.append('')
             self.rulerInfo.emit(vals, 0)
+
         elif action == interploateadd_action:
             if WI_index is not None:
                 self.interpolate.emit([self.sliceNum, self.currentWidnowName, False, WI_index])
+
         elif action == apply_interpolation:
             if WI_index is not None:
                 self.interpolate.emit([self.sliceNum, self.currentWidnowName, True, WI_index])
+
+
+        elif action == export_img_action:
+            # Emit signal to main window to handle the export
+            # Pass the color ID and window name so the main window knows what to extract
+            self.requestExport.emit(int(color), self.currentWidnowName, centerXY)
+
+        elif action == mask_img_action:
+            # Emit signal to main window to handle masking
+            # We want to keep ONLY this color
+            self.requestMask.emit(int(color), self.currentWidnowName)
+
         return
+
     def emptyPenPoints(self):
         """
         eliminating pen points
@@ -903,6 +951,19 @@ class GLWidget(QOpenGLWidget):
         self.program[id].G = self.program[id].uniformLocation("G")
         self.program[id].B = self.program[id].uniformLocation("B")
 
+        # Cache image-processing uniform locations so they are not looked up
+        # by string on every draw call.
+        pid = self.program[id].programId()
+        self.program[id].loc_brightness   = glGetUniformLocation(pid, "u_brightness")
+        self.program[id].loc_contrast     = glGetUniformLocation(pid, "u_contrast")
+        self.program[id].loc_structure    = glGetUniformLocation(pid, "u_structure")
+        self.program[id].loc_nbi          = glGetUniformLocation(pid, "u_nbi")
+        self.program[id].loc_denoise      = glGetUniformLocation(pid, "u_denoise")
+        self.program[id].loc_gamma        = glGetUniformLocation(pid, "u_gamma")
+        self.program[id].loc_isVideoRange = glGetUniformLocation(pid, "u_isVideoRange")
+        self.program[id].loc_glareComp    = glGetUniformLocation(pid, "u_glareComp")
+        self.program[id].loc_iResolution  = glGetUniformLocation(pid, "iResolution")
+
 
 
         glUniform1i(
@@ -983,6 +1044,7 @@ class GLWidget(QOpenGLWidget):
         Initialize GL
         :return:
         """
+
         self.createProgram(0, fsrc=fsrc, vsrc=vsrc)
         self.createProgram(1, fsrc=fsrcPaint, vsrc=vsrcPaint)
 
@@ -990,6 +1052,14 @@ class GLWidget(QOpenGLWidget):
             return
 
         self.makeObject()
+        # Apply the Windows/Linux sRGB fix AFTER the context exists
+        if sys.platform != 'darwin':
+            try:
+                # GL_FRAMEBUFFER_SRGB is 0x8DB9
+                glDisable(0x8DB9)
+                print("Disabled sRGB Framebuffer for Windows/Linux")
+            except Exception as e:
+                print(f"Could not disable sRGB: {e}")
 
     def UpdatePaintInfo(self):
         """
@@ -1155,36 +1225,16 @@ class GLWidget(QOpenGLWidget):
         #glUseProgram(self.program[0].programId())
         # --- 2. Image Processing Parameters (The Fix) ---
 
-        # BRIGHTNESS (u_brightness)
-        # Range: -1.0 (black) to 1.0 (white). Default: 0.0
-        loc = glGetUniformLocation(self.program[0].programId(), "u_brightness")
-        if loc >= 0: glUniform1f(loc, self.brightness)
-
-        # CONTRAST (u_contrast)
-        # Range: 0.0 (grey) to 5.0 (high contrast). Default: 1.0
-        loc = glGetUniformLocation(self.program[0].programId(), "u_contrast")
-        if loc >= 0: glUniform1f(loc, self.contrast)
-
-        loc = glGetUniformLocation(self.program[0].programId(), "u_nbi")
-        if loc >= 0: glUniform1f(loc, self.structure)
-
-        #loc = glGetUniformLocation(self.program[0].programId(), "u_structure")
-        #if loc >= 0: glUniform1f(loc, self.structure)
-
-
-        # Denoise (Smoothness)
-        loc = glGetUniformLocation(self.program[0].programId(), "u_denoise")
-        if loc >= 0: glUniform1f(loc, self.denoise)
-
-        # SATURATION (u_saturation)
-        # Range: 0.0 (B&W) to 5.0 (super color). Default: 1.0
-        #loc = glGetUniformLocation(self.program[0].programId(), "u_saturation")
-        #if loc >= 0: glUniform1f(loc, self.saturation)
-
-        # GAMMA (u_gamma)
-        # Range: 0.1 to 3.0. Default: 1.0. Corrects lighting curve.
-        loc = glGetUniformLocation(self.program[0].programId(), "u_gamma")
-        if loc >= 0: glUniform1f(loc, self.gamma)
+        # Use cached uniform locations — no per-frame string lookups
+        p = self.program[0]
+        if p.loc_brightness   >= 0: glUniform1f(p.loc_brightness,   self.brightness)
+        if p.loc_contrast     >= 0: glUniform1f(p.loc_contrast,     self.contrast)
+        if p.loc_structure    >= 0: glUniform1f(p.loc_structure,    self.structure)
+        if p.loc_nbi          >= 0: glUniform1f(p.loc_nbi,          0.0)   # NBI off by default
+        if p.loc_denoise      >= 0: glUniform1f(p.loc_denoise,      self.denoise)
+        if p.loc_gamma        >= 0: glUniform1f(p.loc_gamma,        self.gamma)
+        if p.loc_isVideoRange >= 0: glUniform1f(p.loc_isVideoRange, self.isVideoRange)
+        if p.loc_glareComp    >= 0: glUniform1f(p.loc_glareComp,    self.isGlareComp)
 
         # --- 3. Sobel / Edge Detection ---
         #loc = glGetUniformLocation(self.program[0].programId(), "sobel")
@@ -1195,10 +1245,9 @@ class GLWidget(QOpenGLWidget):
 
 
 
-        # --- 4. Misc / Legacy Uniforms ---
-        # These might not be used in the new simple shader, but keeping them prevents crashes
-        loc = glGetUniformLocation(self.program[0].programId(), "iResolution")
-        if loc >= 0: glUniform2fv(loc, 1, [self.width(), self.height()])
+        # iResolution — needed by the fragment shader for pixel-size calculations
+        if p.loc_iResolution >= 0:
+            glUniform2fv(p.loc_iResolution, 1, [self.width(), self.height()])
 
         loc = glGetUniformLocation(self.program[0].programId(), "mousePos")
         if loc >= 0: glUniform2fv(loc, 1, [self.lastPos.x(), self.height() - self.lastPos.y()])
@@ -1463,6 +1512,8 @@ class GLWidget(QOpenGLWidget):
             #seg_new, _, _ = self._sam_predictor.predict(point_coords=input_point, point_labels=input_label,
             #                                         multimask_output=False, )
             seg_new = magic_selection(self.imSlice, initial_point, connectivity=4, tol=self._tol_magic_tool)
+            #seg_new = magic_selection_grabcut(self.imSlice, initial_point, rect_size=self._tol_magic_tool)
+            #seg_new = robust_magic_selection(self.imSlice, initial_point, flood_tolerance=self._tol_magic_tool)
             self._magic_slice = None
             if seg_new is not None and self.colorInd!= 9876:
                     l1 = list(np.where(seg_new > 0))
@@ -1713,7 +1764,8 @@ class GLWidget(QOpenGLWidget):
 
 
             seg_new = magic_selection(self.imSlice, initial_point, connectivity=4, tol=self._tol_magic_tool)
-
+            #seg_new = magic_selection_grabcut(self.imSlice, initial_point, rect_size=self._tol_magic_tool)
+            #seg_new = robust_magic_selection(self.imSlice, initial_point, flood_tolerance=self._tol_magic_tool)
             if seg_new is not None and self.colorInd!= 9876:
                     color = self.colorsCombinations[self.colorInd]
                     color_image = np.stack((seg_new * color[0]*255, seg_new * color[1]*255, seg_new * color[2]*255), axis=-1)
@@ -2565,7 +2617,7 @@ class GLWidget(QOpenGLWidget):
                             imslice_seg[magic_mask] = cv2.addWeighted(
                                 imslice_seg[magic_mask], 1 - self.intensitySeg,
                                 self._magic_slice[magic_mask].astype(np.uint8), self.intensitySeg, 0
-                            )
+                            ).squeeze()
 
             except Exception as e:
                 print(f"Seg Error: {e}")
@@ -2606,6 +2658,7 @@ class GLWidget(QOpenGLWidget):
                 imslice_seg[magic_mask] = blended_magic
         # Ensure correct type for OpenGL
         self._imslice_seg = np.ascontiguousarray(imslice_seg, dtype=np.uint8)
+        self._tex_dirty = True
 
         # --- 3. UPLOAD TO GPU (Optimized) ---
     def _uploadTexture(self):
@@ -2614,11 +2667,19 @@ class GLWidget(QOpenGLWidget):
         _imslice_seg = self._imslice_seg
         glEnable(GL_TEXTURE_2D)
 
+        size_changed = (not hasattr(self, 'textureID') or
+                        getattr(self, '_last_w', -1) != self.imWidth or
+                        getattr(self, '_last_h', -1) != self.imHeight)
+
+        # Skip the sub-image upload when nothing has changed.
+        # The texture still exists on the GPU from the previous upload.
+        if not self._tex_dirty and not size_changed and hasattr(self, 'textureID'):
+            glBindTexture(GL_TEXTURE_2D, self.textureID)
+            return
+
         # 1. Initialization (Only runs ONCE or when size changes)
         # Check if texture exists AND if dimensions match (handle video resize)
-        if (not hasattr(self, 'textureID') or
-                getattr(self, '_last_w', -1) != self.imWidth or
-                getattr(self, '_last_h', -1) != self.imHeight):
+        if size_changed:
 
             # Store dimensions to detect changes later
             self._last_w = self.imWidth
@@ -2668,6 +2729,7 @@ class GLWidget(QOpenGLWidget):
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.imWidth, self.imHeight,
                         GL_RGB, GL_UNSIGNED_BYTE, _imslice_seg)
+        self._tex_dirty = False
 
         glDisable(GL_TEXTURE_2D)
 

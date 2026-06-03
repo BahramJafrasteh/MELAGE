@@ -64,66 +64,19 @@ class WarpSegLogic(DynamicDialog):
     def ui_schema(self):
         # We call the function to get the dictionary
         return get_schema()
-    # We alias these to 'update_ui_state' so the auto-connector finds them
-    def on_check_adult_toggled(self, checked=None):
-        return None
-        #self.update_ui_state()
-
-    def on_check_infant_toggled(self, checked=None):
-        return None
-        #self.update_ui_state()
-
-    def update_ui_state(self):
-        """Handle the Adult vs Infant mutual exclusion logic."""
-        sender = self.sender()
-
-        # Mutual Exclusion Logic
-        if sender == self.check_adult and self.check_adult.isChecked():
-            self.check_infant.blockSignals(True)
-            self.check_infant.setChecked(False)
-            self.check_infant.blockSignals(False)
-        elif sender == self.check_infant and self.check_infant.isChecked():
-            self.check_adult.blockSignals(True)
-            self.check_adult.setChecked(False)
-            self.check_adult.blockSignals(False)
-
-        # Enable/Disable Groups
-        self.group_adult.setEnabled(self.check_adult.isChecked())
-        self.group_infant.setEnabled(self.check_infant.isChecked())
-
-        # Update Label (using the auto-bound ID 'lbl_model_info')
-        mode = "Adult" if self.check_adult.isChecked() else "Infant"
-        self.lbl_model_info.setText(f"Model Info: Ready for {mode} segmentation")
-
-    def browse_weights(self, widget):
-        """
-        Opens file dialog and updates the LineEdit.
-        """
-        options = QtWidgets.QFileDialog.Options()
-        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            None,
-            "Select Model Weights",
-            "",
-            "PyTorch Models (*.pth *.pt);;All Files (*)",
-            options=options
-        )
-
-        if file_path:
-            # 1. Update the LineEdit text to show the path
-            widget['txt_weights_path'].setText(file_path)
-
-            # 2. Update the status label to give feedback
-            filename = os.path.basename(file_path)
-            widget['lbl_model_info'].setText(f"Selected: {filename}")
-
-
     # Renamed from 'run_process' to match the schema ID 'btn_apply'
     def on_btn_apply_clicked(self):
         view = self.combo_view.currentText()
-        data_view = self.data_context[view]
-        if  data_view is None:
+        data_obj = self.data_context[view]
+        if  data_obj is None:
             QMessageBox.information(self, "Error", "No image data available for the selected view.")
             return
+        if hasattr(data_obj, "isChunkedVideo") and data_obj.isChunkedVideo:
+            QMessageBox.critical(self, "Error", "WarpSeg is not defined for video or image type inforamtion")
+            return
+        print("Input detected as Image Source (No pre-existing masks).")
+
+        data_view = data_obj.im
 
         try:
             """The main execution function."""
@@ -160,9 +113,9 @@ class WarpSegLogic(DynamicDialog):
                 seg = seg
             else:
                 seg = seg_tissue
+            data_obj.npSeg = seg#.transpose(2, 1, 0)[::-1, ::-1, ::-1]
             result_package = {
-                "image": None,
-                "label": seg,
+                "data_obj": data_obj,
                 "view": view
             }
             self.completed.emit(result_package)

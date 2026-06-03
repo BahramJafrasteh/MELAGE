@@ -46,43 +46,43 @@ class iminfo_dialog(QtWidgets.QDialog):
         self.tab = QtWidgets.QWidget()
         self.tab.setObjectName("tab_2")
 
-        self.meta_table_eco = QtWidgets.QTableWidget(self.tab)
-        self.meta_table_eco.setColumnCount(2)
-        self.meta_table_eco.setHorizontalHeaderLabels(["Tag", "Value"])
-        self.meta_table_eco.horizontalHeader().setStretchLastSection(True)
-        self.meta_table_eco.verticalHeader().setVisible(False)
-        self.meta_table_eco.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.meta_table_eco.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        self.meta_table_eco.setShowGrid(True)
+        self.meta_table_view1 = QtWidgets.QTableWidget(self.tab)
+        self.meta_table_view1.setColumnCount(2)
+        self.meta_table_view1.setHorizontalHeaderLabels(["Tag", "Value"])
+        self.meta_table_view1.horizontalHeader().setStretchLastSection(True)
+        self.meta_table_view1.verticalHeader().setVisible(False)
+        self.meta_table_view1.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.meta_table_view1.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        self.meta_table_view1.setShowGrid(True)
 
 
 
         self.gridLayout_eco = QtWidgets.QGridLayout(self.tab)
         self.gridLayout_eco.setContentsMargins(10, 10, 10, 10)
         self.gridLayout_eco.setObjectName("gridLayout_eco")
-        self.gridLayout_eco.addWidget(self.meta_table_eco, 1, 0, 1, 1)
+        self.gridLayout_eco.addWidget(self.meta_table_view1, 1, 0, 1, 1)
 
 
         self.tab_2 = QtWidgets.QWidget()
         self.tab_2.setObjectName("tab")
-        self.meta_table_mri = QtWidgets.QTableWidget(self.tab_2)
-        self.meta_table_mri.setColumnCount(2)
-        self.meta_table_mri.setHorizontalHeaderLabels(["Tag", "Value"])
-        self.meta_table_mri.horizontalHeader().setStretchLastSection(True)
-        self.meta_table_mri.verticalHeader().setVisible(False)
-        self.meta_table_mri.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.meta_table_mri.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        self.meta_table_mri.setShowGrid(True)
+        self.meta_table_view2 = QtWidgets.QTableWidget(self.tab_2)
+        self.meta_table_view2.setColumnCount(2)
+        self.meta_table_view2.setHorizontalHeaderLabels(["Tag", "Value"])
+        self.meta_table_view2.horizontalHeader().setStretchLastSection(True)
+        self.meta_table_view2.verticalHeader().setVisible(False)
+        self.meta_table_view2.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.meta_table_view2.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        self.meta_table_view2.setShowGrid(True)
 
         self.gridLayout_mri = QtWidgets.QGridLayout(self.tab_2)
         self.gridLayout_mri.setContentsMargins(10, 10, 10, 10)
         self.gridLayout_mri.setObjectName("gridLayout_mri")
-        self.gridLayout_mri.addWidget(self.meta_table_mri, 1, 0, 1, 1)
+        self.gridLayout_mri.addWidget(self.meta_table_view2, 1, 0, 1, 1)
 
         self.tabWidget.addTab(self.tab, "File 2")
         self.tabWidget.addTab(self.tab_2, "File 1")
 
-        for table in [self.meta_table_mri, self.meta_table_eco]:
+        for table in [self.meta_table_view2, self.meta_table_view1]:
             table.setAlternatingRowColors(False)
             table.setStyleSheet("QTableWidget { background-color: white; }")
             table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)  # or SelectRows
@@ -106,11 +106,42 @@ class iminfo_dialog(QtWidgets.QDialog):
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(Dialog)
 
+    def set_video_info(self, reader, ind):
+        metadata = reader.get_video_meta_data()
+        table = self.meta_table_view2 if ind == 1 else self.meta_table_view1
 
+        allowed = metadata.keys()#['num_frames', 'segmented_count', 'source_type', 'label_path', 'width', 'height', 'indices_set', 'fps']
+        #metadata['FileName'] = reader.filename
+        table.setRowCount(len(allowed))
+        row = 0
+        for key in sorted(metadata.keys()):
+            value = metadata[key]
+            value_str = str(value)
+            if key.lower() not in allowed:
+                continue
+            key_item = QtWidgets.QTableWidgetItem(key)
+            val_item = QtWidgets.QTableWidgetItem(value_str)
+
+            # Tooltips for clarity
+            key_item.setToolTip(key)
+            val_item.setToolTip(value_str)
+
+            # Optional styling
+            key_item.setForeground(QtGui.QColor("#2e3d49"))
+            key_item.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
+            val_item.setForeground(QtGui.QColor("#FF0000"))
+            val_item.setFont(QtGui.QFont("Arial", 10))
+
+            table.setItem(row, 0, key_item)
+            table.setItem(row, 1, val_item)
+            row += 1
+
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
 
     def set_tag_value(self, aa, ind):
         metadata = aa.im_metadata
-        table = self.meta_table_mri if ind == 1 else self.meta_table_eco
+        table = self.meta_table_view2 if ind == 1 else self.meta_table_view1
 
 
         allowed = ['filename','affine', 'pixdim', 'dim']
@@ -177,9 +208,9 @@ class iminfo_dialog(QtWidgets.QDialog):
 
         # Select the current table based on the active tab
         if self.tabWidget.currentIndex() == 0:
-            table = self.meta_table_mri
+            table = self.meta_table_view2
         else:
-            table = self.meta_table_eco
+            table = self.meta_table_view1
 
         # Reset all rows' background color
         for row in range(table.rowCount()):

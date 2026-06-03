@@ -9,7 +9,6 @@ import traceback
 from functools import partial
 from collections import defaultdict
 from os.path import join, basename, dirname
-
 # Avoid modifying sys.path manually if possible (use pip install -e .)
 sys.path.append('..')
 
@@ -28,12 +27,13 @@ except ModuleNotFoundError:
 
 # --- 3. GUI (PyQt5) ---
 from PyQt5 import QtWidgets, QtCore, QtGui
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QMessageBox
 from PyQt5.QtCore import Qt, QSettings, QEvent
 
 # --- 4. Melage: Config & Core ---
 from melage.config import settings, __VERSION__
-from melage.core.io import readData
+#from melage.core.io import readData
+from melage.core.io import load_image_core
 
 # --- 5. Melage: UI Components (Dialogs & Widgets) ---
 from melage.dialogs import (
@@ -64,7 +64,8 @@ from melage.utils.utils import (
     add_new_tree_widget, addTreeRoot, manually_check_tree_item,
 
     # Image/View State
-    getCurrentSlice, updateSight, changeCoronalSagittalAxial,
+    getCurrentSlice, updateSight, changeCoronalSagittalAxial, slice_label_text,
+    apply_ct_window,
     setSliceSeg, update_last, update_last_video, update_image_sch,
     clean_parent_image, clean_parent_image2,
     set_new_color_scheme, update_widget_color_scheme, make_all_seg_visibl,
@@ -98,7 +99,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         Initializing the main attributes
         """
-        self._filters = "Nifti(*.nia *.nii *.nii.gz *.hdr *.img *.img.gz *.mgz);;Vol (*.vol *.V00);;DICOM(*.dcm **);;NRRD(*.nrrd *.nhdr);;DICOMDIR(*DICOMDIR*);;Video (*.mp4 *.avi *.mov *.mkv)"
+        self._filters = "Nifti(*.nia *.nii *.nii.gz *.hdr *.img *.img.gz *.mgz);;Vol (*.vol *.V00);;DICOM(*.dcm **);;NRRD(*.nrrd *.nhdr);;DICOMDIR(*DICOMDIR*);;Video (*.mp4 *.avi *.mov *.mkv);;Photo (*.png *.jpg *.jpeg *.bmp)"
         formats = [ll.replace(' ', '').replace(')', '') for el in self._filters.split(';;') for ll in el.split('*')[1:]]
         formats = [el for el in formats if el != '' and '.' in el]
         super(Ui_Main, self).__init__()
@@ -118,6 +119,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.is_view2_video = False
         self.full_path_view1 = None
         self.full_path_view2 = None
+        self.is_photo_view1 = False
+        self.is_photo_view2 = False
         self.readView2 = []
         self.View2_RADIO_NAMES = [
             'radioButton_21', 'radioButton_21_1',
@@ -378,11 +381,8 @@ class Ui_Main(dockWidgets, openglWidgets):
             import urllib.request
             from importlib.metadata import version  # To get installed version
         except Exception as e:
-            QtWidgets.QMessageBox.warning(
-                self,
-                e
-            )
-            return
+            QtWidgets.QMessageBox.warning(self, "Import Error", str(e))
+            return None
 
         url = f"https://pypi.org/pypi/{package_name}/json"
         try:
@@ -390,11 +390,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             with urllib.request.urlopen(url, timeout=5) as response:
                 data = json.loads(response.read().decode())
                 return data["info"]["version"]
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(
-                self,
-                e
-            )
+        except Exception:
             return None
 
     def update_application(self):
@@ -405,10 +401,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             import urllib.request
             from importlib.metadata import version  # To get installed version
         except Exception as e:
-            QtWidgets.QMessageBox.warning(
-                self,
-                e
-            )
+            QtWidgets.QMessageBox.warning(self, "Import Error", str(e))
             return
         # 1. Get the CURRENT installed version
         try:
@@ -502,11 +495,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.enhanceIm.show()
 
     def showImInfoWindow(self):
+
         self.iminfo_dialog.show()
 
 
     def _setup_main_window(self, Main):
         """Sets up the main QMainWindow properties (size, font, statusbar)."""
+
         Main.setObjectName("Main")
         Main.setEnabled(True)
         Main.setMinimumSize(QtCore.QSize(500, 400))  # Your reasonable minimum size
@@ -543,7 +538,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.centralwidget.setObjectName("centralwidget")
 
         # **CRITICAL FIX**: Removed the line:
-        # self.centralwidget.setMinimumSize(QtCore.QSize(800, 600))
+        self.centralwidget.setMinimumSize(QtCore.QSize(800, 600))
         # This was preventing your UI from shrinking!
 
         # This single line creates the layout and assigns it.
@@ -821,6 +816,11 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         self.actionsaveas.setDisabled(True)
 
+        ######################### Generate Report ################################
+        self.actionGenerateReport = QtWidgets.QAction(Main)
+        self.actionGenerateReport.setObjectName("actionGenerateReport")
+        self.actionGenerateReport.setDisabled(True)
+
         ######################### Pan Zoom ################################
         self.actionPan = QtWidgets.QAction(Main)
         self.actionPan.setObjectName("actionPan")
@@ -885,6 +885,43 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         self.action3D.setIcon(self._icon_3d)
 
+
+        ############## ######## PLAY/PAUSE CONTROLS #############################
+        # --- 1. SETUP THE ACTION (Master Control) ---
+        self.actionPlay = QtWidgets.QAction(self)
+        self.actionPlay.setCheckable(True)
+        self.actionPlay.setChecked(False)  # Start paused
+        self.actionPlay.setObjectName("play")
+
+        # Load your icons
+        self._icon_play = QtGui.QIcon(settings.RESOURCE_DIR + "/play.png")  # Or your 3d.png
+        self._icon_pause = QtGui.QIcon(settings.RESOURCE_DIR + "/pause.png")  # You'll need a pause icon
+
+        self.actionPlay.setIcon(self._icon_play)
+
+        # Connect the Action to the logic handler
+        self.actionPlay.toggled.connect(self.handle_global_playback)
+
+        # --- 2. SETUP THE BUTTON (Slave Control) ---
+        self.btn_play_all_view = QtWidgets.QPushButton()
+        self.btn_play_all_view.setFixedSize(25, 25)
+        self.btn_play_all_view.setToolTip("Play/Pause Video")
+
+        # Initial Icon
+        self.btn_play_all_view.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+
+        # CRITICAL: Connect the Button to trigger the Action
+        # This ensures clicking the button does exactly the same thing as clicking the action
+        self.btn_play_all_view.clicked.connect(self.actionPlay.trigger)
+
+        # --- 3. TIMERS FOR BOTH VIEWS ---
+        self.video_timer_view = QtCore.QTimer(self)
+        self.video_timer_view.timeout.connect(self.advance_video_frame_main_view)  # View 0
+
+        #self.video_timer_view2 = QtCore.QTimer(self)
+        #self.video_timer_view2.timeout.connect(partial(self.advance_video_frame_main_view, 1))  # View 1
+
+        ################ ######## ZOOM IN/OUT CONTROLS #############################
         self.actionZoomIn = QtWidgets.QAction(Main)
         self.actionZoomIn.setCheckable(True)
         self.actionZoomIn.setChecked(True)
@@ -1022,12 +1059,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         self._icon_Eraser.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/Eraser.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
         self.actionErase.setIcon(self._icon_EraserFaded)
 
-        self.actionLazyContour = QtWidgets.QAction(Main)
-        self.actionLazyContour.setObjectName("actionLazyContour")
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/zoom_out.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        self.actionLazyContour.setIcon(icon)
-
         self.actionArrow = QtWidgets.QAction(Main)
         self.actionArrow.setObjectName("actionArrow")
         self._icon_arrowFaded = QtGui.QIcon()
@@ -1037,15 +1068,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         self._icon_arrow.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/arrow.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
         self.actionArrow.setIcon(self._icon_arrowFaded)
 
-        ######################### Rotate ################################
-
-        self.actionrotate = QtWidgets.QAction(Main)
-        icon1 = QtGui.QIcon()
-        icon1.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/action_check.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
-        icon1.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/action_check_OFF.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self.actionrotate.setIcon(icon1)
-        self.actionrotate.setObjectName("actionrotate")
-        self.actionrotate.setCheckable(True)
 
         # self.pushButton = QtWidgets.QPushButton(self.centralwidget)
         # self.pushButton.setGeometry(QtCore.QRect(50, 330, 89, 25))
@@ -1081,14 +1103,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         ######################## CALC ########################################
 
-        self.actionTVCor = QtWidgets.QAction(Main)
-        self.actionTVCor.setObjectName('3DVolume Coronal')
-
-        self.actionTVSag = QtWidgets.QAction(Main)
-        self.actionTVSag.setObjectName('3DVolume Sagital')
-
-        self.actionTVAx = QtWidgets.QAction(Main)
-        self.actionTVAx.setObjectName('3DVolume Axial')
 
         ######################### Help->Aobut ################################
         self.actionabout = QtWidgets.QAction(Main)
@@ -1190,6 +1204,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuFile.addMenu(self.menuImport)
         self.menuFile.addMenu(self.menuExport)
         self.menuFile.addSeparator()
+        self.menuFile.addAction(self.actionGenerateReport)
+        self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionScreenS)
 
         self.menuFile.addSeparator()
@@ -1229,9 +1245,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         # self.menuSeg.addAction(self.actionNNventricleGatherIm)
 
         self.menuTV.addSeparator()
-        self.menuTV.addAction(self.actionTVCor)
-        self.menuTV.addAction(self.actionTVSag)
-        self.menuTV.addAction(self.actionTVAx)
 
         self.menuBasicInfo.addAction(self.actionHistImage)
 
@@ -1324,10 +1337,10 @@ class Ui_Main(dockWidgets, openglWidgets):
             QToolButton { margin: 2px; }
         """
 
-        # Dynamic Icon Sizing (High-DPI aware)
-        pixel_ratio = self.devicePixelRatio()
+        # Icon size in logical pixels — Qt scales to physical pixels automatically
+        # when AA_EnableHighDpiScaling is active.
         base_size = 36
-        icon_size = QtCore.QSize(int(base_size * pixel_ratio), int(base_size * pixel_ratio))
+        icon_size = QtCore.QSize(base_size, base_size)
 
         # Helper to create spacers
         def create_spacer():
@@ -1421,111 +1434,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.toolBar2.addSeparator()
         self.toolBar2.addAction(self.actionGoTo)
         self.toolBar2.addAction(self.action3D)
-
+        self.toolBar2.addSeparator()
+        self.toolBar2.addAction(self.actionPlay)
         # Disable Interaction toolbar until data is loaded
         self.toolBar2.setDisabled(True)
-    def _setup_toolbars2(self, Main):
-        """Creates and populates all toolbars."""
-
-        self.toolBar = QtWidgets.QToolBar(Main)
-        self.toolBar.setObjectName("toolBar")
-        Main.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar)
-        Main.insertToolBarBreak(self.toolBar)
-        self.toolBar.addAction(self.actionNew)
-        self.toolBar.addAction(self.actionLoad)
-        self.toolBar.addAction(self.actionsave)
-
-        self.toolBar.addSeparator()
-        # self.toolBar.addAction(self.actionsaveas)
-        # spacerItem = QtWidgets.QWidget()
-        # spacerItem.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        # self.toolBar.addWidget(spacerItem)
-        cts = """
-                QToolBar {
-          background-color: #000000;
-          border-bottom: 0px solid #19232D;
-          padding: 0px;
-          font-weight: bold;
-          spacing: 0px;
-        }
-        QToolBar::separator:horizontal
-        {
-        	width: 10px;
-        	margin-left: 10px;
-        		margin-right: 10px;
-        }
-        QToolButton{margin: 2px 2px;}
-                """
-        self.toolBar.setStyleSheet(cts)
-
-        self.toolBar.addAction(self.actionOpenView1)
-        self.toolBar.addAction(self.actionImportSegView1)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.actionOpenView2)
-        self.toolBar.addAction(self.actionImportSegView2)
-
-        # self.toolBar.addAction(self.actionOpenFA)
-        # self.toolBar.addAction(self.actionOpenTract)
-        self.toolBar.addSeparator()
-        self.actionComboBox_visible = self.toolBar.addWidget(self.actionComboBox)
-        self.actionComboBox_visible.setVisible(False)
-        # self.toolBar.addSeparator()
-        spacerItem = QtWidgets.QWidget()
-        spacerItem.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-
-        self.toolBar.addWidget(spacerItem)
-
-        self.toolBar.addWidget(self.logo)
-        self.toolBar.addAction(self.actionexit)
-
-        self.toolBar2 = QtWidgets.QToolBar(Main)
-        self.toolBar2.setObjectName("Interaction")
-        Main.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar2)
-        Main.insertToolBarBreak(self.toolBar2)
-        self.toolBar2.addAction(self.actionArrow)
-        self.toolBar2.addAction(self.actionPan)
-        self.toolBar2.addSeparator()
-        self.toolBar2.setStyleSheet(cts)
-        self.toolBar2.addAction(self.actionErase)
-        self.toolBar2.addAction(self.actionEraseX)
-        self.toolBar2.addSeparator()
-        self.toolBar2.addAction(self.actionPaint)
-        self.toolBar2.addAction(self.actionContour)
-        self.toolBar2.addAction(self.actionContourX)
-        self.toolBar2.addAction(self.actionCircles)
-        self.toolBar2.addSeparator()
-        self.toolBar2.addAction(self.actionColor)
-        self.toolBar2.addWidget(self.pixmap_box_label)
-        # self.toolBar2.addSeparator()
-
-        spacerItem = QtWidgets.QWidget()
-        spacerItem.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-
-        self.toolBar2.addWidget(spacerItem)
-
-        self.toolBar2.addAction(self.actionLine)
-
-        self.toolBar2.addAction(self.actionPoints)
-        self.toolBar2.addSeparator()
-        self.toolBar2.addAction(self.actionZoomNeutral)
-        self.toolBar2.addAction(self.actionZoomIn)
-        self.toolBar2.addAction(self.actionZoomOut)
-        self.toolBar2.addSeparator()
-        self.toolBar2.addAction(self.actionVerticalView)
-        self.toolBar2.addAction(self.actionHorizontalView)
-        self.toolBar2.addAction(self.actionRuler)
-        self.toolBar2.addAction(self.actionGoTo)
-        self.toolBar2.addAction(self.action3D)
-        self.toolBar2.setDisabled(True)
-        pixel_ratio = self.devicePixelRatio()
-        base_size = 36
-        dynamic_size = int(base_size * pixel_ratio)
-        self.toolBar2.setIconSize(QtCore.QSize(dynamic_size, dynamic_size))
-        self.toolBar.setIconSize(QtCore.QSize(dynamic_size, dynamic_size))
-        # Set fixed size policy
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        self.toolBar.setSizePolicy(sizePolicy)
-        self.toolBar2.setSizePolicy(sizePolicy)
 
     def _connect_signals(self):
         """Connects all signals to slots."""
@@ -1577,6 +1489,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionexit.triggered.connect(self.close)
         self.actionsave.triggered.connect(self.save)
         self.actionsaveas.triggered.connect(self.saveas)
+        self.actionGenerateReport.triggered.connect(self.generate_report)
         self.actionabout.triggered.connect(self.about)
         self.actionmanual.triggered.connect(self.manual)
         self.actionArrow.triggered.connect(partial(self.setCursors, 0))
@@ -1591,6 +1504,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         # self.actionGoTo.triggered.connect(partial(self.setCursors, 7))
         self.actionGoTo.triggered.connect(self.activateGuidelines)
         self.action3D.triggered.connect(self.activate3d)
+
         self.actionZoomIn.triggered.connect(partial(self.Zoom, 'In'))
         self.actionZoomOut.triggered.connect(partial(self.Zoom, 'Out'))
         self.actionZoomNeutral.triggered.connect(partial(self.Zoom, 'Neutral'))
@@ -1601,9 +1515,11 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionEraseX.triggered.connect(partial(self.setCursorsX, 3))
         # self.actionSegExportEco.triggered.connect(self.showScreenShotWindow)
         self.actionMain_Toolbar.triggered.connect(self.toolBar.setVisible)
+        self.action_interaction_Toolbar.triggered.connect(self.toolBar2.setVisible)
         self.action_guideLines.triggered.connect(self.activateGuidelines)
         self.action_axisLines.triggered.connect(self.activateAxisLines)
         self.toolBar.visibilityChanged.connect(self.actionMain_Toolbar.setChecked)
+        self.toolBar2.visibilityChanged.connect(self.action_interaction_Toolbar.setChecked)
         self.t1_1.valueChanged.connect(self.changeBrightness)
         self.t1_2.valueChanged.connect(self.changeContrast)
         self.t1_3.valueChanged.connect(self.changeBandPass)
@@ -1670,6 +1586,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                 widget.goto.connect(
                     lambda slices, currentWidnowName: self.updateAllSlices(slices, currentWidnowName)
                 )
+                widget.requestExport.connect(self.handle_export_from_context)
+                widget.requestMask.connect(self.handle_mask_from_context)
 
         self.setNewImage_view1.connect(
             lambda shapeImage: self.openGLWidget_14.createGridAxis(shapeImage)
@@ -1705,6 +1623,34 @@ class Ui_Main(dockWidgets, openglWidgets):
         #self.openGLWidget_12.resized.connect(self.changedTab)
 
 
+
+    def _sync_tab_visibility(self, loaded_index=None, closed_index=None):
+        """
+        Show/hide Tab 1 (View 1) and Tab 2 (View 2) based on what is loaded,
+        then navigate to the most relevant tab.
+
+        Call with loaded_index=0 or 1 when an image finishes loading,
+        or closed_index=0 or 1 when a view is closed.
+        """
+        view1_loaded = bool(self.readView1)
+        view2_loaded = bool(self.readView2)
+
+        self.tabWidget.setTabVisible(1, view1_loaded)
+        self.tabWidget.setTabVisible(2, view2_loaded)
+
+        if loaded_index == 0:
+            # View 1 just loaded — go to its dedicated tab
+            self.tabWidget.setCurrentIndex(1)
+        elif loaded_index == 1:
+            # View 2 just loaded — go to its dedicated tab
+            self.tabWidget.setCurrentIndex(2)
+        elif closed_index is not None:
+            # A view was closed — move away from its (now hidden) tab if we're on it
+            current = self.tabWidget.currentIndex()
+            if closed_index == 0 and current == 1:
+                self.tabWidget.setCurrentIndex(2 if view2_loaded else 0)
+            elif closed_index == 1 and current == 2:
+                self.tabWidget.setCurrentIndex(1 if view1_loaded else 0)
 
     def _set_initial_state(self):
         """Sets the initial visibility and enabled state of widgets."""
@@ -1753,6 +1699,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.radioButton_21_3.setVisible(False)
         self.radioButton_21.setVisible(False)
 
+        # Tab 1 (View 1) and Tab 2 (View 2) are hidden until an image is loaded
+        self.tabWidget.setTabVisible(1, False)
+        self.tabWidget.setTabVisible(2, False)
+
 
 
     def setupUi(self, Main):
@@ -1786,7 +1736,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.init_state()
         self.create_cursors()
 
+        Main.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.Main = Main
+
 
 
     def updateDataRegistration(self):
@@ -1810,15 +1762,16 @@ class Ui_Main(dockWidgets, openglWidgets):
 
             val.setData(self.readView2.im)
 
-
     def applyMaskToImage(self, values, operation=False):
         """
-        Apply masks to image
-        :param values:
-        :return:
+        Apply masks to image (Supports both 3D Volumes and Video Frames)
+        :param values: List of values containing image index, color selection, and operation type
+        :param operation: Boolean indicating if this is a mask-to-mask operation
         """
         self.setEnabled(True)
-        if len(values)==3:
+
+        # 1. Parse Input Values
+        if len(values) == 3:
             ind_image, ind_sel, keep = values
             ind_color = int(float(self.color_name[ind_sel].split('_')[0]))
         else:
@@ -1826,67 +1779,95 @@ class Ui_Main(dockWidgets, openglWidgets):
             ind_color = int(float(self.color_name[ind_sel].split('_')[0]))
             ind_color2 = int(float(self.color_name[ind_sel2].split('_')[0]))
 
-        if ind_image==0:
-            if not hasattr(self, 'readView1'):
-                return
-            if not hasattr(self.readView1, 'im'):
-                return
+        # 2. Dynamically assign the target reader and properties based on ind_image
+        if ind_image == 0:
+            reader = getattr(self, 'readView1', None)
+            is_video = self.is_view1_video
+            browse_func = self.browse_view1
+            update_disp = self.updateDispView1
+        elif ind_image == 1:
+            reader = getattr(self, 'readView2', None)
+            is_video = getattr(self, 'is_view2_video', False)
+            browse_func = self.browse_view2
+            update_disp = self.updateDispView2
+        else:
+            return
 
-            ind_selected = self.readView1.npSeg==ind_color
+        # Sanity check
+        if reader is None or not hasattr(reader, 'im'):
+            return
+
+        # 3. Apply Masking Logic
+        if not is_video:
+            # ==========================================
+            # STANDARD 3D VOLUME MASKING
+            # ==========================================
+            ind_selected = reader.npSeg == ind_color
+
             if operation:
-                ind_selected2 = self.readView1.npSeg == ind_color2
-                if type_operation=='+':
-                    ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int'))>0
-                    self.readView1.npSeg[ind_selected] = ind_color
-                elif type_operation== '-':
-                    ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int'))>0
-                    self.readView1.npSeg[ind_selected] = ind_color
+                ind_selected2 = reader.npSeg == ind_color2
+                if type_operation == '+':
+                    ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int')) > 0
+                    reader.npSeg[ind_selected] = ind_color
+                elif type_operation == '-':
+                    ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int')) > 0
+                    reader.npSeg[ind_selected] = ind_color
             else:
-                if ind_color!=9876:
-                    im = self.readView1.npImage.copy()
+                if ind_color != 9876:
+                    im = reader.npImage.copy()
                 else:
-                    im = self.readView1.im.get_fdata().copy()
+                    im = reader.im.get_fdata().copy()
+
                 if ind_selected.sum() > 1:
                     if keep:
                         im[~ind_selected] = 0
                     else:
                         im[ind_selected] = 0
 
-                im = make_image(im, self.readView1.im)
-                self.readView1.changeImData(im, axis=[0, 1, 2])
-                self.browse_view1(fileObj=None, use_dialog=False)
-            self.changedTab()
-        elif ind_image==1:
-            if not hasattr(self, 'readView2'):
-                return
-            if not hasattr(self.readView2, 'im'):
-                return
-            ind_selected = self.readView2.npSeg == ind_color
-            if operation:
-                ind_selected2 = self.readView2.npSeg == ind_color2
-                if type_operation=='+':
-                    ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int'))>0
-                    self.readView2.npSeg[ind_selected] = ind_color
-                elif type_operation== '-':
-                    ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int'))>0
-                    self.readView2.npSeg[ind_selected] = ind_color
-            else:
-                if ind_color != 9876:
-                    im = self.readView2.npImage.copy()
-                else:
-                    im = self.readView2.im.get_fdata().copy()
+                im = make_image(im, reader.im)
+                reader.changeImData(im, axis=[0, 1, 2])
+                browse_func(fileObj=None, use_dialog=False)
 
+        else:
+            # ==========================================
+            # VIDEO FRAME MASKING
+            # ==========================================
+            slice_num = reader.current_frame
+            seg_frame = reader.seg_ims.get_frame(slice_num)
+
+            ind_selected = seg_frame == ind_color
+
+            if operation:
+                ind_selected2 = seg_frame == ind_color2
+                if type_operation == '+':
+                    ind_selected = (ind_selected.astype('int') + ind_selected2.astype('int')) > 0
+                    seg_frame[ind_selected] = ind_color
+                elif type_operation == '-':
+                    ind_selected = (ind_selected.astype('int') - ind_selected2.astype('int')) > 0
+                    seg_frame[ind_selected] = ind_color
+
+                # Commit the modified frame back to the segmentation video proxy
+                reader.commit_frame_segmentation_changes(seg_frame, slice_num)
+                update_disp(reader.npImage, seg_frame, initialState=False)
+
+            else:
+                # Modify the current image frame directly for display
+                im_frame = reader.video_im.get_frame(slice_num).copy()
+                # 2. Apply the mask logic (Permanent to the frame copy)
                 if ind_selected.sum() > 1:
                     if keep:
-                        im[~ind_selected]=0
+                        # If keeping the selection, zero out the background
+                        im_frame[~ind_selected] = 0
                     else:
-                        im[ind_selected] = 0
+                        # If removing the selection, zero out the selected area
+                        im_frame[ind_selected] = 0
+                reader.video_im[:, :, slice_num, :] = im_frame
+                # Update the display memory with the masked image frame
+                reader.npImage = im_frame
+                update_disp(reader.npImage, seg_frame, initialState=False)
 
-                im = make_image(im, self.readView2.im)
-                self.readView2.changeImData(im, axis=[0, 1, 2])
-                self.browse_view2(fileObj=None, use_dialog=False)
-            self.changedTab()
-
+        # 4. Refresh UI
+        self.changedTab()
 
     def applyNewCoordSys(self, values):
         """
@@ -1926,8 +1907,47 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         self.setEnabled(True)
 
+    def handle_global_playback(self, is_playing):
+        """
+        This slot handles the logic for BOTH the Action and the Button.
+        It starts/stops both views simultaneously.
+        """
+
+        name = 'openGLWidget_'
+
+        if is_playing:
+            # 1. Start Timers
+            key_index = self.tabWidget.currentIndex()
+            self.widget_indices = {0: [1, 2, 3, 4, 5, 6],
+                                   1: [11],
+                                   2: [12]}
+            widget_tab = self.widget_indices[key_index]
 
 
+            visiblity = False
+            for index_widget in widget_tab:
+                nameWidget = name + str(index_widget)
+                widget = getattr(self, nameWidget)
+                if widget.isVisible():
+
+                    visiblity = True
+                #if widget == self.openGLWidget_4 and widget.isVisible():
+                #    self.video_timer_view2.start(33)
+                #    visiblity = True
+            if visiblity:
+                self.video_timer_view.start(33)  # ~30 FPS
+                # 2. Update Icons to 'Pause' state
+                #self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
+                self.actionPlay.setIcon(self._icon_pause)  # If you have a pause icon for the action
+                self.actionPlay.setText("Pause")
+
+        else:
+            # 1. Stop Timers
+            self.video_timer_view.stop()
+            # 2. Update Icons to 'Play' state
+            #self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+            self.actionPlay.setIcon(self._icon_play)
+            self.actionPlay.setText("Play")
 
     def reconstruction(self, reconstruct, ind, reader, alg):
         if reconstruct:
@@ -2092,8 +2112,10 @@ class Ui_Main(dockWidgets, openglWidgets):
             el = self.iminfo_dialog
 
             try:
-                for i, widg in enumerate([self.readView1, self.readView2]):
-                    el.set_tag_value(widg, ind=i)
+                #for i, widg in enumerate([self.readView1, self.readView2]):
+                    #el.set_tag_value(widg, ind=i)
+                for i in range(2):
+                    self._update_metadata_info(i)
             except:
                 pass
 
@@ -2304,28 +2326,32 @@ class Ui_Main(dockWidgets, openglWidgets):
                     widget.scaleF = widget.ZOOM_IN_FACTOR
                     widget.UpdatePaintInfo()
                     widget.updateScale(0, 0, 1, 1)
+    def _set_3d_panel_visible(self, visible, splitter, right_panel):
+        """Show or hide a 3D right panel and resize the splitter to match."""
+        right_panel.setVisible(visible)
+        total_w = splitter.width()
+        if total_w == 0:
+            total_w = 1000
+        if visible:
+            splitter.setSizes([int(total_w * 0.6), int(total_w * 0.4)])
+        else:
+            splitter.setSizes([total_w, 0])
+
     def activate3d(self, val):
         """
         Activate 3D show
         :param val:
         :return:
         """
-        widgets = [self.openGLWidget_14, self.openGLWidget_24]
         if val:
             self.action3D.setIcon(self._icon_3d)
-            for widget in widgets:
-                widget.setVisible(True)
-
-
-
+            self._set_3d_panel_visible(True, self.splitter_main_view1, self.right_panel_widget_view1)
+            self._set_3d_panel_visible(True, self.splitter_main_view2, self.right_panel_widget)
         else:
             self.action3D.setIcon(self._icon_3dFaded)
+            self._set_3d_panel_visible(False, self.splitter_main_view1, self.right_panel_widget_view1)
+            self._set_3d_panel_visible(False, self.splitter_main_view2, self.right_panel_widget)
 
-
-
-            for widget in widgets:
-                widget.setVisible(False)
-                #widget.setMaximumSize(QtCore.QSize(width_3d, self.height() - self.height() / 3))
 
     def activateGuidelines(self, val):
         """
@@ -2438,90 +2464,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         # 8. Clear Buffer
         self._slice_interp[idx] = []
 
-    def Interpolate2(self, params):
-        """
-        Interpolation
-        :param params:
-        :return:
-        """
-        [sliceNum, currentWidnowName, apply_interp, WI_index] = params
-
-        if currentWidnowName=='sagittal':
-            slices = [sl[0] for sl in self._slice_interp[0]]
-            if sliceNum in slices:
-                index = slices.index(sliceNum)
-                self._slice_interp[0].pop(index)
-            self._slice_interp[0].append([sliceNum, WI_index])
-        elif currentWidnowName == 'axial':
-            slices = [sl[0] for sl in self._slice_interp[1]]
-            if sliceNum in slices:
-                index = slices.index(sliceNum)
-                self._slice_interp[1].pop(index)
-            self._slice_interp[1].append([sliceNum, WI_index])
-        elif currentWidnowName == 'coronal':
-            slices = [sl[0] for sl in self._slice_interp[2]]
-            if sliceNum in slices:
-                index = slices.index(sliceNum)
-                self._slice_interp[2].pop(index)
-            self._slice_interp[2].append([sliceNum, WI_index])
-        elif currentWidnowName=='video':
-            slices = [sl[0] for sl in self._slice_interp[2]]
-            if sliceNum in slices:
-                index = slices.index(sliceNum)
-                self._slice_interp[2].pop(index)
-            self._slice_interp[2].append([sliceNum, WI_index])
-        if not apply_interp:
-            return
-
-        sender = QtCore.QObject.sender(self)
-        if sender.id in [1,2,3,11]:
-            reader = self.readView1
-        elif sender.id in [4,5,6,12]:
-            reader = self.readView2
-        if currentWidnowName == 'sagittal':
-            slicesWI = self._slice_interp[0]
-            if len(slicesWI) < 2:
-                return
-            slices = [sl[0] for sl in slicesWI]
-            WI = [sl[1] for sl in slicesWI]
-            self.app.processEvents()
-            whiteInd=  slice_intepolation(reader, slices, currentWidnowName, sender.colorInd, WI)
-            self.updateSegmentation(whiteInd, currentWidnowName, sender.colorInd, sender.sliceNum)
-            self._slice_interp[0] = []
-        elif currentWidnowName == 'axial':
-            slicesWI = self._slice_interp[1]
-            if len(slicesWI) < 2:
-                return
-            slices = [sl[0] for sl in slicesWI]
-            WI = [sl[1] for sl in slicesWI]
-            self.app.processEvents()
-            whiteInd= slice_intepolation(reader, slices, currentWidnowName, sender.colorInd, WI)
-            self.updateSegmentation(whiteInd, currentWidnowName, sender.colorInd, sender.sliceNum)
-            self._slice_interp[1] = []
-        elif currentWidnowName == 'coronal':
-            slicesWI = self._slice_interp[2]
-            if len(slicesWI) < 2:
-                return
-            slices = [sl[0] for sl in slicesWI]
-            WI = [sl[1] for sl in slicesWI]
-            if len(slices) < 2:
-                return
-            self.app.processEvents()
-            whiteInd= slice_intepolation(reader, slices, currentWidnowName, sender.colorInd, WI)
-            self.updateSegmentation(whiteInd, currentWidnowName, sender.colorInd, sender.sliceNum)
-            self._slice_interp[2] = []
-        elif currentWidnowName=='video':
-            slicesWI = self._slice_interp[2]
-            if len(slicesWI) < 2:
-                return
-            slices = [sl[0] for sl in slicesWI]
-            WI = [sl[1] for sl in slicesWI]
-            if len(slices) < 2:
-                return
-            self.app.processEvents()
-            whiteInd= slice_intepolation(reader, slices, currentWidnowName, sender.colorInd, WI)
-            self.updateSegmentation(whiteInd, currentWidnowName, sender.colorInd, sender.sliceNum)
-            self._slice_interp[2] = []
 
 
     def updateLP(self, params):
@@ -2754,46 +2696,57 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         result = {"view 1":None, "view 2":None}
         if hasattr(self.readView1, 'im'):
-            result["view 1"] = self.readView1.im
+            result["view 1"] = self.readView1
         if hasattr(self.readView2, 'im'):
-            result["view 2"] = self.readView2.im
+            result["view 2"] = self.readView2
         return result
 
     def on_plugin_complete(self, results: dict):
         """
-        (Placeholder) This is called when a plugin finishes.
+        Called when a plugin emits its 'completed' signal.
+        Accepts two formats:
+          - Legacy: {'data_obj': reader, 'view': ...}
+          - Plugin: {'image': ndarray|None, 'affine': ..., 'label': ndarray|None, 'view': ...}
         """
         print(f"Plugin finished. Results: {results.keys()}")
-        out_image = results.get('image', None)
-        out_affine = results.get('affine', None)
-        out_seg = results.get('label', None)
         view = results.get('view', None)
         if view == "view 1":
-            reader = self.readView1
+            reader = getattr(self, 'readView1', None)
             updater = self.updateDispView1
         elif view == 'view 2':
-            reader = self.readView2
+            reader = getattr(self, 'readView2', None)
             updater = self.updateDispView2
         else:
             return
-        npSeg = reader.npSeg
-        img = reader.im
-        if out_seg is not None:
-            if img.ndim==3:
-                npSeg = out_seg.transpose(2, 1, 0)[::-1, ::-1, ::-1] # adjustment for show
-            elif img.ndim == 4:
-                npSeg = out_seg.transpose(2, 1, 0, 3)[::-1, ::-1, ::-1, :] # adjustment for show
 
-        if out_image is not None:
-
-            if out_affine is None:
-                img = make_image(out_image, reader.im)
+        data_obj = results.get('data_obj', None)
+        if data_obj is not None:
+            # Legacy path: plugin returned a fully-prepared reader object
+            reader = data_obj
+            npSeg = reader.npSeg
+            img = reader.im
+            if not reader.isChunkedVideo:
+                reader.read_pars(im_new=img, seg_new=npSeg, reset_seg=False)
+                if reader.npImage is not None:
+                    updater(reader.npImage, reader.npSeg, initialState=True)
             else:
-                img = make_image_using_affine(out_image, out_affine, None)
-            #reader.im = img
-            #reader.npImage = out_image.transpose(2, 1, 0)[::-1, ::-1, ::-1]
+                updater(reader.npImage, reader.npSeg, initialState=True)
+            return
 
-        reader.read_pars(im_new=img, seg_new = npSeg, reset_seg=False)
+        # Standard plugin path: raw arrays emitted by plugin logic classes
+        if reader is None:
+            return
+
+        image_data = results.get('image', None)
+        affine = results.get('affine', None)
+        label = results.get('label', None)
+
+        new_img = None
+        if image_data is not None:
+            header = reader.im.header if hasattr(reader, 'im') else None
+            new_img = make_image_using_affine(image_data, affine, header)
+
+        reader.read_pars(im_new=new_img, seg_new=label, reset_seg=(label is None))
 
         if reader.npImage is not None:
             updater(reader.npImage, reader.npSeg, initialState=True)
@@ -3322,8 +3275,6 @@ class Ui_Main(dockWidgets, openglWidgets):
                                                    ['readView2', 'readView1'], whiteInds):
                             self._lastChangedWidgest = widgets
                             self._lastReader = readerName
-                            #self._lastReaderSegInd, self._lastReaderSegCol = getNoneZeroSeg(reader.npSeg)
-                            print(a) # neverused
                             self._lastReaderSegInd.append(whiteIn)
                             self._lastReaderSegCol.append(colorInd)
                             self._lastReaderSegPrevCol.append(widgets[0].colorInd)
@@ -3358,6 +3309,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                     widgets = []
                     if self.tabWidget.currentIndex() == 0:
                         widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
+                        if self.is_view2_video:
+                            widgets = [self.openGLWidget_4]
                     elif self.tabWidget.currentIndex()==2:
                         widgets = [self.openGLWidget_12]
                 elif sender == self.openGLWidget_1 or sender == self.openGLWidget_2 or sender == self.openGLWidget_3 or sender == self.openGLWidget_11:
@@ -3367,28 +3320,11 @@ class Ui_Main(dockWidgets, openglWidgets):
                     widgets = []
                     if self.tabWidget.currentIndex() == 0:
                         widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
+                        if self.is_view1_video:
+                            widgets = [self.openGLWidget_1]
                     elif self.tabWidget.currentIndex() == 1:
                         widgets = [self.openGLWidget_11]
 
-                elif sender in [self.actionTVSag, self.actionTVCor, self.actionTVAx]:
-
-                    if currentWidnowName.split('_')[0]=='ECO':
-                        readerName = 'readView1'
-                        reader = self.readView1
-                        self._sender = self.openGLWidget_1
-                        if self.tabWidget.currentIndex() == 0:
-                            widgets = [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3]
-                        elif self.tabWidget.currentIndex() == 1:
-                            widgets = [self.openGLWidget_11]
-                        elif self.tabWidget.currentIndex() == 2:
-                            widgets = [self.openGLWidget_12]
-                    elif currentWidnowName.split('_')[0]=='MRI':
-                        readerName = 'readView2'
-                        reader = self.readView2
-                        self._sender = self.openGLWidget_5
-                        widgets = [self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]
-                    else:
-                        return
                 else:
                     return
 
@@ -3742,9 +3678,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         widgets_view1 = [0, 1, 2, 10, 13]
         widgets_view2 = [3, 4, 5, 11, 23]
         if self.is_view1_video:
-            widgets_view1 = [10]
+            widgets_view1 = [0, 10]
         if self.is_view2_video:
-            widgets_view2 = [11]
+            widgets_view2 = [3, 11]
         widgets_num = widgets_view1 + widgets_view2
 
 
@@ -4255,38 +4191,86 @@ class Ui_Main(dockWidgets, openglWidgets):
             print('Imposible to change the color {}'.format(e))
 
 
-    def changeBrightness(self,value): # change contrast brightns
+    def _reapply_ct_window(self, reader, widgets_num):
         """
-        Change contrast and brightness
-        :param value:
-        :return:
+        Re-window a CT reader's display image with updated center/width,
+        then push the new npImage to all affected OpenGL widgets.
+        Only called when the reader is confirmed CT (has _ct_window_center set).
+        """
+        try:
+            data = reader.im.get_fdata().transpose(2, 1, 0)[::-1, ::-1, ::-1]
+            reader.npImage = apply_ct_window(
+                data, reader._ct_window_center, reader._ct_window_width)
+            for k in widgets_num:
+                widget = getattr(self, f'openGLWidget_{k + 1}')
+                if hasattr(widget, 'imSlice') and widget.imSlice is not None:
+                    from melage.utils.utils import getCurrentSlice
+                    imSlice, segSlice, trk = getCurrentSlice(
+                        widget, reader.npImage, reader.npSeg,
+                        widget.sliceNum, reader.tract)
+                    widget.imSlice = imSlice
+                    widget.segSlice = segSlice
+                widget.update()
+        except Exception as e:
+            print(f'CT re-window error: {e}')
+
+    def changeBrightness(self, value):
+        """
+        Change brightness.
+        For CT images: shifts the window center (level adjustment).
+        For other modalities: adjusts the OpenGL brightness uniform.
         """
         sender = QtCore.QObject.sender(self)
-        value = (value/100)
         widgets_num = []
+        reader = None
         if sender == self.t1_1:
             widgets_num = [0, 1, 2, 10]
+            reader = self.readView1 if self.readView1 else None
         elif sender == self.t2_1:
             widgets_num = [3, 4, 5, 11]
-        for k in widgets_num:
-            name = 'openGLWidget_' + str(k + 1)
-            widget = getattr(self, name)
-            widget.brightness = value
-            widget.update()
+            reader = self.readView2 if self.readView2 else None
 
-    def changeContrast(self,value): # change contrast brightns
+        if reader and getattr(reader, '_ct_window_center', None) is not None:
+            # CT: shift window center — slider range maps to ±500 HU shift
+            shift = (value / 100.0) * 500.0
+            reader._ct_window_center = reader._ct_window_center + shift
+            self._reapply_ct_window(reader, widgets_num)
+        else:
+            fval = value / 100.0
+            for k in widgets_num:
+                widget = getattr(self, f'openGLWidget_{k + 1}')
+                widget.brightness = fval
+                widget.update()
+
+    def changeContrast(self, value):
+        """
+        Change contrast.
+        For CT images: scales the window width (contrast/window adjustment).
+        For other modalities: adjusts the OpenGL contrast uniform.
+        """
         sender = QtCore.QObject.sender(self)
-        value = (value/100)
         widgets_num = []
+        reader = None
         if sender == self.t1_2:
             widgets_num = [0, 1, 2, 10]
+            reader = self.readView1 if self.readView1 else None
         elif sender == self.t2_2:
             widgets_num = [3, 4, 5, 11]
-        for k in widgets_num:
-            name = 'openGLWidget_' + str(k + 1)
-            widget = getattr(self, name)
-            widget.contrast = value
-            widget.update()
+            reader = self.readView2 if self.readView2 else None
+
+        if reader and getattr(reader, '_ct_window_width', None) is not None:
+            # CT: scale window width — slider range 0–200 maps to 0.1×–10× original width
+            base_ww = getattr(reader, '_ct_window_width_orig', reader._ct_window_width)
+            reader._ct_window_width_orig = base_ww
+            scale = max(0.1, (value / 100.0) * 10.0)
+            reader._ct_window_width = base_ww * scale
+            self._reapply_ct_window(reader, widgets_num)
+        else:
+            fval = value / 100.0
+            for k in widgets_num:
+                widget = getattr(self, f'openGLWidget_{k + 1}')
+                widget.contrast = fval
+                widget.update()
 
 
     def changeBandPass(self,value): # change threshold
@@ -4376,8 +4360,6 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
 
-    def changeWidthPen(self):
-        pass
 
 
 
@@ -4392,9 +4374,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         widgets_view1 = [0, 1, 2, 10]
         widgets_view2 = [3, 4, 5, 11]
         if self.is_view1_video:
-            widgets_view1 = [10]
+            widgets_view1 = [0, 10]
         if self.is_view2_video:
-            widgets_view2 = [11]
+            widgets_view2 = [3, 11]
         widgets_num = widgets_view1 + widgets_view2
 
 
@@ -4574,7 +4556,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         self.toolBar.setVisible(True)
         self.actionMain_Toolbar.setChecked(True)
-        self.actionrotate.setChecked(False)
 
 
 
@@ -4607,7 +4588,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         fileObj = QtWidgets.QFileDialog.getSaveFileName( self, "Open File", settings.DEFAULT_USE_DIR, filters, options=opts)
         if fileObj[0] == '':
             return
-        self._basefileSave, _ = os.path.splitext(fileObj[0])
+        self._basefileSave = os.path.splitext(fileObj[0])[0]
         self.dock_progressbar.setVisible(True)
         self.setEnabled(False)
 
@@ -4620,6 +4601,106 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.progressBarSaving.setValue(0)
 
 
+
+    def _run_single_report(self, reader, filename, measurements, out_path):
+        """Generate one HTML report for a single reader and open it."""
+        from melage.core.report import generate_neuroimaging_report, generate_video_report
+        import webbrowser
+
+        if getattr(reader, 'isChunkedVideo', False):
+            generate_video_report(
+                reader, filename,
+                self.color_name, self.colorsCombinations,
+                measurements, out_path)
+        else:
+            generate_neuroimaging_report(
+                reader, filename,
+                self.color_name, self.colorsCombinations,
+                measurements, out_path)
+
+        webbrowser.open(f'file://{os.path.abspath(out_path)}')
+
+    def generate_report(self):
+        """
+        Generate segmentation reports for all loaded views.
+        When both views are loaded the user is asked which to export
+        (View 1, View 2, or Both). When only one view is loaded that
+        view is used automatically.
+        """
+        v1 = self.readView1 if self.readView1 else None
+        v2 = self.readView2 if self.readView2 else None
+
+        if v1 is None and v2 is None:
+            QtWidgets.QMessageBox.information(
+                self, "No data", "Please load an image before generating a report.")
+            return
+
+        # Decide which views to report on
+        if v1 and v2:
+            dlg = QtWidgets.QMessageBox(self)
+            dlg.setWindowTitle("Generate Report")
+            dlg.setText("Both views are loaded. Which view(s) should be included in the report?")
+            btn_v1   = dlg.addButton("View 1 only",  QtWidgets.QMessageBox.ActionRole)
+            btn_v2   = dlg.addButton("View 2 only",  QtWidgets.QMessageBox.ActionRole)
+            btn_both = dlg.addButton("Both views",   QtWidgets.QMessageBox.ActionRole)
+            dlg.addButton(QtWidgets.QMessageBox.Cancel)
+            dlg.exec_()
+            clicked = dlg.clickedButton()
+            if clicked is None or clicked == dlg.button(QtWidgets.QMessageBox.Cancel):
+                return
+            report_v1 = clicked in (btn_v1, btn_both)
+            report_v2 = clicked in (btn_v2, btn_both)
+        else:
+            report_v1 = v1 is not None
+            report_v2 = v2 is not None
+
+        # Collect measurements table (shared between views)
+        measurements = []
+        for row in range(self.table_widget_measure.rowCount()):
+            row_data = []
+            for col in range(self.table_widget_measure.columnCount()):
+                item = self.table_widget_measure.item(row, col)
+                row_data.append(item.text() if item else '')
+            measurements.append(row_data)
+
+        opts = QtWidgets.QFileDialog.DontUseNativeDialog
+        saved_paths = []
+
+        self.setCursor(QtCore.Qt.WaitCursor)
+        try:
+            if report_v1:
+                fname = self.filenameView1
+                default_name = os.path.splitext(os.path.basename(fname))[0] + '_view1_report.html'
+                out_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                    self, "Save View 1 Report",
+                    os.path.join(settings.DEFAULT_USE_DIR, default_name),
+                    "HTML Report (*.html)", options=opts)
+                if out_path:
+                    self._run_single_report(v1, fname, measurements, out_path)
+                    saved_paths.append(out_path)
+
+            if report_v2:
+                fname = self.filenameView2
+                default_name = os.path.splitext(os.path.basename(fname))[0] + '_view2_report.html'
+                out_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                    self, "Save View 2 Report",
+                    os.path.join(settings.DEFAULT_USE_DIR, default_name),
+                    "HTML Report (*.html)", options=opts)
+                if out_path:
+                    self._run_single_report(v2, fname, measurements, out_path)
+                    saved_paths.append(out_path)
+
+            self.unsetCursor()
+
+            if saved_paths:
+                QtWidgets.QMessageBox.information(
+                    self, "Report saved",
+                    "Report(s) saved:\n" + "\n".join(saved_paths))
+
+        except Exception as e:
+            self.unsetCursor()
+            QtWidgets.QMessageBox.critical(
+                self, "Report error", f"Could not generate report:\n{e}")
 
     def convert(self):
         """
@@ -4712,9 +4793,9 @@ class Ui_Main(dockWidgets, openglWidgets):
 
             # Filter out slices if they are Video
             if self.is_view1_video:
-                widgets_num_view1 = []
+                widgets_num_view1 = [0]
             if getattr(self, 'is_view2_video', False):
-                widgets_num_view2 = []
+                widgets_num_view2 = [3]
 
             widgets_num = widgets_num_view1 + widgets_num_view2
 
@@ -4733,7 +4814,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         else:
             widgets_num = []
-
+        self.handle_global_playback(False)
         # --- 2. Update the Selected Widgets ---
         for k in widgets_num:
             name = 'openGLWidget_' + str(k + 1)
@@ -4973,7 +5054,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         tol_slice = self.tol_trk
         if self.allowChangeScn:
             if not self.is_view1_video:
-                updateSight(self.horizontalSlider_11, self.openGLWidget_11, self.readView1, value, tol_slice=tol_slice)
+                updateSight(self.horizontalSlider_11, self.openGLWidget_11, self.readView1, value, tol_slice=tol_slice, label=self.label_11)
             else:
                 slider = None
                 if self.tabWidget.currentIndex()==1:
@@ -4983,13 +5064,16 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if slider is not None:
                     sliceNum = value #slider.value()
                     self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
+                    if self.is_photo_view1:
+                        self.tabWidget.setTabText(1, self.readView1.label_current_frame)
 
     def changeSightTab4(self, value):
         tol_slice = self.tol_trk
         if self.allowChangeScn:
             if    not self.is_view2_video:
-                updateSight(self.horizontalSlider_12, self.openGLWidget_12, self.readView2, value, tol_slice=self.tol_trk)
+                updateSight(self.horizontalSlider_12, self.openGLWidget_12, self.readView2, value, tol_slice=self.tol_trk, label=self.label_12)
             else:
+                slider = None
                 if self.tabWidget.currentIndex()==2:
                     slider = self.horizontalSlider_12
                     widget = self.openGLWidget_12
@@ -4997,48 +5081,106 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if slider is not None:
                     sliceNum = value #slider.value()
                     self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
+                    if self.is_photo_view2:
+                        self.tabWidget.setTabText(2, self.readView1.label_current_frame)
 
     def changeSight1(self, value):
+        tol_slice = self.tol_trk
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_1, self.openGLWidget_1, self.readView1, value, tol_slice=self.tol_trk)
+            if not self.is_view1_video:
+                updateSight(self.horizontalSlider_1, self.openGLWidget_1, self.readView1, value, tol_slice=self.tol_trk, label=self.label_1)
+            else:
+                slider = None
+                #if self.tabWidget.currentIndex()==0:
+                slider = self.horizontalSlider_1
+                widget = self.openGLWidget_1
+                reader = self.readView1
+                if slider is not None:
+                    sliceNum = value #slider.value()
+                    self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
+                    if self.is_photo_view1:
+                        self._update_head_tab_0(
+                            name_1=reader.label_current_frame,
+                            name_2=None,
+                            use_label_frame=True
+                        )
 
 
     def changeSight2(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_2, self.openGLWidget_2, self.readView1, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_2, self.openGLWidget_2, self.readView1, value, tol_slice=self.tol_trk, label=self.label_2)
 
     def changeSight3(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_3, self.openGLWidget_3, self.readView1, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_3, self.openGLWidget_3, self.readView1, value, tol_slice=self.tol_trk, label=self.label_3)
 
     def changeSight4(self, value):
+        tol_slice = self.tol_trk
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_4, self.openGLWidget_4, self.readView2, value, tol_slice=self.tol_trk)
+            if    not self.is_view2_video:
+                updateSight(self.horizontalSlider_4, self.openGLWidget_4, self.readView2, value, tol_slice=self.tol_trk, label=self.label_1)
+            else:
+                slider = None
+                #if self.tabWidget.currentIndex()==2:
+                slider = self.horizontalSlider_4
+                widget = self.openGLWidget_4
+                reader = self.readView2
+                if slider is not None:
+                    sliceNum = value #slider.value()
+                    self._udpate_video_reader(widget, reader, sliceNum, tol_slice)
+                    if self.is_photo_view2:
+                        self._update_head_tab_0(
+                            name_1=None,
+                            name_2=reader.label_current_frame,
+                            use_label_frame=True
+                        )
 
 
     def changeSight5(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_5, self.openGLWidget_5, self.readView2, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_5, self.openGLWidget_5, self.readView2, value, tol_slice=self.tol_trk, label=self.label_2)
 
 
 
     def changeSight6(self, value):
         if self.allowChangeScn:
-            updateSight(self.horizontalSlider_6, self.openGLWidget_6, self.readView2, value, tol_slice=self.tol_trk)
+            updateSight(self.horizontalSlider_6, self.openGLWidget_6, self.readView2, value, tol_slice=self.tol_trk, label=self.label_3)
 
-    def toggle_video_playback(self, index=0):
-        if index==0:
-            video_timer = self.video_timer_view1
-            button = self.btn_play_view1
-        elif index==1:
-            video_timer = self.video_timer_view2
-            button = self.btn_play_view2
-        if video_timer.isActive():
-            video_timer.stop()
-            button.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
-        else:
-            video_timer.start(33)  # ~30 FPS
-            button.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
+    def advance_video_frame_main_view(self):
+        slider_dic = {0: [self.horizontalSlider_1, self.horizontalSlider_2, self.horizontalSlider_3,
+                          self.horizontalSlider_4, self.horizontalSlider_5, self.horizontalSlider_6],
+                      1: [self.horizontalSlider_11],
+                      2: [self.horizontalSlider_12]}
+
+        key_tab = self.tabWidget.currentIndex()
+        sliders = slider_dic.get(key_tab, [])
+
+        # 1. Filter for only the currently visible sliders
+        visible_sliders = [s for s in sliders if s.isVisible()]
+
+        if not visible_sliders:
+            return
+
+        # 2. Pick a "Master" slider (the first one) to serve as the clock
+        master_slider = visible_sliders[0]
+
+        # 3. Calculate the next frame index ONCE
+        next_val = master_slider.value() + 1
+        if next_val > master_slider.maximum():
+            next_val = 0  # Loop
+
+        # 4. Apply this single value to ALL sliders to force synchronization
+        for slider in visible_sliders:
+            # Optional: Block signals if you want to prevent 4 separate update calls
+            # slider.blockSignals(True)
+
+            # Ensure we don't exceed this specific slider's max (if videos have different lengths)
+            if next_val <= slider.maximum():
+                slider.setValue(next_val)
+            else:
+                slider.setValue(0)
+
+            # slider.blockSignals(False)
 
     def advance_video_frame(self, index = 0):
         if index==0:
@@ -5065,7 +5207,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
         if self.is_view1_video:
-            ind_widgets = [11]
+            ind_widgets = [1, 11]
             ind_3d_widget = []
         else:
             ind_widgets = [1, 2, 3, 11]
@@ -5087,29 +5229,27 @@ class Ui_Main(dockWidgets, openglWidgets):
                 #self.btn_play_view1.setVisible(False)
                 #self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
-            def update_slider(slider, label, extent_val):
+            def update_slider(slider, label, extent_val, active_dim):
+                mid_val = extent_val // 2
                 if slider.maximum() != extent_val - 1:
-                    mid_val = extent_val // 2
                     slider.blockSignals(True)
                     slider.setRange(0, extent_val)
                     slider.blockSignals(False)
                     slider.setValue(mid_val)
-                    label.setText(str_conv(mid_val))
+                label.setText(slice_label_text(mid_val, self.readView1, active_dim))
 
-            # Usage:
             ext = self.readView1.ImExtent
-            update_slider(self.horizontalSlider_1, self.label_1, ext[3])
-            update_slider(self.horizontalSlider_2, self.label_2, ext[1])
-            update_slider(self.horizontalSlider_3, self.label_3, ext[5])
+            # ext[3]=dimY(coronal→activeDim1), ext[1]=dimX(sagittal→2), ext[5]=dimZ(axial→0)
+            update_slider(self.horizontalSlider_1, self.label_1, ext[3], active_dim=1)
+            update_slider(self.horizontalSlider_2, self.label_2, ext[1], active_dim=2)
+            update_slider(self.horizontalSlider_3, self.label_3, ext[5], active_dim=0)
             currentWidnowName_in = self.openGLWidget_11.currentWidnowName
-            view_to_ext_index = {
-                'coronal': 3,
-                'sagittal': 1,
-                'axial': 5,
-            }
+            view_to_ext_index = {'coronal': 3, 'sagittal': 1, 'axial': 5}
+            view_to_active_dim = {'coronal': 1, 'sagittal': 2, 'axial': 0}
 
             ext_v = ext[view_to_ext_index[currentWidnowName_in]]
-            update_slider(self.horizontalSlider_11, self.label_11, ext_v)
+            update_slider(self.horizontalSlider_11, self.label_11, ext_v,
+                          active_dim=view_to_active_dim[currentWidnowName_in])
 
 
             self.openGLWidget_1.updateCurrentImageInfo(npImage.shape[:3])
@@ -5136,8 +5276,8 @@ class Ui_Main(dockWidgets, openglWidgets):
             #self.splitter_main_view1.setSizes([2000, 1000])
         else:
             # 1. SHOW Play Button
-            if hasattr(self, 'btn_play_view1'):
-                self.btn_play_view1.setVisible(True)
+            #if hasattr(self, 'btn_play_view1'):
+            #    self.btn_play_view1.setVisible(True)
             self.openGLWidget_14.hide()
             self.set_view_mode_focused_view1()
             #self.splitter_left_view1.setSizes([10000, 50, 0])
@@ -5213,7 +5353,7 @@ class Ui_Main(dockWidgets, openglWidgets):
 
 
         if self.is_view2_video:
-            ind_widgets = [12]
+            ind_widgets = [4, 12]
             ind_3d_widget = []
         else:
             ind_widgets = [4, 5, 6, 12]
@@ -5235,29 +5375,26 @@ class Ui_Main(dockWidgets, openglWidgets):
                 #self.btn_play_view2.setVisible(False)
                 #self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
-            def update_slider(slider, label, extent_val):
+            def update_slider(slider, label, extent_val, active_dim):
+                mid_val = extent_val // 2
                 if slider.maximum() != extent_val - 1:
-                    mid_val = extent_val // 2
                     slider.blockSignals(True)
                     slider.setRange(0, extent_val)
                     slider.blockSignals(False)
                     slider.setValue(mid_val)
-                    label.setText(str_conv(mid_val))
-
+                label.setText(slice_label_text(mid_val, self.readView2, active_dim))
 
             ext = self.readView2.ImExtent
-            update_slider(self.horizontalSlider_4, self.label_1, ext[3])
-            update_slider(self.horizontalSlider_5, self.label_2, ext[1])
-            update_slider(self.horizontalSlider_6, self.label_3, ext[5])
+            update_slider(self.horizontalSlider_4, self.label_1, ext[3], active_dim=1)
+            update_slider(self.horizontalSlider_5, self.label_2, ext[1], active_dim=2)
+            update_slider(self.horizontalSlider_6, self.label_3, ext[5], active_dim=0)
             currentWidnowName_in = self.openGLWidget_12.currentWidnowName
-            view_to_ext_index = {
-                'coronal': 3,
-                'sagittal': 1,
-                'axial': 5,
-            }
+            view_to_ext_index = {'coronal': 3, 'sagittal': 1, 'axial': 5}
+            view_to_active_dim = {'coronal': 1, 'sagittal': 2, 'axial': 0}
 
             ext_v = ext[view_to_ext_index[currentWidnowName_in]]
-            update_slider(self.horizontalSlider_12, self.label_12, ext_v)
+            update_slider(self.horizontalSlider_12, self.label_12, ext_v,
+                          active_dim=view_to_active_dim[currentWidnowName_in])
 
 
 
@@ -5295,8 +5432,8 @@ class Ui_Main(dockWidgets, openglWidgets):
             #self.splitter_main_view2.setSizes([2000, 1000])
         else:
             # 1. SHOW Play Button
-            if hasattr(self, 'btn_play_view2'):
-                self.btn_play_view2.setVisible(True)
+            #if hasattr(self, 'btn_play_view2'):
+            #    self.btn_play_view2.setVisible(True)
             self.openGLWidget_24.hide()
             self.set_view_mode_focused_view2()
             #self.splitter_left_view2.setSizes([10000, 50, 0])
@@ -5393,13 +5530,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionCircles.setText(self._translate("Main", "Circle Selection"))
         self.actionGoTo.setText(self._translate("Main", "Link"))
         self.action3D.setText(self._translate("Main", "3D"))
+        self.actionPlay.setText(self._translate("Main", "Play"))
         self.actionZoomIn.setText(self._translate("Main", "Zoom In"))
         self.actionZoomOut.setText(self._translate("Main", "Zoom Out"))
         self.actionContourX.setText(self._translate("Main", "Contour X times"))
         self.actionEraseX.setText(self._translate("Main", "Eraser X times"))
         self.actionPaint.setText(self._translate("Main", "Paint"))
         self.actionErase.setText(self._translate("Main", "Erase"))
-        self.actionLazyContour.setText(self._translate("Main", "Zoom Out"))
 
 
 
@@ -5411,7 +5548,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionMasking.setText(self._translate("Main", "Image Masking"))
         self.actionOperationMask.setText(self._translate("Main", "Masking Operation"))
 
-        self.actionrotate.setText(self._translate("Main", "Rotate"))
         self.actionArrow.setText(self._translate("Main", "Arrow"))
         self.menuTools.setTitle(self._translate("Main", "Tools"))
         self.menuPlugins.setTitle(self._translate("Main", "Plugins"))
@@ -5423,13 +5559,11 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.menuExport.setTitle(self._translate("Main", "Export"))
         self.menuImport.setTitle(self._translate("Main", "Import"))
         self.menuTV.setTitle(self._translate("Main", "Total Volume"))
-        self.actionTVCor.setText(self._translate("Main", "Coronal"))
-        self.actionTVSag.setText(self._translate("Main", "Sagital"))
-        self.actionTVAx.setText(self._translate("Main", "Axial"))
         self.menuSeg.setTitle( self._translate("Main", "Ventricle Segmentation") )
         self.actionMain_Toolbar.setText(self._translate("Main", "Main Toolbar"))
         self.actionsave.setText(self._translate("Main", "Save"))
         self.actionsaveas.setText(self._translate("Main", "Save as"))
+        self.actionGenerateReport.setText(self._translate("Main", "Generate Report..."))
         self.actionLine.setText(self._translate("Main", "Draw Line"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.mutulaViewTab), self._translate("Main", "Mutual view"))
         #self.tabWidget.setTabText(self.tabWidget.indexOf(self.reservedTab), self._translate("Main", "Rserved"))
@@ -5542,28 +5676,30 @@ class Ui_Main(dockWidgets, openglWidgets):
             #self.actionImportSegView2.setDisabled(False)
             self.actionsave.setDisabled(False)
             self.actionsaveas.setDisabled(False)
+            self.actionGenerateReport.setDisabled(False)
             self.toolBar2.setDisabled(False)
             self.startTime = time.time()
 
         else:
             return
 
-    def newProject(self):
+    def newProject(self, fileObj=None):
         opts = QtWidgets.QFileDialog.DontUseNativeDialog
         #fileObj = QtWidgets.QFileDialog.getSaveFileName(self, "Open File", settings.DEFAULT_USE_DIR, options=opts)
 
         dialog = self.get_dialog( settings.DEFAULT_USE_DIR, filters=None, opts=opts, title="Open File")
         #if fileObj[0] != '':
-        if dialog.exec() == QtWidgets.QDialog.Accepted:
-            selected_files = dialog.selectedFiles()
-            if selected_files:
-                # getOpenFileName returns a tuple (filepath, filter)
-                fileObj = (selected_files[0], dialog.selectedNameFilter())
-            else:
-                return
+        if fileObj is None or type(fileObj)==bool:
+            if dialog.exec() == QtWidgets.QDialog.Accepted:
+                selected_files = dialog.selectedFiles()
+                if selected_files:
+                    # getOpenFileName returns a tuple (filepath, filter)
+                    fileObj = (selected_files[0], dialog.selectedNameFilter())
+                else:
+                    return
         #if fileObj[0] != '':
-
-            self._basefileSave, _ = os.path.splitext(fileObj[0])
+        try:
+            self._basefileSave = os.path.splitext(fileObj[0])[0]
             if self._openUSEnabled:
                 self.actionOpenView1.setDisabled(False)
             self.actionOpenView2.setDisabled(False)
@@ -5572,6 +5708,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.actionOpenTract.setDisabled(True)
             self.actionsave.setDisabled(False)
             self.actionsaveas.setDisabled(False)
+            self.actionGenerateReport.setDisabled(False)
             self.reset_view_pages(index=0)
             self.reset_view_pages(index=1)
             widgets_num = [0, 1, 2, 3, 4, 5, 10, 11]
@@ -5584,6 +5721,8 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.openGLWidget_24.clear()
             self.Main.setWindowTitle(self._translate("Main", os.path.basename(self._basefileSave)))
             self.save()
+        except Exception as e:
+            self.warning_msgbox(e)
 
     def CloseView1(self, message_box=True):
         """
@@ -5612,8 +5751,11 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 4. Perform cleanup only if confirmed
         if proceed:
+            self.is_photo_view1 = False
+            self.label_1.show()
+            self.label_11.show()
             self._perform_view1_cleanup()
-
+            self.changedTab()
         return proceed
 
     def _set_view1_widgets_visible(self, is_visible):
@@ -5646,6 +5788,78 @@ class Ui_Main(dockWidgets, openglWidgets):
                 widget.resetInit()
                 widget.initialState()
 
+    def handle_mask_from_context(self, color_id, window_name):
+        """ Handles masking directly from the right-click context menu """
+        sender = self.sender()
+        # Determine which view this came from
+        ind_image = 0 if sender.imType == 'eco' else 1
+
+        # Build the values list expected by applyMaskToImage:
+        # [image_index, color_selection_index, keep_boolean]
+
+        # We need to find the 'ind_sel' (the index in self.color_name)
+        # This assumes your color_name list is formatted like "1_Ventricle"
+        ind_sel = 0
+        for i, c_name in enumerate(self.color_name):
+            if int(float(c_name.split('_')[0])) == color_id:
+                ind_sel = i
+                break
+
+        values = [ind_image, ind_sel, True]  # True = keep only this color
+
+        # Reuse your existing applyMaskToImage function!
+        self.applyMaskToImage(values, operation=False)
+
+    def handle_export_from_context(self, color_id, window_name, center_xy):
+        """ Handles exporting a specific segmented region from the context menu """
+        sender = self.sender()
+        export_type = 'view1_im' if sender.imType == 'eco' else 'view2_im'
+        export_type_seg = 'view1_seg' if sender.imType == 'eco' else 'view2_seg'
+
+        # Determine which view this came from
+        ind_image = 0 if sender.imType == 'eco' else 1
+
+        # Build the values list expected by applyMaskToImage:
+        # [image_index, color_selection_index, keep_boolean]
+
+        # We need to find the 'ind_sel' (the index in self.color_name)
+        # This assumes your color_name list is formatted like "1_Ventricle"
+        ind_sel = 0
+        for i, c_name in enumerate(self.color_name):
+            if int(float(c_name.split('_')[0])) == color_id:
+                ind_sel = i
+                break
+
+
+        ind_color = int(float(self.color_name[ind_sel].split('_')[0]))
+        reader = None
+        # 2. Dynamically assign the target reader and properties based on ind_image
+        if ind_image == 0:
+            reader = getattr(self, 'readView1', None)
+            is_video = self.is_view1_video
+            browse_func = self.browse_view1
+            update_disp = self.updateDispView1
+        elif ind_image == 1:
+            reader = getattr(self, 'readView2', None)
+            is_video = getattr(self, 'is_view2_video', False)
+            browse_func = self.browse_view2
+            update_disp = self.updateDispView2
+        else:
+            return
+        if reader is None:
+            return
+        if is_video:
+            slice_num = reader.current_frame
+            seg_frame = reader.seg_ims.get_frame(slice_num)
+            mask = seg_frame == ind_color
+            # You can call your existing exportData method.
+            # Note: If you want it to ONLY export the masked area, you might
+            # want to call applyMaskToImage first (on a copy), or update exportData
+            # to accept a specific color_id to filter by before saving.
+            # image export
+            self.exportData(export_type, mask)
+            # segmentation export
+            #self.exportData(export_type_seg, mask)
     def _perform_view1_cleanup(self):
         """Helper method to consolidate all cleanup tasks for closing the US view."""
 
@@ -5660,8 +5874,8 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 3. Clear the image data
         self.readView1 = []
-        self.btn_play_view1.setVisible(False)
-        # 4. Update tab state
+        # 4. Update tab state — hide Tab 1 and redirect if needed
+        self._sync_tab_visibility(closed_index=0)
         self.changedTab()
 
         # 5. Resize other (MRI) widgets
@@ -5676,7 +5890,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionComboBox_visible.setVisible(False)
         self.actionComboBox_visible.setDisabled(True)
         self.actionComboBox.setObjectName("View1")
-
+        self.openGLWidget_1.currentWidnowName = 'coronal'
         # 7. Safely disconnect the signal
         try:
             self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
@@ -5722,8 +5936,11 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 4. Perform cleanup only if user confirmed or no confirmation was needed
         if proceed:
+            self.is_photo_view2 = False
+            self.label_4.show()
+            self.label_12.show()
             self._perform_view2_cleanup()
-
+            self.changedTab()
         return proceed
 
     def _set_view2_widgets_visible(self, is_visible):
@@ -5778,9 +5995,9 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # 3. Clear the image data
         self.readView2 = []
-        # self.save() # Removed commented-out code
-        self.btn_play_view2.setVisible(False)
-        # 4. Resize other widgets
+        # 4. Update tab state — hide Tab 2 and redirect if needed
+        self._sync_tab_visibility(closed_index=1)
+        # 5. Resize other widgets
         for k in self.VIEW1_INDICES:
             name = 'openGLWidget_' + str(k)
             widget = getattr(self, name)
@@ -5842,10 +6059,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         #fileObj = QtWidgets.QFileDialog.getSaveFileName(self, "Open File", settings.DEFAULT_USE_DIR+'/'+pref, filters, options=opts)
         from melage.dialogs.helpers import QFileSaveDialogPreview
         #from melage.utils.utils import getCurrentCoordSystem
-        check_save = True
-        if hasattr(self, '_last_state_save_csv' ):
-            check_save=self._last_state_save_csv
-        dialg = QFileSaveDialogPreview(self, "Open File", settings.DEFAULT_USE_DIR+'/'+pref, filters, options=opts, check_state_csv=check_save)
+        #check_save = True
+        #if hasattr(self, '_last_state_save_csv' ):
+        #    check_save=self._last_state_save_csv
+        dialg = QFileSaveDialogPreview(self, "Open File", settings.DEFAULT_USE_DIR+'/'+pref, filters, options=opts)#, check_state_csv=check_save)
 
         dialg.setCS(currentCS)
         parent_size = self.size()
@@ -5855,16 +6072,16 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         #if dialg.exec_() == QFileSaveDialogPreview.Accepted:
         dialg.exec_()
-        cs, from_to, save_csv = dialg.getInfo()
-        self._last_state_save_csv = dialg.checkBox_csv.isChecked()
+        cs, from_to, fps, use_dfaults_fps, segmented_only = dialg.getInfo()
+        #self._last_state_save_csv = dialg.checkBox_csv.isChecked()
         fileObj = dialg.getFileSelected()
         fileObj[1] = dialg.selectedNameFilter()
 
         if fileObj[0] == '':
             self.warning_msgbox('No file name is selected')
-        return fileObj, [cs, from_to, save_csv]
+        return fileObj, [cs, from_to, fps, use_dfaults_fps, segmented_only]
 
-    def exportData(self, export_type):
+    def exportData(self, export_type, mask=None):
         """
         Unified Export Manager for MRI, Ultrasound (Volumetric), and Video Segmentation.
         Handles NIfTI, TIFF, and AVI formats.
@@ -5909,29 +6126,37 @@ class Ui_Main(dockWidgets, openglWidgets):
         # --- 3. PREPARE FILE DIALOG ---
         # Determine Filters based on mode
         if is_video_proxy:
-            filters = "Video (*.avi);;NifTi (*.nii *.nii.gz)"
+            filters = "Photo (*.png);;Video (*.avi)"
         else:
-            filters = "NifTi (*.nii *.nii.gz *.mgz);;tif(*.tif)"
+            filters = "NifTi (*.nii.gz);;tif(*.tif)"
 
         # Generate Default Filename
         original_path = getattr(self, 'filenameView1' if 'us' in export_type else 'filenameView2', "output")
-        base_name = os.path.splitext(os.path.basename(original_path))[0]
-        default_name = base_name + conf['suffix']
+        if 'view1' in export_type:
+            if self.is_photo_view1:
+                base_name = os.path.basename(os.path.dirname(self.full_path_view1))
+            else:
+                base_name = os.path.basename(self.full_path_view1)
+                base_name = base_name.split('.')[0]
+        if is_video_proxy:
+            default_name = base_name
+        else:
+            default_name = base_name + conf['suffix']
 
         # Coordinate System
         current_cs = getattr(reader, 'source_system', 'RAS')
 
         # Show Dialog
         opts = QtWidgets.QFileDialog.DontUseNativeDialog
-        file_path, selected_filter = self._filesave_dialog(filters, opts, default_name, currentCS=current_cs)
+        file_path, info_save = self._filesave_dialog(filters, opts, default_name, currentCS=current_cs)
+        cs, from_to, selected_fps, use_dfaults_fps, segmented_only = info_save
 
-        # User Cancelled
-        if not file_path:
-            return
 
 
         file_path, selected_filter = file_path  # unpack if needed
-
+        # User Cancelled
+        if not file_path:
+            return
         # --- 4. EXECUTE SAVE ---
         try:
             self.dock_progressbar.setVisible(False)
@@ -5940,10 +6165,20 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.app.processEvents()  # Force UI update
 
             # A. VIDEO EXPORT
-            if is_video_proxy and 'video' in selected_filter.lower():
-                if not file_path.endswith('.avi'):
-                    file_path = file_path + '.avi'
-                self._export_video_data(reader, file_path, export_type)
+            if is_video_proxy:
+                if 'video' in selected_filter.lower():
+                    if not file_path.endswith('.avi'):
+                        file_path = file_path + '.avi'
+                    # 1. Get FPS
+                    original_fps, fps = 30, 30  # Default
+                    if hasattr(reader, 'video_im') and hasattr(reader.video_im, 'fps'):
+                        original_fps = reader.video_im.fps
+                    if not use_dfaults_fps:
+                        fps = selected_fps
+                    self._export_video_data(reader, file_path, export_type, fps, original_fps, mask)
+                else:
+                    if "photo" in selected_filter.lower():
+                        self._export_photo_data(reader, file_path, export_type, segmented_only, mask)
 
             # B. STATIC 3D IMAGE EXPORT (NIfTI / TIF)
             else:
@@ -5975,7 +6210,9 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         except Exception as e:
             print(f"Export Failed: {e}")
-
+            self.setEnabled(True)
+            self.dock_progressbar.setVisible(False)
+            self.progressBarSaving.setValue(0)
             traceback.print_exc()
 
         finally:
@@ -5984,16 +6221,143 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.dock_progressbar.setVisible(False)
             self.progressBarSaving.setValue(0)
 
-    # --- HELPER FUNCTIONS (Add these to your class) ---
 
-    def _export_video_data(self, reader, output_path, export_type):
+
+    def _export_photo_data(self, reader, output_path, export_type, segmented_only, mask=None):
+        """Helper to handle Image Sequence export logic."""
+
+        # 1. Determine Target Object (Image vs Segmentation)
+        target_seg = None
+        if 'seg' in export_type:
+            # Saving Segmentation
+            if hasattr(reader, 'seg_ims'):
+                target_obj = reader.seg_ims
+
+                is_seg = True
+            else:
+                target_obj = reader.npSeg
+                is_seg = True
+        else:
+            # Saving Video Frames
+            if hasattr(reader, 'video_im'):
+                target_obj = reader.video_im
+                if segmented_only:
+                    target_seg = reader.seg_ims
+                is_seg = False
+            else:
+                target_obj = reader.npImage
+                is_seg = False
+
+        # 2. Setup Directory & Filenames
+        # Logic: If output_path is "C:/Data/results.png", we save to "C:/Data/" with prefix "results_"
+        folder = os.path.dirname(output_path)
+        filename = os.path.basename(output_path)
+        base_name, ext = os.path.splitext(filename)
+
+        # Default to png if no extension provided
+        if not ext == '.png':
+            ext = '.png'
+            #folder = output_path  # Treat the whole path as a folder
+            #base_name = 'frame'
+
+        # Create folder if it doesn't exist
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
+
+        # 3. Get Dimensions
+        if hasattr(target_obj, 'shape'):
+            # In your proxies:
+            # Video is (H, W, T, C) -> T is index 2
+            # Label is (H, W, T)    -> T is index 2
+            total_frames = target_obj.shape[2]
+        else:
+            print("Error: Cannot determine dimensions.")
+            return
+
+        print(f"Exporting sequence to {folder} ...")
+        self.setEnabled(False)  # Freeze UI interactions
+        if mask is not None and type(mask)!=bool:
+            y_coords, x_coords = np.where(mask)
+            y_min, y_max = y_coords.min(), y_coords.max()
+            x_min, x_max = x_coords.min(), x_coords.max()
+        # 4. Write Loop
+        for i in range(total_frames):
+            # -- Progress Bar Update --
+            if i % 10 == 0:
+                prog = int((i / total_frames) * 100)
+                self.progressBarSaving.setValue(prog)
+                self.app.processEvents()  # Keep GUI alive
+
+            # -- Get Frame --
+            if hasattr(target_obj, 'get_frame'):
+                # Use Proxy Optimized Getter
+                if target_seg is not None:
+                    frame_seg = target_seg.get_frame(i)
+                    if frame_seg.sum()==0:
+                        continue
+                frame = target_obj.get_frame(i)
+
+                frame_label = target_obj.get_label_frame(i)
+
+            elif target_obj.ndim == 4:
+                # 4D Array (H, W, T, C)
+                frame = target_obj[:, :, i, :]
+            elif target_obj.ndim == 3:
+                # 3D Array (H, W, T)
+                frame = target_obj[:, :, i]
+            else:
+                continue  # Skip invalid shape
+
+            # -- Format Frame --
+            if is_seg:
+                # Labels: Ensure integer type
+                if segmented_only:
+                    if frame.sum()==0:
+                        continue
+                frame = frame.astype(np.uint8)
+            else:
+                # Images: Color Conversion
+                if frame.ndim == 2:
+                    # Grayscale to BGR (for consistent image format)
+                    frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+                else:
+                    # RGB to BGR (OpenCV expects BGR)
+                    # Your VideoArrayProxy outputs RGB, so we must flip it back
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            if mask is not None and type(mask)!=bool:
+                # Crop both the image frame and the segmentation frame to the bounding box
+                frame = frame[y_min:y_max + 1, x_min:x_max + 1]
+            # -- Save to Disk --
+            # Creates: prefix_00000.png, prefix_00001.png, etc.
+            is_video = False
+            if hasattr(target_obj, 'is_video'):
+                is_video = target_obj.is_video
+            else:
+                is_video = target_obj.video.is_video
+            if ext!='.png' or is_video:
+                fname = f"{base_name}_{frame_label}{ext}"
+                if is_seg:
+                    fname = f"{base_name}_{frame_label}_seg{ext}"
+            else:
+                fname = f"{frame_label}_im{ext}"
+                if is_seg:
+                    fname = f"{frame_label}_seg{ext}"
+
+            full_path = os.path.join(folder, fname)
+
+            # cv2.imwrite handles compression based on extension provided
+            cv2.imwrite(full_path, frame)
+
+        # 5. Cleanup
+        self.progressBarSaving.setValue(100)
+        self.setEnabled(True)
+        print(f"Sequence saved successfully: {folder}")
+
+    def _export_video_data(self, reader, output_path, export_type, fps, original_fps, mask=None):
         """Helper to handle AVI export logic."""
 
         # Manual Loop Writer (if proxy.save() didn't handle it)
-        # 1. Get FPS
-        fps = 30.0
-        if hasattr(reader, 'video_im') and hasattr(reader.video_im, 'fps'):
-            fps = reader.video_im.fps
+
 
 
         # Determine which object to save (Image vs Segmentation)
@@ -6034,24 +6398,33 @@ class Ui_Main(dockWidgets, openglWidgets):
             depth = target_obj.shape[2]
         else:
             return  # Cannot determine shape
-
+        # If target fps is lower than original, we skip frames
+        if fps < original_fps:
+            step = original_fps / fps
+        else:
+            step = 1
         writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h), isColor=not is_seg)
 
-        # 3. Write Frames
-        total_frames = depth
-        for i in range(total_frames):
+        # Write Frames with Skipping
+
+        # We use a float counter to handle non-integer steps (e.g. 30fps -> 24fps)
+        current_frame_idx = 0.0
+
+        while current_frame_idx < depth:
+            i = int(current_frame_idx)
+
             # Progress Bar Update
             if i % 10 == 0:
-                prog = int((i / total_frames) * 100)
+                prog = int((i / depth) * 100)
                 self.progressBarSaving.setValue(prog)
                 self.app.processEvents()
 
-            # Get Frame
+            # Get Frame (using the integer index 'i')
             if hasattr(target_obj, 'get_frame'):
                 frame = target_obj.get_frame(i)
-            elif target_obj.ndim == 3:  # (H, W, T) or (H, W, Channels)? Assuming (H, W, T) for seg
+            elif target_obj.ndim == 3:
                 frame = target_obj[..., i]
-            elif target_obj.ndim == 4:  # (H, W, T, C)
+            elif target_obj.ndim == 4:
                 frame = target_obj[:, :, i, :]
 
             # Ensure format
@@ -6061,9 +6434,12 @@ class Ui_Main(dockWidgets, openglWidgets):
                 if frame.ndim == 2:
                     frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_GRAY2BGR)
                 else:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # OpenCV needs BGR
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
             writer.write(frame)
+
+            # Increment by step (e.g., if step is 2, we grab index 0, 2, 4...)
+            current_frame_idx += step
 
         writer.release()
         print(f"Video saved: {output_path}")
@@ -6342,8 +6718,8 @@ class Ui_Main(dockWidgets, openglWidgets):
                     # Update Widget View
                     if i < 13:
                         if widget.imSlice is not None:
-                            widget.setVisible(True)
                             widget.makeObject()
+                            widget.setVisible(True)
                             widget.update()
                         else:
                             widget.setVisible(False)
@@ -6395,326 +6771,6 @@ class Ui_Main(dockWidgets, openglWidgets):
                     if key in dic_settings:
                         # Be careful if 'settings' here refers to QSettings or a global module
                         pass
-
-            self.current_view = 'horizontal'
-
-        except Exception as e:
-            print(f"Error in final UI cleanup: {e}")
-
-        # --- Finalize ---
-        self._loaded = True
-        self.openGLWidget_14._updatePaint = True
-        self.openGLWidget_24._updatePaint = True
-
-    def loadChanges2(self, file_base=None):
-        """
-        This function loads all previous values.
-        Refactored to continue execution even if individual sections fail.
-        """
-        # --- 1. Imports and Setup ---
-
-
-        sender = QtCore.QObject.sender(self)
-
-        if file_base is not None and type(file_base) is not bool:
-            self._basefileSave = file_base
-
-        if type(self._basefileSave) == bool or self._basefileSave == '' or self._loaded:
-            return
-
-        # Initialize settings and UI flags
-        try:
-            self.settings = QSettings(self._basefileSave + '.ini', self.settings.IniFormat)
-            self.openGLWidget_14._updatePaint = False
-            self.openGLWidget_24._updatePaint = False
-            self.activate3d(True)
-        except Exception as e:
-            print(f"Error initializing settings: {e}")
-
-        if file_base is None:
-            file = self._basefileSave + '.bn'
-        else:
-            file = file_base
-
-        dic = None
-        self.progressBarSaving.setValue(20)
-
-        # --- 2. CRITICAL: Load File Data ---
-        # This is the only block that stops the function if it fails,
-        # because without 'dic', there is nothing to load.
-        if os.path.exists(file) and os.path.getsize(file) > 0:
-            try:
-                with open(file, 'rb') as inputs:
-                    unpickler = pickle.Unpickler(inputs)
-                    dic = unpickler.load()
-            except Exception as e:
-                print(f"Critical Error: Failed to load or decrypt file: {e}")
-                return  # Cannot proceed without data
-
-        if dic is None:
-            return
-
-        # =========================================================
-        # INDEPENDENT LOADING BLOCKS
-        # Failures here will NOT stop the rest of the function
-        # =========================================================
-
-        # --- 3. Load Measurements ---
-        try:
-            if 'measurements' in dic:
-                vals = dic['measurements']
-                self.table_widget_measure.setRowCount(len(vals))
-                self.table_widget_measure.setColumnCount(8)
-                r = 0
-                for row in range(len(vals)):
-                    for col in range(len(vals[row])):
-                        self.table_widget_measure.setItem(row, col, QtWidgets.QTableWidgetItem(vals[row][col]))
-                    r += 1
-            else:
-                self.table_widget_measure.setRowCount(0)
-        except Exception as e:
-            print(f"Error loading measurements: {e}")
-
-        self.progressBarSaving.setValue(65)
-
-        # --- 4. Load Widgets (Iterative) ---
-        name = 'openGLWidget_'
-        nameS = 'horizontalSlider_'
-        widgets_num = [0, 1, 2, 3, 4, 5, 10, 11, 13, 23]
-        self.scroll_intensity.setValue(50)
-
-        for i in widgets_num:
-            try:
-                nameWidget = name + str(i + 1)
-                if hasattr(self, nameWidget):
-                    widget = getattr(self, nameWidget)
-
-                    # UI Visibility Logic
-                    if i < 13:
-                        slider = getattr(self, nameS + str(i + 1))
-                        slider.setVisible(True)
-                    if i == 10:
-                        self.radioButton_1.setVisible(True)
-                        self.radioButton_2.setVisible(True)
-                        self.radioButton_3.setVisible(True)
-                        self.radioButton_4.setVisible(True)
-                    elif i == 11:
-                        self.radioButton_21_1.setVisible(True)
-                        self.radioButton_21_2.setVisible(True)
-                        self.radioButton_21_3.setVisible(True)
-                        self.radioButton_21.setVisible(True)
-
-                    # Load Widget Data
-                    loadAttributeWidget(widget, nameWidget, dic, self.progressBarSaving)
-
-                    # Update Widget View
-                    if i < 13:
-                        if widget.imSlice is not None:
-                            widget.setVisible(True)
-                            widget.makeObject()
-                            widget.update()
-                        else:
-                            widget.setVisible(False)
-                            slider.setVisible(False)
-            except Exception as e:
-                print(f"Error loading widget {i + 1}: {e}")
-
-        self.progressBarSaving.setValue(75)
-
-        # --- 5. Initialize Image Readers ---
-        try:
-            names = ['readView1', 'readView2']
-            for name in names:
-                # Re-initialize readers
-                if name == 'readView1':
-                    imtype = 'eco'
-                else:
-                    imtype = 't1'
-
-                # Note: readData needs to be available in context
-                # Assuming it is a method of self or imported globally
-                setattr(self, name, self.readData(type=imtype) if hasattr(self, 'readData') else None)
-
-                readD = getattr(self, name)
-                if readD:
-                    loadAttributeWidget(readD, name, dic, self.progressBarSaving)
-        except Exception as e:
-            print(f"Error initializing image readers: {e}")
-
-        self.progressBarSaving.setValue(80)
-        self.app.processEvents()
-
-        # --- 6. Setup ECO (View 1) ---
-        try:
-            if hasattr(self, 'readView1') and hasattr(self.readView1, 'npImage'):
-                self.tree_colors.setVisible(True)
-                self.readView1.npSeg = self.readView1.npSeg.astype('int')
-
-                self.ImageEnh_view1.setVisible(True)
-                self.readView1.manuallySetIms('eco')
-                self.setNewImage_view1.emit(self.readView1.npImage.shape[:3])
-                self.openGLWidget_14.load_paint(self.readView1.npSeg)
-                self.tabWidget.setTabVisible(1, True)
-
-                # Sync Affine
-                for i in widgets_num:
-                    widget = getattr(self, 'openGLWidget_' + str(i + 1))
-                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readView2,
-                                                                                                       'affine'):
-                        if widget.imType == 'eco':
-                            widget.affine = self.readView2.affine
-
-                self.updateDispView1(self.readView1.npImage, self.readView1.npSeg, initialState=True)
-
-                if not hasattr(self.readView1, 'npEdge'):
-                    self.readView1.npEdge = []
-        except Exception as e:
-            print(f"Error setting up ECO/View1: {e}")
-
-        self.app.processEvents()
-
-        # --- 7. Setup MRI (View 2) ---
-        try:
-            if hasattr(self, 'readView2') and hasattr(self.readView2, 'npImage'):
-                self.readView2.npSeg = self.readView2.npSeg.astype('int')
-
-                self.tabWidget.setTabVisible(2, True)
-                self.page1_mri.setVisible(True)
-                self.tree_colors.setVisible(True)
-                self.readView2.manuallySetIms('t1')
-                self.setNewImage_view2.emit(self.readView2.npImage.shape[:3])
-
-                # Sync Affine
-                for i in widgets_num:
-                    widget = getattr(self, 'openGLWidget_' + str(i + 1))
-                    if i < 13 and widget.imSlice is not None and hasattr(widget, 'affine') and hasattr(self.readView2,
-                                                                                                       'affine'):
-                        if widget.imType == 'mri':
-                            widget.affine = self.readView2.affine
-
-                self.updateDispView2(self.readView2.npImage, self.readView2.npSeg, initialState=True,
-                                   tract=self.readView2.tract)
-
-                if not hasattr(self.readView2, 'npEdge'):
-                    self.readView2.npEdge = []
-
-                # Setup ComboBox for Dimensions
-                if hasattr(self.readView2, 'ims'):
-                    shape = self.readView2.ims.shape
-                    self.actionComboBox.setObjectName("View2")
-                    try:
-                        self.actionComboBox.currentTextChanged.disconnect(self.changeVolume)
-                    except:
-                        pass
-
-                    self.actionComboBox.clear()
-                    for r in range(shape[-1]):
-                        self.actionComboBox.addItem("{}".format(r + 1))
-
-                    try:
-                        self.actionComboBox.currentTextChanged.connect(self.changeVolume)
-                    except:
-                        pass
-
-                    self.actionComboBox_visible.setVisible(True)
-                    self.actionComboBox_visible.setDisabled(False)
-                else:
-                    self.actionComboBox_visible.setVisible(False)
-                    self.actionComboBox_visible.setDisabled(True)
-        except Exception as e:
-            print(f"Error setting up MRI/View2: {e}")
-
-        self.progressBarSaving.setValue(95)
-        self.app.processEvents()
-
-        # --- 8. Load Main Attributes & Reset Tree ---
-        try:
-            loadAttributeWidget(self, 'main', dic, self.progressBarSaving)
-            self.imported_images = []
-            self.tree_images.model().sourceModel().clear()
-            self.tree_images.model().sourceModel().setColumnCount(2)
-            self.tree_images.model().sourceModel().setHorizontalHeaderLabels(['Index', 'Name'])
-        except Exception as e:
-            print(f"Error loading main attributes: {e}")
-
-        # --- 9. Update Info Dialogs ---
-        try:
-
-            # MRI Info
-            if hasattr(self, 'readView2') and hasattr(self.readView2, 'im'):
-                if self.filenameView1:
-                    file_out = 'View 1: {}, View 2: {}'.format(self.filenameView1, self.filenameView2)
-                else:
-                    file_out = 'View 2: {}'.format(self.filenameView2)
-
-                info1, color1 = [[[self.filenameView2], "*View 2 (loaded)"], 2, 1], [1, 1, 0]
-                update_image_sch(self, info=info1, color=color1, loaded=True)
-                self.iminfo_dialog.updata_name_iminfo(self.filenameView2, 1)
-
-                if hasattr(self.readView2, 'im_metadata'):
-                    self.iminfo_dialog.set_tag_value(self.readView2, ind=1)
-
-            # ECO Info
-            if hasattr(self, 'readView1') and hasattr(self.readView1, 'im'):
-                self.iminfo_dialog.updata_name_iminfo(self.filenameView1, 0)
-                info1, color1 = [[[self.filenameView1], "*View 1 (loaded)"], 0, 0], [0, 1, 1]
-                update_image_sch(self, info=info1, color=color1, loaded=True)
-
-                if hasattr(self.readView1, 'im_metadata'):
-                    self.iminfo_dialog.set_tag_value(self.readView1, ind=0)
-        except Exception as e:
-            print(f"Error updating info dialogs: {e}")
-
-        self.progressBarSaving.setValue(98)
-
-        # --- 10. Final UI Cleanups & Settings ---
-        try:
-
-            adapt_previous_versions(self)
-            set_new_color_scheme(self)
-            update_widget_color_scheme(self)
-
-            self.t1_5.setValue(0)
-            self.lb_t1_5.setText('0')
-            self.t2_5.setValue(0)
-            self.lb_t2_5.setText('0')
-
-            self.openGLWidget_4.imType = 'mri'
-            self.openGLWidget_5.imType = 'mri'
-            self.openGLWidget_6.imType = 'mri'
-
-            # Reset Color Indices
-            widgets = [1, 2, 3, 4, 5, 6, 11, 12, 14, 24]
-            prefix = 'openGLWidget_'
-            for k in widgets:
-                if hasattr(self, prefix + str(k)):
-                    getattr(self, prefix + str(k)).colorInds = []
-
-            self.progressBarSaving.setVisible(False)
-            self.openGLWidget_14._updatePaint = True
-            self.openGLWidget_24._updatePaint = True
-
-            if hasattr(self.settingsBN, 'auto_save_spinbox'):
-                self.expectedTime = self.settingsBN.auto_save_spinbox.value() * 60
-
-            if hasattr(self, 'lb_scrol_rad_circle'):
-                self.scrol_rad_circle.setValue(int(self.lb_scrol_rad_circle.text()))
-
-            # Load Settings Dict
-            if "settings" in dic:
-                dic_settings = dic["settings"]
-                allowed_keys = ["auto_save_interval", "DEFAULT_MODELS_DIR", "DEFAULT_USE_DIR"]
-                # Assuming 'settings' is a module or object available in context
-                # If 'settings' refers to self.settings, adjust accordingly
-                for key in allowed_keys:
-                    if key in dic_settings:
-                        # Be careful if 'settings' here refers to QSettings or a global module
-                        pass
-
-            try:
-                self.scrol_tol_rad_circle.setValue(int(self.lb_scrol_tol_rad_circle.text()))
-            except ValueError:
-                self.scrol_tol_rad_circle.setValue(0)
 
             self.current_view = 'horizontal'
 
@@ -6749,6 +6805,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             # Read Data based on selected type
             success = self._load_data_by_type(fileObj, index, index_view = 0)
             if not success: return False
+        self.openGLWidget_1.currentWidnowName = 'coronal'
 
         # --- STEP 2: SETUP VIDEO VS STANDARD MODE ---
         # Check if loaded data is a Video Proxy
@@ -6756,7 +6813,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                               getattr(self.readView1, 'isChunkedVideo', False)
 
         if self.is_view1_video:
-            self._configure_video_ui(self.readView1, name_tab= 'segmentationTab', ind_use = [0, 1, 2, 10, 13], index_tab=0)
+            self._configure_video_ui(self.readView1, name_tab= 'segmentationTab', ind_use = [1, 2, 10, 13], index_tab=0)
         else:
             self._configure_standard_ui(self.readView2, index_tab=0) # update second view too
 
@@ -6793,8 +6850,18 @@ class Ui_Main(dockWidgets, openglWidgets):
         data_context = self.get_current_image_data()
         for plugin in self.plugin_widgets:
             plugin.update_data_context(data_context)
-
+        if self.is_photo_view1:
+            self.label_1.hide()
+            self.label_11.hide()
+            self.tabWidget.setTabText(1, self.readView1.label_current_frame)
+            self._update_head_tab_0(name_1 = self.readView1.label_current_frame,
+                                    name_2=None, use_label_frame = True)
+        else:
+            self.tabWidget.setTabText(1, os.path.basename(self.full_path_view1))
+            self._update_head_tab_0()
         return True
+
+
 
 
     def browse_view2(self, fileObj=None, use_dialog=True):
@@ -6819,14 +6886,14 @@ class Ui_Main(dockWidgets, openglWidgets):
             # Read Data based on selected type
             success = self._load_data_by_type(fileObj, index, index_view = 1)
             if not success: return False
-
+        self.openGLWidget_4.currentWidnowName = 'coronal'
         # --- STEP 2: SETUP VIDEO VS STANDARD MODE ---
         # Check if loaded data is a Video Proxy
         self.is_view2_video = getattr(self.readView2, 'isVideo', False) or \
                               getattr(self.readView2, 'isChunkedVideo', False)
 
         if self.is_view2_video:
-            self._configure_video_ui(self.readView2, name_tab= 'MRISegTab', ind_use = [3, 4, 5, 11, 23], index_tab=1)
+            self._configure_video_ui(self.readView2, name_tab= 'MRISegTab', ind_use = [ 4, 5, 11, 23], index_tab=1)
         else:
             self._configure_standard_ui(self.readView1, index_tab=1) # update second view too
 
@@ -6863,8 +6930,43 @@ class Ui_Main(dockWidgets, openglWidgets):
         for plugin in self.plugin_widgets:
             plugin.update_data_context(data_context)
 
+
+        if self.is_photo_view2:
+            self.label_4.hide()
+            self.label_12.hide()
+            self.tabWidget.setTabText(2, self.readView2.label_current_frame)
+            self._update_head_tab_0(name_1 = None,
+                                    name_2=self.readView2.label_current_frame,
+                                    use_label_frame = True)
+        else:
+            self.tabWidget.setTabText(2, os.path.basename(self.full_path_view2))
+            self._update_head_tab_0()
+
         return True
 
+
+
+    def _update_head_tab_0(self, name_1 = None, name_2 = None, use_label_frame = False):
+        if use_label_frame:
+            tab_label = self.tabWidget.tabText(0)
+            view1_view2 = tab_label.split('|')
+            if len(view1_view2)!=2:
+                view1_view2 = ['View 1: None', 'View 2: None']
+            if name_1 is not None:
+                tab_label = f"View 1: {name_1}  |  {view1_view2[1].strip()}"
+            elif name_2 is not None:
+                tab_label = f"{view1_view2[0].strip()}  |  View 2: {name_2}"
+        else:
+            # 1. Get the basenames safely (default to 'None' or 'Empty' if path is None)
+            name_1 = os.path.basename(self.full_path_view1) if self.full_path_view1 else "None"
+            name_2 = os.path.basename(self.full_path_view2) if self.full_path_view2 else "None"
+
+            # 2. Create a clean label using an f-string
+            # Format: "View 1: filename.nii | View 2: filename.nii"
+            tab_label = f"View 1: {name_1}  |  View 2: {name_2}"
+
+        # 3. Set the text of tab 0
+        self.tabWidget.setTabText(0, tab_label)
 
     # ------------------------------------------------------------------
     # HELPER METHODS (Add these to your class to keep code clean)
@@ -6893,21 +6995,30 @@ class Ui_Main(dockWidgets, openglWidgets):
 
     def _load_data_by_type(self, fileObj, index, index_view=0):
         """Reads the file into self.readView1 based on index type."""
+
+
         try:
             reader, Info, file_full_path = self.readD(fileObj, 'eco', target_system='RAS')
             if Info[2].lower() != 'success':
                 return False
             if index_view == 0:
+
                 self.readView1 = reader
                 self.full_path_view1 = file_full_path
+                self.is_photo_view1 = True if self.full_path_view1.endswith(".png") else False
             elif index_view == 1:
                 self.readView2 = reader
                 self.full_path_view2 = file_full_path
+                self.is_photo_view2 = True if self.full_path_view2.endswith(".png") else False
 
 
 
             return True
         except Exception as e:
+            MessageBox = QtWidgets.QMessageBox(self)
+            MessageBox.setText('Unable to read the file correctly.')
+            MessageBox.setWindowTitle('Reading Warning')
+            MessageBox.show()
             print(f"Error loading file: {e}")
             return False
 
@@ -6928,26 +7039,31 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         # Set context name
         if index_tab == 0:
+            self.openGLWidget_1.currentWidnowName = "video"
             self.openGLWidget_11.currentWidnowName = "video"
         elif index_tab==1:
+            self.openGLWidget_4.currentWidnowName = "video"
             self.openGLWidget_12.currentWidnowName = "video"
-
-        self.tabWidget.setCurrentIndex(main_tab_index)
+        if self.tabWidget.currentIndex()!=0:
+            self.tabWidget.setCurrentIndex(main_tab_index)
         self._format = 'video'
 
 
 
         # Setup Video Slider
+        slider_index0 = [self.horizontalSlider_1, self.horizontalSlider_11]
+        slider_index1 = [self.horizontalSlider_4, self.horizontalSlider_12]
         if hasattr(reader, 'seg_ims'):
             if index_tab==0:
-                slider = self.horizontalSlider_11
+                sliders = slider_index0
 
             elif index_tab==1:
-                slider = self.horizontalSlider_12
-            slider.blockSignals(True)
-            slider.setRange(0, reader.seg_ims.shape[-1])
-            slider.blockSignals(False)
-            slider.setValue(reader.current_frame)
+                sliders = slider_index1
+            for slider in sliders:
+                slider.blockSignals(True)
+                slider.setRange(0, reader.seg_ims.shape[-1])
+                slider.blockSignals(False)
+                slider.setValue(reader.current_frame)
 
 
 
@@ -6995,6 +7111,21 @@ class Ui_Main(dockWidgets, openglWidgets):
                 self.actionComboBox_visible.setVisible(True)
                 self.actionComboBox.currentTextChanged.connect(self.changeVolume)
 
+    def _update_metadata_info(self, index_tab):
+        if index_tab==0:
+            reader = self.readView1
+            name_file = self.filenameView1
+        elif index_tab==1:
+            reader = self.readView2
+            name_file = self.filenameView2
+
+        self.iminfo_dialog.updata_name_iminfo(name_file, index_tab)
+        if hasattr(reader, 'im_metadata'):
+            self.iminfo_dialog.set_tag_value(reader, ind=index_tab)
+        if hasattr(reader, 'isChunkedVideo'):
+            if reader.isChunkedVideo:
+                self.iminfo_dialog.set_video_info(reader, ind=index_tab)
+
     def _initialize_display_widgets(self, reader, str_name_file = 'filenameView1', fileObj=None, use_dialog=None,
                                     index_tab = 0, widgets_to_reset = [0, 1, 2, 10], view_text = 'View 1'):
         """Sets up the OpenGL Widgets, Colors, and Metadata."""
@@ -7007,9 +7138,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         name_file = getattr(self, str_name_file)
 
         # Update Metadata Info Dialog
-        self.iminfo_dialog.updata_name_iminfo(name_file, index_tab)
-        if hasattr(reader, 'im_metadata'):
-            self.iminfo_dialog.set_tag_value(reader, ind=index_tab)
+        self._update_metadata_info(index_tab)
 
         # Set Colors
         ls = manually_check_tree_item(self, '9876')
@@ -7018,9 +7147,6 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.changeColorPen(item)
 
         # Reset & Update OpenGL Widgets
-        self.tabWidget.setTabVisible(1, True)
-
-
         for k in widgets_to_reset:
             widget = getattr(self, f'openGLWidget_{k + 1}')
             if widget.isVisible():
@@ -7034,6 +7160,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.updateDispView1(reader.npImage, reader.npSeg, initialState=True)
         elif index_tab==1:
             self.updateDispView2(reader.npImage, reader.npSeg, initialState=True)
+        self._sync_tab_visibility(loaded_index=index_tab)
         self.changedTab()
         self.reset_view_pages(index= index_tab)
 
@@ -7051,15 +7178,16 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.actionImportSegView1.setDisabled(not val)
             self.actionExportImView1.setDisabled(not val)
             self.actionExportSegView1.setDisabled(not val)
-            self.btn_play_view1.setVisible(True)
-            for rb in [self.radioButton_1, self.radioButton_2, self.radioButton_3, self.radioButton_4]:
+            #self.btn_play_view1.setVisible(True)
+            #self.radioButton_1
+            for rb in [ self.radioButton_2, self.radioButton_3, self.radioButton_4]:
                 rb.setVisible(val)
 
-            for k in [1, 2, 3, 11]:
+            for k in [2, 3, 11]:
                 getattr(self, f'label_{k}').setVisible(val)
                 getattr(self, f'horizontalSlider_{k}').setVisible(val)
                 getattr(self, f'openGLWidget_{k}').setVisible(val)
-            self.openGLWidget_14.setVisible(val)
+            self._set_3d_panel_visible(val, self.splitter_main_view1, self.right_panel_widget_view1)
             if val:  # Reset rotations if showing
                 self._rotationAngleView1_coronal = 0
                 self._rotationAngleView1_axial = 0
@@ -7069,16 +7197,16 @@ class Ui_Main(dockWidgets, openglWidgets):
             self.actionImportSegView2.setDisabled(not val)
             self.actionExportImView2.setDisabled(not val)
             self.actionExportSegView2.setDisabled(not val)
-            self.btn_play_view2.setVisible(True)
-
-            for rb in [self.radioButton_21, self.radioButton_21_1, self.radioButton_21_2, self.radioButton_21_2]:
+            #self.btn_play_view2.setVisible(True)
+            #self.radioButton_21,
+            for rb in [ self.radioButton_21_1, self.radioButton_21_2, self.radioButton_21_2]:
                 rb.setVisible(val)
 
-            for k in [4, 5, 6, 12]:
+            for k in [5, 6, 12]:
                 getattr(self, f'label_{k}').setVisible(val)
                 getattr(self, f'horizontalSlider_{k}').setVisible(val)
                 getattr(self, f'openGLWidget_{k}').setVisible(val)
-            self.openGLWidget_24.setVisible(val)
+            self._set_3d_panel_visible(val, self.splitter_main_view2, self.right_panel_widget)
             if val:  # Reset rotations if showing
                 self._rotationAngleView2_coronal = 0
                 self._rotationAngleView2_axial = 0
@@ -7195,7 +7323,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         if text is None:
             text = 'There is an error.'
         MessageBox = QtWidgets.QMessageBox(self)
-        MessageBox.setText(text)
+        MessageBox.setText(str(text))
         MessageBox.setWindowTitle('Warning')
         MessageBox.show()
 
@@ -7240,34 +7368,12 @@ class Ui_Main(dockWidgets, openglWidgets):
             _, file_extension = os.path.splitext(fileObj[0])
             self.file_extension = file_extension
             self.setCursor(QtCore.Qt.WaitCursor)
-            readIM = readData(target_system=target_system)
-            format = 'None'
-            try:
-                if 'vol' in outfile_format: # Kretz data
-                    Info = readIM.readKretz(join(settings.DEFAULT_USE_DIR, filename))
-                    format = 'VOL'
-                elif 'nii' in outfile_format: # read NIFTI
-                    Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                    format = 'NIFTI'
-                elif 'nrrd' in outfile_format: # Read NRRD
-                    Info = readIM.readNRRD(join(settings.DEFAULT_USE_DIR, filename), type)
-                    format = 'NRRD'
-                elif 'dcm' in outfile_format or "dicomdir" in outfile_format: # READ DICOM
-                    Info = readIM.readDICOM(join(settings.DEFAULT_USE_DIR, filename), type)
-                    format = 'DICOM'
-                elif "video" in outfile_format:
-                    Info = readIM.readNIFTI(join(settings.DEFAULT_USE_DIR, filename), type)
-                    format = 'Video'
-                else:
-                    Info = [False, False, 'No file']
-                if Info[1]==True:
-                    self._format = format
-                self.setCursor(QtCore.Qt.ArrowCursor)
-            except Exception as e:
-                print(e)
-                Info = [False, False, 'No file']
+            #file_path = join(settings.DEFAULT_USE_DIR, filename)
+            readIM, Info, fmt = load_image_core(file_read_name, target_system, type)
+            # --- POST-LOAD GUI UPDATES ---
+            if Info[1] == True:
+                self._format = fmt
             self.setCursor(QtCore.Qt.ArrowCursor)
-
             return readIM, Info, file_read_name
         else:
             return [], [False, False, 'No file'], None

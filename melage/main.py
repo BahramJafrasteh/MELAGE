@@ -5,7 +5,7 @@ import os
 import pickle
 from collections import defaultdict
 from time import gmtime, strftime
-
+import argparse
 # Modify System Path (Only keep if running from source)
 sys.path.append('.')
 sys.path.append("../")
@@ -18,8 +18,7 @@ from PyQt5.QtCore import QSettings, QEvent
 from melage.config import settings, __VERSION__
 from melage.mainwindow_widget import Ui_Main
 from melage.utils.utils import getAttributeWidget
-
-
+from melage.core.headless import run_headless_mode
 
 class MainWindow(QtWidgets.QMainWindow, Ui_Main):
     def __init__(self, *args, app = None, **kwargs):
@@ -158,6 +157,23 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
                 elif reply == QtWidgets.QMessageBox.Cancel:
                     event.ignore()
 
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        handle = self.windowHandle()
+        if handle:
+            try:
+                handle.screenChanged.disconnect(self._apply_toolbar_icon_size)
+            except TypeError:
+                pass
+            handle.screenChanged.connect(self._apply_toolbar_icon_size)
+
+    def _apply_toolbar_icon_size(self, *_):
+        size = QtCore.QSize(36, 36)
+        if hasattr(self, 'toolBar'):
+            self.toolBar.setIconSize(size)
+        if hasattr(self, 'toolBar2'):
+            self.toolBar2.setIconSize(size)
+
     #def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
 
             #self.saveChanges()
@@ -168,35 +184,59 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
 
 
 def main():
-    app = QtWidgets.QApplication(sys.argv)
-    """
-    
-    # Set the default surface format for the application
-    fmt = QtGui.QSurfaceFormat()
-    fmt.setVersion(2, 0)  # Set the desired OpenGL version
-    fmt.setProfile(QtGui.QSurfaceFormat.CoreProfile)  # Set the desired profile
-    QtGui.QSurfaceFormat.setDefaultFormat(fmt)
-    """
-    #root = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    QtCore.QDir.addSearchPath('resource', os.path.join(root, "assets", 'resource'))
-    QtCore.QDir.addSearchPath('theme', os.path.join(root, "assets",'resource', 'theme'))
-    QtCore.QDir.addSearchPath('rc', os.path.join(root, "assets",'resource','theme', 'rc'))
-    QtCore.QDir.addSearchPath('color', os.path.join(root, "assets",'resource', 'color'))
-    file = QtCore.QFile("theme:style.qss")
-    file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
-    stream = QtCore.QTextStream(file)
-    app.setStyle(QtWidgets.QStyleFactory.create("Fusion"))
+    # 1. Setup Argument Parser
+
+    from .utils.headless_utils import list_available_tools
+    tools_map = list_available_tools()
+    tool_ids = list(tools_map.keys())
+    # Create a helpful description for the --tool argument
+    tool_help_text = "Choose a tool to run:\n"
+    for tid, tname in tools_map.items():
+        tool_help_text += f"  - {tid:<12} ({tname})\n"
+    # Add arguments
+    parser = argparse.ArgumentParser(description="MELAGE: Neuroimaging Tool")
+    parser.add_argument('--headless', action='store_true', help='Run in headless mode')
+    parser.add_argument('--tool', type=str, choices=tool_ids, help=tool_help_text)
+    parser.add_argument('--input', type=str,default='', help='Input image path')
+    parser.add_argument('--output', type=str, default='',help='Output image path')
+
+    # Parse known args to avoid conflict with Qt args
+    args, unknown = parser.parse_known_args()
+    # 2. Check for Headless Mode
+    if args.headless:
+        run_headless_mode(args)
+    else:
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+        app = QtWidgets.QApplication(sys.argv)
+        """
+        
+        # Set the default surface format for the application
+        fmt = QtGui.QSurfaceFormat()
+        fmt.setVersion(2, 0)  # Set the desired OpenGL version
+        fmt.setProfile(QtGui.QSurfaceFormat.CoreProfile)  # Set the desired profile
+        QtGui.QSurfaceFormat.setDefaultFormat(fmt)
+        """
+        #root = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        QtCore.QDir.addSearchPath('resource', os.path.join(root, "assets", 'resource'))
+        QtCore.QDir.addSearchPath('theme', os.path.join(root, "assets",'resource', 'theme'))
+        QtCore.QDir.addSearchPath('rc', os.path.join(root, "assets",'resource','theme', 'rc'))
+        QtCore.QDir.addSearchPath('color', os.path.join(root, "assets",'resource', 'color'))
+        file = QtCore.QFile("theme:style.qss")
+        file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
+        stream = QtCore.QTextStream(file)
+        app.setStyle(QtWidgets.QStyleFactory.create("Fusion"))
 
 
-    app.setStyleSheet(stream.readAll())
-    window = MainWindow(app=app)
-    window.show()
-    #sys.excepthook = excepthook
-    ret = app.exec_()
-    #print("Exit")
-    #sys.exit(ret)
-    #sys.exc_info()
+        app.setStyleSheet(stream.readAll())
+        window = MainWindow(app=app)
+        window.show()
+        #sys.excepthook = excepthook
+        ret = app.exec_()
+        #print("Exit")
+        #sys.exit(ret)
+        #sys.exc_info()
 
 
 

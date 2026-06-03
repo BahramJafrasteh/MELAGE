@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "2.0.6"
+version = "2.1.34"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -106,7 +106,14 @@ exclude = ["tests", "tests.*", "docs", "examples"]
 
 # If you ship non-Python assets under melage/, add patterns here (and in MANIFEST.in)
 [tool.setuptools.package-data]
-melage = ["data/**", "resource/**", "models/**", "py.typed"]
+# Include configs and scripts; explicitly exclude large model weights
+melage = [
+    "data/**",
+    "resource/**",
+    "plugins/sam/configs/**",
+    "plugins/sam/checkpoints/download_ckpts.sh",
+    "py.typed",
+]
 
 # Optional: type hints marker if you have them
 [tool.pyright]

@@ -1,4 +1,3 @@
-import numpy as np
 from PyQt5.QtWidgets import QMessageBox
 from melage.widgets import MelagePlugin
 from melage.dialogs.dynamic_gui import DynamicDialog
@@ -87,7 +86,7 @@ class MainLogic(DynamicDialog):
             result_package = {
                 "image": im.get_fdata(),
                 "affine": im.affine,
-                "label": np.zeros_like(im.get_fdata()),
+                "label": None,
                 "view": view
             }
             self.completed.emit(result_package)

@@ -25,7 +25,7 @@ def build_model(model_path="MGA_NET.pth", device="cpu"):
 
 
 ################## Loading data and data standardization ################################
-def get_inference(model, imA, device, eco_mri=1, threshold=0.0, high_quality_rec=True):
+def get_inference(model, imA, affine, device, eco_mri=1, threshold=0.0, high_quality_rec=True):
     time = torch.from_numpy(np.array(eco_mri)).unsqueeze(0).to(torch.float).to(device)
 
     border_value = imA[0, 0, 0]
@@ -95,7 +95,8 @@ def get_inference(model, imA, device, eco_mri=1, threshold=0.0, high_quality_rec
         im_mask[~ind] = 1
     im_rec = normalize_mri(im_rec)
 
-    return im_rec, im_mask
+    im_rec_nifti = nib.Nifti1Image(im_rec, affine, None)
+    return im_rec_nifti, im_mask
 
 def make_ras_image(imA):
     transform, source = convert_to_ras(imA.affine, target='RAS')

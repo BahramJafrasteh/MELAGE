@@ -123,9 +123,9 @@ class BETLogic(DynamicDialog):
             self.lbl_status.setText('Initialization...')
             self.progress_bar.setValue(0)
             state = self.check_thresholding.isChecked()
-            data = data_view.get_fdata().copy()
+            data = data_view.im.get_fdata().copy()
             try:
-                spacing = data_view.header['pixdim'][1:4]
+                spacing = data_view.im.header['pixdim'][1:4]
                 spacing = np.max(spacing)
             except (KeyError, TypeError, AttributeError):
                 # Fallback value

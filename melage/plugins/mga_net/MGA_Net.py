@@ -69,11 +69,15 @@ class MGA_NetLogic(DynamicDialog):
     # Renamed from 'run_process' to match the schema ID 'btn_apply'
     def on_btn_apply_clicked(self):
         view = self.combo_view.currentText()
-        data_view = self.data_context[view]
-        if  data_view is None:
+        data_obj = self.data_context[view]
+        if  data_obj is None:
             QMessageBox.information(self, "Error", "No image data available for the selected view.")
             return
-
+        if hasattr(data_obj, "isChunkedVideo") and data_obj.isChunkedVideo:
+            QMessageBox.critical(self, "Error", "MGA net is not defined for video or image type inforamtion")
+            return
+        print("Input detected as Image Source (No pre-existing masks).")
+        data_view = data_obj.im
         try:
             """The main execution function."""
             # Get values using auto-bound attributes
@@ -100,7 +104,7 @@ class MGA_NetLogic(DynamicDialog):
             # Here you would load pre-trained weights if available
             # For simplicity, we skip that step
             # Run inference
-
+            affine = data_view.affine
             data = data_view.get_fdata().copy()
             if len(data.shape)<=1:
                 raise ValueError("Input image must be at least 2D NIfTI.")
@@ -108,10 +112,12 @@ class MGA_NetLogic(DynamicDialog):
             eco_mri = -1
             if self.radio_mri.isChecked():
                 eco_mri = 1
-            image, seg = get_inference(model, data, device, eco_mri=eco_mri, threshold=threshold, high_quality_rec=True)
+            image, seg = get_inference(model, data, affine, device, eco_mri=eco_mri, threshold=threshold, high_quality_rec=True)
+
+            data_obj.im = image
+            data_obj.npSeg = seg
             result_package = {
-                "image": image,
-                "label": seg,
+                "data_obj": data_obj,
                 "view": view
             }
             self.completed.emit(result_package)

@@ -10,6 +10,42 @@ from functools import partial
 from .ui_builder import UIBuilder
 from melage.dialogs.helpers import custom_qscrollbar
 
+
+class FullWidthTabWidget(QtWidgets.QTabWidget):
+    """
+    A custom TabWidget that forces all tabs to share the
+    full width equally (e.g., 3 tabs = 33% each).
+    """
+
+    def resizeEvent(self, event):
+        # 1. Call the original resize event
+        super().resizeEvent(event)
+
+        # 2. Calculate the exact width each tab should be
+        count = self.count()
+        if count > 0:
+            # We subtract a small buffer (e.g. 4px) to prevent scrollbar flickering
+            target_width = int(self.width() / count) - 4
+
+            # 3. Force this width via Stylesheet
+            # This overrides any internal sizing logic
+            self.setStyleSheet(f"""
+                QTabBar::tab {{
+                    width: {target_width}px;  /* The Magic Fix */
+                    height: 30px;
+                    margin: 0px;
+                    padding: 0px;
+                    border: none;
+                    background-color: #353535;
+                    color: #c0c0c0;
+                }}
+                QTabBar::tab:selected {{
+                    background-color: #2e6b4e; /* Your Green Color */
+                    color: white;
+                    border-bottom: 2px solid #3add36;
+                }}
+            """)
+
 class openglWidgets():
     """
     Maing OPENGL WIDGETS
@@ -30,9 +66,6 @@ class openglWidgets():
         self.gridLayout.setObjectName("gridLayout")
         self.gridLayout.setSpacing(0)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
-
-
-
 
         # 2. Define the Schema (2 Rows x 3 Cols)
         # Row 0: ECO (Coronal, Sagittal, Axial) -> IDs 1, 2, 3
@@ -63,51 +96,15 @@ class openglWidgets():
                 slider.cut_limit.connect(lambda val, vid=i: self._cutIM(val, vid))
             except AttributeError:
                 pass  # Handle case where widget creation might have failed
-        #self.create_vertical_mutualview()
+        # self.create_vertical_mutualview()
 
-        #self.create_horizontal_mutualview()
+        # self.create_horizontal_mutualview()
 
-    def create_mutual_view0(self, colorsCombinations):
-        """
-        Initializes the 6 views (3 ECO, 3 MRI) and their controllers.
-        """
-        self.mutulaViewTab = QtWidgets.QWidget()
-        self.mutulaViewTab.setObjectName("tab1")
-
-        # Initialize the main grid
-        self.gridLayout = QtWidgets.QGridLayout(self.mutulaViewTab)
-        self.gridLayout.setObjectName("gridLayout")
-        self.gridLayout.setSpacing(0)
-        self.gridLayout.setContentsMargins(0, 0, 0, 0)
-
-        # Define configuration for the 6 views
-        # Format: (ID, WindowName, Type)
-        view_configs = [
-            (1, 'coronal', 'eco'),
-            (2, 'sagittal', 'eco'),
-            (3, 'axial', 'eco'),
-            (4, 'coronal', 'mri'),
-            (5, 'sagittal', 'mri'),
-            (6, 'axial', 'mri')
-        ]
-
-        # Loop to create all widgets dynamically
-        for view_id, window_name, img_type in view_configs:
-            self._init_single_view(colorsCombinations, view_id, window_name, img_type)
-
-
-
-
-        # Now that widgets exist, build the layout
-        self.create_vertical_mutualview()
-
-        self.create_horizontal_mutualview()
     def _init_single_view(self, colorsCombinations, view_id, window_name, img_type):
         """
         Helper to initialize one set of (OpenGL + Slider + Label).
         Sets attributes like self.openGLWidget_1, self.horizontalSlider_1, etc.
         """
-
 
         # 1. Create OpenGL Widget
         gl_widget = GLWidget(
@@ -189,7 +186,7 @@ class openglWidgets():
         return layout
 
     def create_horizontal_mutualview(self):
-        #self.clear_layout(self.gridLayout)
+        # self.clear_layout(self.gridLayout)
 
         # 1. Configure widgets for Horizontal orientation
         # (Sliders become wide, labels align left/center)
@@ -239,13 +236,13 @@ class openglWidgets():
         self.setup_layout_expansion()
 
     def create_vertical_mutualview(self):
-        #self.clear_layout(self.gridLayout)
+        # self.clear_layout(self.gridLayout)
 
         # 1. Configure widgets for Vertical Mode
         # (Sliders become tall/thin, Labels align correctly)
         self._configure_widgets_for_orientation(is_vertical=True)
-        #height = self.height()
-        width = round(self.width()*0.1)
+        # height = self.height()
+        width = round(self.width() * 0.1)
         # 2. Setup Grid Settings
         self.gridLayout.setContentsMargins(width, 0, width, 0)
         self.gridLayout.setSpacing(0)
@@ -369,7 +366,7 @@ class openglWidgets():
 
         # 2. Ensure the Layout has no dead zones
         # Remove margins so the grid hits the exact edges of the window
-        #self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        # self.gridLayout.setContentsMargins(0, 0, 0, 0)
 
         # CRITICAL: Do NOT set alignment on the layout itself.
         # If you do self.gridLayout.setAlignment(Qt.AlignCenter),
@@ -379,12 +376,11 @@ class openglWidgets():
         # 3. Ensure the Inner Widgets (OpenGL) want to grow
         # You likely did this, but double-check:
         for gl_widget in [self.openGLWidget_1, self.openGLWidget_2, self.openGLWidget_3,
-        self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]:
+                          self.openGLWidget_4, self.openGLWidget_5, self.openGLWidget_6]:
             gl_widget.setSizePolicy(
                 QtWidgets.QSizePolicy.Expanding,
                 QtWidgets.QSizePolicy.Expanding
             )
-
 
     def _make_control_group(self, label, slider, is_left):
         """Creates the tight QHBoxLayout for controls."""
@@ -413,182 +409,18 @@ class openglWidgets():
 
 
 
-    def create_view1_tab_old(self, colorsCombinations):
-        self.segmentationTab = QtWidgets.QWidget()
-        self.segmentationTab.setObjectName("segmentationTab")
-        self.gridLayout_seg = QtWidgets.QGridLayout(self.segmentationTab)
-        self.gridLayout_seg.setObjectName("gridLayout_seg")
-        self.splitter_main_view1 = QtWidgets.QSplitter(self.segmentationTab)
-        self.splitter_main_view1.setOrientation(QtCore.Qt.Horizontal)
-        self.splitter_main_view1.setObjectName("splitter_main")
-        self.splitter_left_view1 = QtWidgets.QSplitter(self.splitter_main_view1)
-        self.splitter_left_view1.setOrientation(QtCore.Qt.Vertical)
-        self.splitter_left_view1.setObjectName("splitter_left")
-
-
-
-
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.openGLWidget_11 = GLWidget(colorsCombinations,self.splitter_left_view1, imdata=None, currentWidnowName='coronal', type='eco', id=11)
-
-
-
-
-
-        #self.openGLWidget_11.setSizePolicy(sizePolicy)
-        #self.openGLWidget_11.setMaximumSize(QtCore.QSize(self.width(), self.height()))
-        #self.openGLWidget_11.setObjectName("openGLWidget_11")
-
-        self.splitter_slider = QtWidgets.QSplitter(self.splitter_left_view1)
-        self.splitter_slider.setOrientation(QtCore.Qt.Vertical)
-        self.splitter_slider.setObjectName("splitter_slider")
-        self.label_11 = QtWidgets.QLabel(self.splitter_slider)
-        self.splitter_slider.setMinimumHeight(40)
-        self.splitter_slider.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHeightForWidth(self.label_11.sizePolicy().hasHeightForWidth())
-        self.label_11.setSizePolicy(sizePolicy)
-        self.label_11.setMinimumSize(QtCore.QSize(10, 10))
-        self.label_11.setMaximumSize(QtCore.QSize(self.width()-self.width()//4, self.height()//44))
-        self.label_11.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_11.setObjectName("label_11")
-
-
-
-        self.splitterRadioButton = QtWidgets.QSplitter(self.splitter_left_view1)
-        self.splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
-        self.splitterRadioButton.setObjectName("splitterRadioButton")
-        self.splitterRadioButton.setSizePolicy(sizePolicy)
-        self.splitterRadioButton.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-
-
-        self.splitterRadioButton_3 = QtWidgets.QSplitter(self.splitterRadioButton)
-        self.splitterRadioButton_3.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-        self.splitterRadioButton_3.setOrientation(QtCore.Qt.Horizontal)
-        self.splitterRadioButton_3.setObjectName("splitterRadioButton_3")
-
-
-        self.radioButton_4 = QtWidgets.QCheckBox(self.splitterRadioButton)
-        self.radioButton_4.setObjectName("radioButton_4")
-        self.radioButton_4.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-        self.radioButton_4.setChecked(True)
-        self.radioButton_4.setSizePolicy(sizePolicy)
-
-        self.radioButton_1 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
-        self.radioButton_1.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-        self.radioButton_1.setSizePolicy(sizePolicy)
-        self.radioButton_1.setObjectName("radioButton_1")
-        self.radioButton_1.setChecked(True)
-
-        self.radioButton_2 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
-        self.radioButton_2.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-        self.radioButton_2.setSizePolicy(sizePolicy)
-        self.radioButton_2.setObjectName("radioButton_2")
-
-
-        self.radioButton_3 = QtWidgets.QRadioButton(self.splitterRadioButton_3)
-        self.radioButton_3.setMaximumSize(QtCore.QSize(self.width(),
-                                                               self.height() // 44))
-        self.radioButton_3.setSizePolicy(sizePolicy)
-        self.radioButton_3.setObjectName("radioButton_3")
-
-
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
-
-        splitter_right = QtWidgets.QSplitter(self.splitter_main_view1)
-        splitter_right.setOrientation(QtCore.Qt.Vertical)
-        splitter_right.setObjectName("splitter_right")
-        self.openGLWidget_14 = glScientific(colorsCombinations,splitter_right, id=0)
-        self.openGLWidget_14.initiate_actions()
-        self.openGLWidget_14.setObjectName("openGLWidget_14")
-        self.openGLWidget_14.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_14.setSizePolicy(sizePolicy)
-        width_3d, height_3d = self.width()//3, int(self.height()/1.2)
-        #self.openGLWidget_14.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height()//3))
-        self.splitter_main_view1.setSizes([int(self.width() * 0.7), int(self.width() * 0.3)])
-        self.openGLWidget_11.setFocusPolicy(Qt.StrongFocus)
-
-
-
-        self.widget = QtWidgets.QWidget(splitter_right)
-        self.widget.setObjectName("widget")
-
-        self.verticalLayout = QtWidgets.QVBoxLayout(self.widget)
-        self.verticalLayout.setObjectName("verticalLayout")
-
-
-        spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout.addItem(spacerItem)
-        self.gridLayout_seg.addWidget(self.splitter_main_view1, 0, 0, 1, 1)
-
-
-
-        # 1. Create a Container Widget to hold Button + Slider
-        self.slider_container = QtWidgets.QWidget(self.splitter_slider)
-        self.slider_container.setObjectName("slider_container")
-
-        # 2. Create Horizontal Layout (No margins so it fits tight)
-        layout_hbox = QtWidgets.QHBoxLayout(self.slider_container)
-        layout_hbox.setContentsMargins(0, 0, 0, 0)
-        layout_hbox.setSpacing(5)
-
-        # 3. Create the Small Play Button
-        self.btn_play_view1 = QtWidgets.QPushButton(self.slider_container)
-        self.btn_play_view1.setObjectName("btn_play")
-        # Use standard Play Icon
-        self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
-        # Make it small and square (e.g., 25x25 pixels)
-        self.btn_play_view1.setFixedSize(25, 25)
-        self.btn_play_view1.setToolTip("Play/Pause Video")
-        self.btn_play_view1.clicked.connect(partial(self.toggle_video_playback, 0))
-
-        # 4. Create the Slider (Parent is now the container, not the splitter)
-        self.horizontalSlider_11 = QtWidgets.QScrollBar(self.slider_container)
-        self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_11.setObjectName("horizontalSlider_11")
-
-        # Apply your existing sizing policies to the slider
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.horizontalSlider_11.setSizePolicy(sizePolicy)
-        self.horizontalSlider_11.setMaximumSize(QtCore.QSize(16777215, self.height() // 44))
-
-        # 5. Add them to the Horizontal Layout
-        layout_hbox.addWidget(self.btn_play_view1)
-        layout_hbox.addWidget(self.horizontalSlider_11)
-
-        # 6. Initialize Timer
-        self.video_timer_view1 = QtCore.QTimer(self)
-        self.video_timer_view1.timeout.connect(partial(self.advance_video_frame, 0))
-
-        # Default: Hide button (it will show only when video loads)
-        self.btn_play_view1.setVisible(False)
-
-
-        self.tabWidget.addTab(self.segmentationTab, "")
-
-
-
-
-
-
     def set_view_mode_show_all_view1(self):
         """
-        Mode 1: Show Everything (80% Left, 20% Right)
+        Mode 1: Show Everything (60% Left, 40% Right)
         """
         # 1. Make components visible
         self.radio_row_widget_view1.setVisible(True)
         self.right_panel_widget_view1.setVisible(True)
 
-        # 2. Force Splitter Sizes
-        # We give the left side 4 parts and right side 1 part (approx 80/20)
+        # 2. Force Splitter Sizes — 60/40 gives the 3D panel enough room to be useful
         total_w = self.splitter_main_view1.width()
         if total_w == 0: total_w = 1000  # Fallback if not rendered yet
-        self.splitter_main_view1.setSizes([int(total_w * 0.8), int(total_w * 0.2)])
+        self.splitter_main_view1.setSizes([int(total_w * 0.6), int(total_w * 0.4)])
 
     def set_view_mode_focused_view1(self):
         """
@@ -605,7 +437,6 @@ class openglWidgets():
         self.splitter_main_view1.setSizes([total_w, 0])
 
     def create_view1_tab(self, colorsCombinations):
-
 
         self.segmentationTab = QtWidgets.QWidget()
         self.segmentationTab.setObjectName("segmentationTab")
@@ -674,18 +505,18 @@ class openglWidgets():
         layout_hbox_slider.setSpacing(5)
 
         # Play Button
-        self.btn_play_view1 = QtWidgets.QPushButton()
-        self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
-        self.btn_play_view1.setFixedSize(25, 25)
-        self.btn_play_view1.clicked.connect(partial(self.toggle_video_playback, 0))
-        self.btn_play_view1.setVisible(False)
+        # self.btn_play_view1 = QtWidgets.QPushButton()
+        # self.btn_play_view1.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        # self.btn_play_view1.setFixedSize(25, 25)
+        # self.btn_play_view1.clicked.connect(partial(self.toggle_video_playback, 0))
+        # self.btn_play_view1.setVisible(False)
 
         # Slider
         self.horizontalSlider_11 = QtWidgets.QScrollBar()
         self.horizontalSlider_11.setOrientation(QtCore.Qt.Horizontal)
         self.horizontalSlider_11.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        layout_hbox_slider.addWidget(self.btn_play_view1)
+        # layout_hbox_slider.addWidget(self.btn_play_view1)
         layout_hbox_slider.addWidget(self.horizontalSlider_11)
 
         self.video_timer_view1 = QtCore.QTimer(self)
@@ -722,18 +553,21 @@ class openglWidgets():
         # RIGHT SIDE SETUP
         # ========================================================
         self.right_panel_widget_view1 = QtWidgets.QWidget(self.splitter_main_view1)
+        self.right_panel_widget_view1.setMinimumWidth(280)
         self.right_panel_layout_view1 = QtWidgets.QVBoxLayout(self.right_panel_widget_view1)
         self.right_panel_layout_view1.setContentsMargins(0, 0, 0, 0)
 
         self.openGLWidget_14 = glScientific(colorsCombinations, self.right_panel_widget_view1, id=1)
         self.openGLWidget_14.initiate_actions()
-        self.openGLWidget_14.setSizePolicy(sizePolicy_gl)  # Use same greedy policy
+        self.openGLWidget_14.setSizePolicy(sizePolicy_gl)
+        self.openGLWidget_14.setMinimumWidth(280)
 
         self.right_panel_layout_view1.addWidget(self.openGLWidget_14)
 
         # Add to splitter
         self.splitter_main_view1.addWidget(self.left_panel_widget_view1)
         self.splitter_main_view1.addWidget(self.right_panel_widget_view1)
+        self.splitter_main_view1.setHandleWidth(6)
 
         # Add to Tab
         self.gridLayout_seg_1.addWidget(self.splitter_main_view1, 0, 0, 1, 1)
@@ -742,22 +576,18 @@ class openglWidgets():
         # Start in full mode
         self.set_view_mode_show_all_view1()
 
-
-
-
     def set_view_mode_show_all_view2(self):
         """
-        Mode 1: Show Everything (80% Left, 20% Right)
+        Mode 1: Show Everything (60% Left, 40% Right)
         """
         # 1. Make components visible
         self.radio_row_widget.setVisible(True)
         self.right_panel_widget.setVisible(True)
 
-        # 2. Force Splitter Sizes
-        # We give the left side 4 parts and right side 1 part (approx 80/20)
+        # 2. Force Splitter Sizes — 60/40 gives the 3D panel enough room to be useful
         total_w = self.splitter_main_view2.width()
         if total_w == 0: total_w = 1000  # Fallback if not rendered yet
-        self.splitter_main_view2.setSizes([int(total_w * 0.8), int(total_w * 0.2)])
+        self.splitter_main_view2.setSizes([int(total_w * 0.6), int(total_w * 0.4)])
 
     def set_view_mode_focused_view2(self):
         """
@@ -841,18 +671,18 @@ class openglWidgets():
         layout_hbox_slider.setSpacing(5)
 
         # Play Button
-        self.btn_play_view2 = QtWidgets.QPushButton()
-        self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
-        self.btn_play_view2.setFixedSize(25, 25)
-        self.btn_play_view2.clicked.connect(partial(self.toggle_video_playback, 1))
-        self.btn_play_view2.setVisible(False)
+        # self.btn_play_view2 = QtWidgets.QPushButton()
+        # self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+        # self.btn_play_view2.setFixedSize(25, 25)
+        # self.btn_play_view2.clicked.connect(partial(self.toggle_video_playback, 1))
+        # self.btn_play_view2.setVisible(False)
 
         # Slider
         self.horizontalSlider_12 = QtWidgets.QScrollBar()
         self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
         self.horizontalSlider_12.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        layout_hbox_slider.addWidget(self.btn_play_view2)
+        # layout_hbox_slider.addWidget(self.btn_play_view2)
         layout_hbox_slider.addWidget(self.horizontalSlider_12)
 
         self.video_timer_view2 = QtCore.QTimer(self)
@@ -889,18 +719,21 @@ class openglWidgets():
         # RIGHT SIDE SETUP
         # ========================================================
         self.right_panel_widget = QtWidgets.QWidget(self.splitter_main_view2)
+        self.right_panel_widget.setMinimumWidth(280)
         self.right_panel_layout = QtWidgets.QVBoxLayout(self.right_panel_widget)
         self.right_panel_layout.setContentsMargins(0, 0, 0, 0)
 
         self.openGLWidget_24 = glScientific(colorsCombinations, self.right_panel_widget, id=1)
         self.openGLWidget_24.initiate_actions()
-        self.openGLWidget_24.setSizePolicy(sizePolicy_gl)  # Use same greedy policy
+        self.openGLWidget_24.setSizePolicy(sizePolicy_gl)
+        self.openGLWidget_24.setMinimumWidth(280)
 
         self.right_panel_layout.addWidget(self.openGLWidget_24)
 
         # Add to splitter
         self.splitter_main_view2.addWidget(self.left_panel_widget)
         self.splitter_main_view2.addWidget(self.right_panel_widget)
+        self.splitter_main_view2.setHandleWidth(6)
 
         # Add to Tab
         self.gridLayout_seg_2.addWidget(self.splitter_main_view2, 0, 0, 1, 1)
@@ -908,159 +741,6 @@ class openglWidgets():
 
         # Start in full mode
         self.set_view_mode_show_all_view2()
-
-
-
-    def create_view2_tab_old(self, colorsCombinations):
-        self.MRISegTab = QtWidgets.QWidget()
-        self.MRISegTab.setObjectName("segmentationTab")
-        self.gridLayout_seg_2 = QtWidgets.QGridLayout(self.MRISegTab)
-        self.gridLayout_seg_2.setObjectName("gridLayout_seg")
-        self.splitter_main_view2 = QtWidgets.QSplitter(self.MRISegTab)
-        self.splitter_main_view2.setOrientation(QtCore.Qt.Horizontal)
-        self.splitter_main_view2.setObjectName("splitter_main")
-        self.splitter_left_view2 = QtWidgets.QSplitter(self.splitter_main_view2)
-        self.splitter_left_view2.setOrientation(QtCore.Qt.Vertical)
-        self.splitter_left_view2.setObjectName("splitter_left")
-
-
-        width_3d, height_3d = self.width() // 3, int(self.height() // 1.2)
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-
-        self.openGLWidget_12 = GLWidget(colorsCombinations, self.splitter_left_view2, imdata=None, currentWidnowName='coronal',
-                                        type='mri', id=12)
-
-        self.openGLWidget_12.setSizePolicy(sizePolicy)
-        self.openGLWidget_12.setMaximumSize(QtCore.QSize(self.width(), self.height()))
-        self.openGLWidget_12.setObjectName("openGLWidget_11")
-        self.openGLWidget_12.setFocusPolicy(Qt.StrongFocus)
-
-        self.splitter_slider_view2 = QtWidgets.QSplitter(self.splitter_left_view2)
-        self.splitter_slider_view2.setOrientation(QtCore.Qt.Vertical)
-        self.splitter_slider_view2.setObjectName("splitter_slider")
-        self.label_12 = QtWidgets.QLabel(self.splitter_slider_view2)
-
-        sizePolicy.setHeightForWidth(self.label_12.sizePolicy().hasHeightForWidth())
-        self.label_12.setSizePolicy(sizePolicy)
-        self.label_12.setMinimumSize(QtCore.QSize(10, 10))
-        self.label_12.setMaximumSize(QtCore.QSize(self.width() - self.width() // 4, self.height() // 44))
-        self.label_12.setAlignment(QtCore.Qt.AlignCenter)
-        self.label_12.setObjectName("label_11")
-
-
-        
-        
-        
-        # 1. Create a Container Widget to hold Button + Slider
-        self.slider_container_view2 = QtWidgets.QWidget(self.splitter_slider_view2)
-        self.slider_container_view2.setObjectName("slider_container")
-
-        # 2. Create Horizontal Layout (No margins so it fits tight)
-        layout_hbox = QtWidgets.QHBoxLayout(self.slider_container_view2)
-        layout_hbox.setContentsMargins(0, 0, 0, 0)
-        layout_hbox.setSpacing(5)
-
-        # 3. Create the Small Play Button
-        self.btn_play_view2 = QtWidgets.QPushButton(self.slider_container_view2)
-        self.btn_play_view2.setObjectName("btn_play")
-        # Use standard Play Icon
-        self.btn_play_view2.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
-        # Make it small and square (e.g., 25x25 pixels)
-        self.btn_play_view2.setFixedSize(25, 25)
-        self.btn_play_view2.setToolTip("Play/Pause Video")
-        self.btn_play_view2.clicked.connect(partial(self.toggle_video_playback, 1))
-
-
-        # 4. Create the Slider (Parent is now the container, not the splitter)
-        self.horizontalSlider_12 = QtWidgets.QScrollBar(self.slider_container_view2)
-        self.horizontalSlider_12.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_12.setObjectName("horizontalSlider_11")
-
-        # Apply your existing sizing policies to the slider
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.horizontalSlider_12.setSizePolicy(sizePolicy)
-        self.horizontalSlider_12.setMaximumSize(QtCore.QSize(16777215, self.height() // 44))
-
-        # 5. Add them to the Horizontal Layout
-        layout_hbox.addWidget(self.btn_play_view2)
-        layout_hbox.addWidget(self.horizontalSlider_12)
-
-        # 6. Initialize Timer
-        self.video_timer_view2 = QtCore.QTimer(self)
-        self.video_timer_view2.timeout.connect(partial(self.advance_video_frame, 1))
-
-        # Default: Hide button (it will show only when video loads)
-        self.btn_play_view2.setVisible(False)
-        
-        
-        
-        
-        
-
-        splitterRadioButton = QtWidgets.QSplitter(self.splitter_left_view2)
-        splitterRadioButton.setOrientation(QtCore.Qt.Horizontal)
-        splitterRadioButton.setObjectName("splitterRadioButton")
-        splitterRadioButton.setSizePolicy(sizePolicy)
-        splitterRadioButton.setMaximumSize(QtCore.QSize(self.width(),
-                                                        self.height() // 44))
-
-        splitterRadioButton_3 = QtWidgets.QSplitter(splitterRadioButton)
-        splitterRadioButton_3.setMaximumSize(QtCore.QSize(self.width(),
-                                                          self.height() // 44))
-        splitterRadioButton_3.setOrientation(QtCore.Qt.Horizontal)
-        splitterRadioButton_3.setObjectName("splitterRadioButton_3")
-
-        self.radioButton_21 = QtWidgets.QCheckBox(splitterRadioButton)
-        self.radioButton_21.setObjectName("radioButton_4")
-        self.radioButton_21.setMaximumSize(QtCore.QSize(self.width(),
-                                                        self.height() // 44))
-        self.radioButton_21.setChecked(True)
-        self.radioButton_21.setSizePolicy(sizePolicy)
-
-        self.radioButton_21_1 = QtWidgets.QRadioButton(splitterRadioButton_3)
-        self.radioButton_21_1.setMaximumSize(QtCore.QSize(self.width(),
-                                                          self.height() // 44))
-        self.radioButton_21_1.setSizePolicy(sizePolicy)
-        self.radioButton_21_1.setObjectName("radioButton_1")
-        self.radioButton_21_1.setChecked(True)
-
-        self.radioButton_21_2 = QtWidgets.QRadioButton(splitterRadioButton_3)
-        self.radioButton_21_2.setMaximumSize(QtCore.QSize(self.width(),
-                                                          self.height() // 44))
-        self.radioButton_21_2.setSizePolicy(sizePolicy)
-        self.radioButton_21_2.setObjectName("radioButton_2")
-
-        self.radioButton_21_3 = QtWidgets.QRadioButton(splitterRadioButton_3)
-        self.radioButton_21_3.setMaximumSize(QtCore.QSize(self.width(),
-                                                          self.height() // 44))
-        self.radioButton_21_3.setSizePolicy(sizePolicy)
-        self.radioButton_21_3.setObjectName("radioButton_3")
-
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        splitter_right = QtWidgets.QSplitter(self.splitter_main_view2)
-        splitter_right.setOrientation(QtCore.Qt.Vertical)
-        splitter_right.setObjectName("splitter_right")
-        self.openGLWidget_24 = glScientific(colorsCombinations, splitter_right, id=1)
-        self.openGLWidget_24.initiate_actions()
-        self.openGLWidget_24.setObjectName("openGLWidget_14")
-        self.openGLWidget_24.setFocusPolicy(Qt.StrongFocus)
-        self.openGLWidget_24.setSizePolicy(sizePolicy)
-        self.openGLWidget_24.setFixedSize(QtCore.QSize(width_3d, self.height() - self.height() // 3))
-
-        self.widget_2 = QtWidgets.QWidget(splitter_right)
-        self.widget_2.setObjectName("widget")
-
-        self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.widget_2)
-        self.verticalLayout_2.setObjectName("verticalLayout")
-
-        spacerItem = QtWidgets.QSpacerItem(14, 118, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout_2.addItem(spacerItem)
-        self.gridLayout_seg_2.addWidget(self.splitter_main_view2, 0, 0, 1, 1)
-
-        self.tabWidget.addTab(self.MRISegTab, "")
-
-
 
     def createOpenGLWidgets(self, centralwidget, colorsCombinations):
         """
@@ -1071,8 +751,10 @@ class openglWidgets():
         """
         self.gridLayout_main = QtWidgets.QGridLayout(centralwidget)
         self.gridLayout_main.setObjectName("gridLayout_main")
-        self.tabWidget = QtWidgets.QTabWidget(centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        # Use the custom class we defined above
+        self.tabWidget = FullWidthTabWidget(centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
+                                           QtWidgets.QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.tabWidget.sizePolicy().hasHeightForWidth())
@@ -1080,16 +762,13 @@ class openglWidgets():
         self.tabWidget.setMinimumSize(QtCore.QSize(100, 100))
         self.tabWidget.setObjectName("tabWidget")
 
-        #self.create_horizontal_mutual_view(colorsCombinations)
         self.create_mutual_view(colorsCombinations)
 
         self.create_horizontal_mutualview()
 
-
         self.tabWidget.addTab(self.mutulaViewTab, "fdfdfdfdf")
 
 
-        #self.tabWidget.addTab(self.reservedTab, "")
 
         ################# LEFT SIDE ######################################
 
@@ -1099,9 +778,6 @@ class openglWidgets():
         ################# LEFT SIDE ######################################
         self.create_view2_tab(colorsCombinations)
 
-
-
-
         self.gridLayout_main.addWidget(self.tabWidget, 2, 0, 1, 1)
 
         self.openedFileName = QtWidgets.QLabel(centralwidget)
@@ -1110,7 +786,6 @@ class openglWidgets():
         self.openedFileName.setText('US:NONE, MRI:NONE')
         self.openedFileName.setVisible(True)
         self.gridLayout_main.addWidget(self.openedFileName, 0, 0, 1, 1)
-
 
         # mouse press event
         self.openGLWidget_1.mousePress.connect(
@@ -1123,8 +798,8 @@ class openglWidgets():
             lambda totalPs, chInd: self.openGLWidget_3.subpaintGL(totalPs, chInd))
 
         update_color_scheme(self, None, dialog=False, update_widget=False)
-        #self.tabWidget.addTab(self.tab, "")
-        #self.gridLayout_main.addWidget(self.tabWidget, 0, 0, 1, 1)
+
+        # self.gridLayout_main.addWidget(self.tabWidget, 0, 0, 1, 1)
 
         self.tabWidget.setCurrentIndex(0)
         self.horizontalSlider_1.valueChanged.connect(self.label_1.setNum)
@@ -1133,13 +808,13 @@ class openglWidgets():
         self.horizontalSlider_4.valueChanged.connect(self.label_4.setNum)
         self.horizontalSlider_5.valueChanged.connect(self.label_5.setNum)
         self.horizontalSlider_6.valueChanged.connect(self.label_6.setNum)
-        #self.horizontalSlider_7.valueChanged.connect(self.label_7.setNum)
-        #self.horizontalSlider_8.valueChanged.connect(self.label_8.setNum)
-        #self.horizontalSlider_9.valueChanged.connect(self.label_9.setNum)
-        #self.horizontalSlider_10.valueChanged.connect(self.label_10.setNum)
+        # self.horizontalSlider_7.valueChanged.connect(self.label_7.setNum)
+        # self.horizontalSlider_8.valueChanged.connect(self.label_8.setNum)
+        # self.horizontalSlider_9.valueChanged.connect(self.label_9.setNum)
+        # self.horizontalSlider_10.valueChanged.connect(self.label_10.setNum)
         self.horizontalSlider_11.valueChanged.connect(self.label_11.setNum)
         self.horizontalSlider_12.valueChanged.connect(self.label_12.setNum)
-        #sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
+        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
 
         try:
 
@@ -1153,21 +828,21 @@ class openglWidgets():
             self.label_4.setSizePolicy(sizePolicy)
             self.label_5.setSizePolicy(sizePolicy)
             self.label_6.setSizePolicy(sizePolicy)
-            #self.label_7.setSizePolicy(sizePolicy)
-            #self.label_8.setSizePolicy(sizePolicy)
-            #self.label_9.setSizePolicy(sizePolicy)
-            #self.label_10.setSizePolicy(sizePolicy)
+            # self.label_7.setSizePolicy(sizePolicy)
+            # self.label_8.setSizePolicy(sizePolicy)
+            # self.label_9.setSizePolicy(sizePolicy)
+            # self.label_10.setSizePolicy(sizePolicy)
             self.label_11.setSizePolicy(sizePolicy)
             self.label_12.setSizePolicy(sizePolicy)
         except AttributeError:
             print("Warning: Labels not found. Skipping label size policy setup.")
         self.openGLWidget_11.setVisible(False)
         self.openGLWidget_12.setVisible(False)
-        for i in [0,1,2,3,4,5,6,7,8,9,10,11]:
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
             try:
-                a='openGLWidget_{}'.format(i+1)
+                a = 'openGLWidget_{}'.format(i + 1)
                 ats = getattr(self, a)
-                #ats.setSizePolicy(sizePolicy)
+                # ats.setSizePolicy(sizePolicy)
                 ats.clicked.connect(self.save_changes_auto)
             except:
                 pass

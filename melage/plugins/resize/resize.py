@@ -103,12 +103,12 @@ class MainLogic(DynamicDialog):
             y_v = self.spin_y.value()
             z_v = self.spin_z.value()
             method = self.combo_method.currentText().lower()
-            im = resample_to_spacing(data_view, [x_v, y_v, z_v], method)
+            im = resample_to_spacing(data_view.im, [x_v, y_v, z_v], method)
             self.compute_current_spcaing(im)
             result_package = {
                 "image": im.get_fdata(),
                 "affine": im.affine,
-                "label": np.zeros_like(im.get_fdata()),
+                "label": None,
                 "view": view
             }
             self.completed.emit(result_package)
