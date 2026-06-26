@@ -7,6 +7,10 @@ build/
 *.egg
 .eggs/
 
+# PyInstaller
+*.spec.bak
+MELAGE.iconset/
+
 # Virtual environments
 venv/
 .venv/

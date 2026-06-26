@@ -1,12 +1,26 @@
 import json
 import os
+import sys
 from pathlib import Path
 from sys import platform
 
 ADULT_WEIGHTS_FILE = 'New_model_latest_SegMulti_current.pth'
 INFANT_WEIGHTS_FILE = 'New_model_latest_SegMulti_current_neo.pth'
-__VERSION__ = '2.1.34'
-VERSION_DATE = 'Jun 3 2026'
+__VERSION__ = '2.2.0'
+VERSION_DATE = 'Jun 26 2026'
+
+
+def _get_app_root() -> Path:
+    """Return the project root whether running from source or a PyInstaller bundle."""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller --onefile sets sys._MEIPASS to the extraction temp dir.
+        # PyInstaller --onedir (macOS .app / Windows folder) also sets it in
+        # recent versions; fall back to the directory containing the executable.
+        return Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
+    # Running from source: melage/config/ → melage/ → project root
+    return Path(__file__).resolve().parent.parent.parent
+
+
 class SettingsManager:
     """
     A singleton class to manage all application settings.
@@ -27,8 +41,7 @@ class SettingsManager:
             raise Exception("This class is a singleton! Use instance().")
 
         # --- 1. Define Application-Relative Paths (Should NOT change) ---
-        # We go up two levels: config.py -> melage -> Project Root
-        self.APP_ROOT = Path(__file__).resolve().parent.parent.parent
+        self.APP_ROOT = _get_app_root()
         self.ASSETS_DIR = self.APP_ROOT / "assets"
         self.RESOURCE_DIR = self.ASSETS_DIR / "resource"
         self.DOCS_DIR = self.APP_ROOT / "docs"
