@@ -36,8 +36,8 @@ jobs:
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda install -c conda-forge pyqt=5 antspyx -y
-          pip install pyinstaller pillow
+          conda install -c conda-forge pyqt=5 -y
+          pip install pyinstaller pillow antspyx
           pip install -e ".[bet]"
 
       - name: Convert icon to .icns
@@ -88,8 +88,8 @@ jobs:
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda install -c conda-forge pyqt=5 antspyx -y
-          pip install pyinstaller
+          conda install -c conda-forge pyqt=5 -y
+          pip install pyinstaller antspyx
           pip install -e ".[bet]"
 
       - name: Build Windows folder
