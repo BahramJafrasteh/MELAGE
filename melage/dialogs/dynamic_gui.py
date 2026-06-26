@@ -134,7 +134,7 @@ class DynamicDialog(QDialog):
         """
         for tid in target_ids:
             widget = self.widgets.get(tid)
-            if widget:
+            if widget is not None:
                 widget.setEnabled(is_checked)
             else:
                 # Safe fail: might happen if targets are built AFTER the checkbox
@@ -278,7 +278,7 @@ class DynamicDialog(QDialog):
                 self._build_item(child, layout)
 
         # --- C. Common Properties & Registration ---
-        if widget:
+        if widget is not None:
             # 1. Register ID
             if w_id:
                 widget.setObjectName(w_id)

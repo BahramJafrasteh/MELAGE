@@ -56,6 +56,7 @@ class GLWidget(QOpenGLWidget):
     intensity_change = pyqtSignal(object)
     requestExport = pyqtSignal(int, str, object)  # Color ID, WindowName, Bounding Box/Center
     requestMask = pyqtSignal(int, str)  # Color ID, WindowName
+    colorAutoSelected = pyqtSignal(int)  # emitted when a drawing tool auto-picks a real label
 
     def __init__(self, colorsCombinations, parent=None, currentWidnowName = 'sagittal',
                  imdata=None, type= 'eco',id=0
@@ -172,6 +173,7 @@ class GLWidget(QOpenGLWidget):
         self.enabledGoTo = False # GOTO
         self.enabledRuler = False  # Ruller
         self.enabledLine = False # Line
+        self.enabledInfo = False # Pixel/contour Info tool
         self.tract = None # Tractography
         self.width_line_tract = 3 # width tractography
         self._selected_seg_color = 1 # color of the segmetation
@@ -230,6 +232,7 @@ class GLWidget(QOpenGLWidget):
         self.enabledGoTo = False
         self.enabledRuler = False # Ruler
         self.enabledLine = False
+        self.enabledInfo = False
         """
         self.lastPos = QPoint()
         self.points = []
@@ -524,6 +527,107 @@ class GLWidget(QOpenGLWidget):
             self.startLinePoints = []
             self.LineChanged.emit([[], self.colorInd, True, False])
 
+    def _showPixelInfo(self, event):
+        """
+        Info tool: click a pixel to show its label name, area, perimeter,
+        and world-space location in a tooltip next to the cursor.
+
+        Defensive by design: any failure along the way still produces a
+        (possibly partial) tooltip with the error noted, rather than silently
+        showing nothing — a click should always give the user feedback.
+        """
+        from melage.utils.utils import point_in_contour
+
+        pos = event.pos()
+        try:
+            x, y = self.to_real_world(pos.x(), pos.y())
+            color = self.segSlice[int(y), int(x)]
+        except Exception as e:
+            print(f"[Info tool] could not read pixel under cursor: {e}")
+            self._show_info_label(pos, "Info unavailable here.")
+            return
+
+        area, perimeter, centerXY = 0.0, 0.0, [x, y]
+        try:
+            if color in self.colorInds or 9876 in self.colorInds:
+                area, perimeter, centerXY, _ = point_in_contour(self.segSlice.copy(), (x, y), color)
+                area = (self.imSpacing[0] ** 2) * area
+                perimeter = (self.imSpacing[0]) * perimeter
+        except Exception as e:
+            print(f"[Info tool] point_in_contour failed for color={color}: {e}")
+            area, perimeter, centerXY = 0.0, 0.0, [x, y]
+
+        # Map (row, col, sliceNum) back to the npSeg array's own (axis0, axis1,
+        # axis2) index order, mirroring exactly how getCurrentSlice() sliced it
+        # (activeDim 0/1/2 for axial/coronal/sagittal) — verified against real
+        # data: affine @ this xyz reproduces the known world location of a
+        # marker voxel for all three views.
+        loc = [x, y, self.sliceNum]
+        try:
+            if self.currentWidnowName == 'axial':
+                xyz = [self.sliceNum, centerXY[1], centerXY[0], 1]
+            elif self.currentWidnowName == 'coronal':
+                xyz = [centerXY[1], self.sliceNum, centerXY[0], 1]
+            else:  # sagittal / video
+                xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
+            loc = (self.affine @ np.array(xyz)) if self.affine is not None else xyz
+        except Exception as e:
+            print(f"[Info tool] location computation failed: {e}")
+
+        if color == 0:
+            name = "Background"
+        else:
+            try:
+                name = self.color_name[color - 1]
+            except Exception:
+                name = "Unknown"
+
+        try:
+            text = (
+                f"Label: {name}\n"
+                f"Location: ({loc[0]:.1f}, {loc[1]:.1f}, {loc[2]:.1f}) mm\n"
+                f"Surface: {area:.2f} mm²\n"
+                f"Perimeter: {perimeter:.2f} mm"
+            )
+        except Exception as e:
+            print(f"[Info tool] formatting failed: {e}")
+            text = f"Label: {name}"
+        self._show_info_label(pos, text)
+
+    def _show_info_label(self, pos, text):
+        """
+        Show `text` next to `pos` (local widget coordinates) using a plain
+        child QLabel instead of QToolTip.
+
+        QToolTip.showText positions itself via global screen coordinates and
+        relies on Qt's hover tracking to stay visible — both are unreliable
+        over a QOpenGLWidget's native rendering surface (observed: silently
+        failing to appear on some GL widgets while working on others with the
+        exact same call). A QLabel parented directly to this widget and
+        positioned with local coordinates sidesteps both problems.
+        """
+        if not hasattr(self, "_info_label") or self._info_label is None:
+            self._info_label = QtWidgets.QLabel(self)
+            self._info_label.setStyleSheet(
+                "QLabel { background-color: rgba(40, 40, 40, 230); color: white; "
+                "border: 1px solid #888; border-radius: 4px; padding: 4px 6px; }"
+            )
+            self._info_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            self._info_hide_timer = QtCore.QTimer(self)
+            self._info_hide_timer.setSingleShot(True)
+            self._info_hide_timer.timeout.connect(self._info_label.hide)
+
+        label = self._info_label
+        label.setText(text)
+        label.adjustSize()
+
+        x = min(max(pos.x() + 12, 0), max(self.width() - label.width(), 0))
+        y = min(max(pos.y() + 12, 0), max(self.height() - label.height(), 0))
+        label.move(x, y)
+        label.show()
+        label.raise_()
+        self._info_hide_timer.start(4000)
+
     def ShowContextMenu_contour(self, pos):
         """
         Context Menu for contouring including center of contouring, perimeter, interpolation, etc.
@@ -549,49 +653,29 @@ class GLWidget(QOpenGLWidget):
             WI_index = None
 
         self.penPoints = []
-        area_action = QAction("Surface {:.2f} mm\u00b2".format(area))
-        perimeter_action = QAction("Perimeter {:.2f} mm".format(perimeter))
-
-        # xyz = [x, y, self.sliceNum, 1]
-        if self.currentWidnowName == 'sagittal':
-            # xyz = [xyz[1], xyz[0], xyz[2], 1]
-            xyz = [self.sliceNum, centerXY[1], centerXY[0], 1]
-        elif self.currentWidnowName == 'coronal':
-            # xyz = [xyz[1], xyz[2], xyz[0], 1]
-            xyz = [centerXY[1], self.sliceNum, centerXY[0], 1]
-        elif self.currentWidnowName == 'axial':
-            # xyz = [xyz[2], xyz[1], xyz[0], 1]
-            xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
-        elif self.currentWidnowName == 'video':
-            xyz = [centerXY[1], centerXY[0], self.sliceNum, 1]
-
-        # Handle case where affine might be None before multiplication
-        if self.affine is not None:
-            loc = self.affine @ np.array(xyz)
-            xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(loc[0], loc[1], loc[2]))
-        else:
-            xy_action = QAction("Loc ({:.1f}, {:.1f},{:.1f})".format(xyz[0], xyz[1], xyz[2]))
-
-        try:
-            name_area = QAction(f"{self.color_name[color - 1]}")
-        except:
-            name_area = QAction(f"Unknown")
 
         send_action = QAction("Send to Table")
-        interploateadd_action = QAction("Add to interploation")
-        apply_interpolation = QAction("Apply interploation")
+        send_action.setToolTip("Send this contour's area, perimeter, and location to the Measurements table.")
+        interploateadd_action = QAction("Add to interpolation")
+        interploateadd_action.setToolTip(
+            "Mark this slice's contour as a reference point for interpolating "
+            "the segmentation across the slices in between.")
+        apply_interpolation = QAction("Apply interpolation")
+        apply_interpolation.setToolTip(
+            "Fill in the segmentation on the slices between two marked reference contours.")
 
         # --- NEW ACTIONS ---
         export_img_action = QAction("Export Segmented Image")
+        export_img_action.setToolTip("Save this label's segmented region as a new image file.")
         mask_img_action = QAction("Mask Image (Keep Only Selection)")
+        mask_img_action.setToolTip(
+            "Replace the image with a version that keeps only this label's "
+            "region, zeroing out everything else.")
 
         remove_action.triggered.connect(self.emptyPenPoints)
+        remove_action.setToolTip("Discard the contour currently being drawn.")
 
         # Build Menu
-        menu.addAction(name_area)
-        menu.addAction(xy_action)
-        menu.addAction(area_action)
-        menu.addAction(perimeter_action)
         menu.addAction(send_action)
         menu.addSeparator()
         menu.addAction(interploateadd_action)
@@ -1472,10 +1556,31 @@ class GLWidget(QOpenGLWidget):
         # This creates the list of [x, y, z] points in one go
         self._center_circle = np.column_stack((x, y, z)).astype(np.float32)
 
+    def _auto_select_color(self):
+        """
+        If colorInd is the 'show all' sentinel (9876) and the user clicks with
+        a drawing tool active, auto-switch to the first real label in colorInds
+        so drawing works immediately without requiring a manual color selection.
+        Emits colorAutoSelected so the main window can sync the tree/UI.
+        """
+        for c in self.colorInds:
+            if c not in (0, 9876):
+                self.colorInd = c
+                self.colorAutoSelected.emit(c)
+                return
+        # No real label in colorInds yet — default to 1
+        self.colorInd = 1
+        self.colorAutoSelected.emit(1)
+
     def mousePressEvent(self, event):
         self.mousePress.emit(event)
         self.setFocus()
         self.lastPos = event.pos()
+
+        if (self.colorInd == 9876 and self.imSlice is not None
+                and (self.enabledMagicTool or self.enabledPen or self.enabledErase
+                     or self.enabledLine or self.enabledCircle)):
+            self._auto_select_color()
         """
         
         if self.activateSobel:
@@ -1576,6 +1681,9 @@ class GLWidget(QOpenGLWidget):
                 self.rulerPoints[self.N_rulerPoints]['perpendicular2'] = []
                 self.rulerPoints[self.N_rulerPoints]['center'] = []
                 self.rulerPoints[self.N_rulerPoints]['points'].append([x, y, self.sliceNum])
+
+        elif self.enabledInfo:
+            self._showPixelInfo(event)
 
         elif self.enabledLine:
             x , y = self.to_real_world(event.pos().x(), event.pos().y())
@@ -2753,6 +2861,7 @@ class GLWidget(QOpenGLWidget):
         self.enabledZoom = False
         self.enabledRuler = False
         self.enabledLine = False
+        self.enabledInfo = False
         self.erasePoints = []
         self.points = []
         self.penPoints = []

@@ -134,7 +134,7 @@ class dockWidgets():
                         id="scrol_rad_circle",  # Creates self.scrol_rad_circle
                         label="Circle Radius",
                         label_id="label_assigned_rad_circle",
-                        min_val=50, max_val=1000, default=50
+                        min_val=50, max_val=1000, default=220
                     ),
                     Slider(
                         id="scrol_tol_rad_circle",  # Creates self.scrol_tol_rad_circle
@@ -169,7 +169,7 @@ class dockWidgets():
         self.vscode_widget.add_tab(
             self.content_segInt,
             settings.RESOURCE_DIR + "/seg_intensity.png",
-            "Image Intensity"
+            "Brush & Intensity"
         )
 
 
@@ -776,67 +776,6 @@ class dockWidgets():
         self.dw5_flb1.setText(_translate("Main", "Track Distance"))
         self.dw5_flb2.setText(_translate("Main", "Track Width"))
 
-    def _setting_radius_dock(self, Main):
-        self.Settings_widget = QtWidgets.QWidget(Main)
-        self.Settings_widget.setObjectName("setting")
-        self.Settings_widget.setMinimumSize(QtCore.QSize(self.width() // 8, self.height() // 2))
-
-        # Main layout is Vertical
-        layout = QtWidgets.QVBoxLayout(self.Settings_widget)
-        layout.setSpacing(10)
-
-        # Define the UI Structure
-        schema = [
-            # --- Group 1: Radius ---
-
-
-            Separator(),
-
-            # --- Group 2: Tolerance ---
-            # (Example: Wrapping it in a GroupBox to show off the builder)
-            Group(
-                id="group_tolerance",
-                title="Tolerance Settings",
-                layout="vbox",
-                children=[
-                    Slider(
-                        id="scrol_rad_circle",  # Creates self.scrol_rad_circle
-                        label="Circle Radius",
-                        label_id="label_assigned_rad_circle",
-                        min_val=50, max_val=1000, default=50
-                    ),
-                    Slider(
-                        id="scrol_tol_rad_circle",  # Creates self.scrol_tol_rad_circle
-                        label="Tolerance Level",
-                        label_id="label_assigned_tol_rad_circle",
-                        min_val=0, max_val=100, default=0
-                    )
-                ]
-            ),
-
-            Separator(),
-
-            # --- Example of Side-by-Side (HBox) for future reference ---
-            # HBox(children=[
-            #     Label("Left"),
-            #     Label("Right")
-            # ])
-        ]
-
-        # Build and Inject Variables into 'self'
-        builder = UIBuilder(self.Settings_widget)
-        builder.build(schema, layout, context=self)
-
-        # Add spacing at the bottom to push widgets up
-        layout.addStretch()
-
-        # Add to Sidebar
-        self.vscode_widget.add_tab(
-            self.Settings_widget,
-            settings.RESOURCE_DIR + "/seg_settings.png",
-            "Settings"
-        )
-
 
     def _table_link_doc(self, Main):
         self.dock_widget_table = QtWidgets.QWidget(Main)
@@ -1061,6 +1000,162 @@ class dockWidgets():
             "Image Enhancement"
         )
 
+    @staticmethod
+    def _make_nni_icon():
+        """
+        Create a 64×64 QIcon for the nnInteractive sidebar button.
+        Dark-navy circle with white 'nI' text — matches nnInteractive's visual style.
+        """
+        from PyQt5.QtGui import QPixmap, QPainter, QColor, QFont, QBrush, QPen
+        from PyQt5.QtCore import Qt, QRect
+        size = 64
+        pix  = QPixmap(size, size)
+        pix.fill(Qt.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.Antialiasing)
+        # Dark-navy background circle
+        p.setBrush(QBrush(QColor(10, 35, 90)))
+        p.setPen(QPen(QColor(40, 100, 200), 2))
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        # Cyan accent arc (top-right quadrant)
+        p.setPen(QPen(QColor(0, 180, 220), 3))
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(8, 8, size - 16, size - 16, 0 * 16, 90 * 16)
+        # White "nI" text
+        p.setPen(QColor(255, 255, 255))
+        font = QFont("Arial", 18, QFont.Bold)
+        p.setFont(font)
+        p.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "nI")
+        p.end()
+        return QtGui.QIcon(pix)
+
+    def _create_nninteractive_tab(self, Main):
+        """Add nnInteractive as a permanent tab in the left sidebar."""
+        try:
+            from melage.plugins.nninteractive.nninteractive import NNILogic
+            nni = NNILogic(data_context={}, parent=Main)
+            nni.setObjectName("nni_sidebar_widget")
+            self.nni_widget = nni
+
+            # Wrap in a scroll area so all controls stay reachable when the
+            # sidebar is narrow (capped at 20% of screen width).
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(nni)
+            scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+            self.vscode_widget.add_tab(scroll, self._make_nni_icon(), "nnInteractive")
+        except Exception as e:
+            print(f"[nnInteractive] sidebar tab could not be created: {e}")
+            import traceback
+            traceback.print_exc()
+            self.nni_widget = None
+
+    @staticmethod
+    def _make_medsam_icon():
+        """
+        Create a 64×64 QIcon for the MedSAM sidebar button.
+        Teal circle with white 'MS' text — visually distinct from nnInteractive.
+        """
+        from PyQt5.QtGui import QPixmap, QPainter, QColor, QFont, QBrush, QPen
+        from PyQt5.QtCore import Qt, QRect
+        size = 64
+        pix  = QPixmap(size, size)
+        pix.fill(Qt.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.Antialiasing)
+        # Teal background circle
+        p.setBrush(QBrush(QColor(10, 90, 80)))
+        p.setPen(QPen(QColor(40, 200, 170), 2))
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        # White accent arc (top-right quadrant)
+        p.setPen(QPen(QColor(220, 255, 250), 3))
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(8, 8, size - 16, size - 16, 0 * 16, 90 * 16)
+        # White "MS" text
+        p.setPen(QColor(255, 255, 255))
+        font = QFont("Arial", 16, QFont.Bold)
+        p.setFont(font)
+        p.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "MS")
+        p.end()
+        return QtGui.QIcon(pix)
+
+    def _create_medsam_tab(self, Main):
+        """Add MedSAM as a permanent tab in the left sidebar."""
+        try:
+            from melage.plugins.medsam.medsam import MedSamLogic
+            medsam = MedSamLogic(data_context={}, parent=Main)
+            medsam.setObjectName("medsam_sidebar_widget")
+            self.medsam_widget = medsam
+
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(medsam)
+            scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+            self.vscode_widget.add_tab(scroll, self._make_medsam_icon(), "MedSAM")
+        except Exception as e:
+            print(f"[MedSAM] sidebar tab could not be created: {e}")
+            import traceback
+            traceback.print_exc()
+            self.medsam_widget = None
+
+    @staticmethod
+    def _make_sam2_icon():
+        """
+        Create a 64×64 QIcon for the SAM 2 sidebar button.
+        Indigo circle with white 'S2' text — visually distinct from
+        nnInteractive/MedSAM.
+        """
+        from PyQt5.QtGui import QPixmap, QPainter, QColor, QFont, QBrush, QPen
+        from PyQt5.QtCore import Qt, QRect
+        size = 64
+        pix  = QPixmap(size, size)
+        pix.fill(Qt.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.Antialiasing)
+        # Indigo background circle
+        p.setBrush(QBrush(QColor(60, 40, 120)))
+        p.setPen(QPen(QColor(140, 110, 230), 2))
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        # White accent arc (top-right quadrant)
+        p.setPen(QPen(QColor(220, 210, 255), 3))
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(8, 8, size - 16, size - 16, 0 * 16, 90 * 16)
+        # White "S2" text
+        p.setPen(QColor(255, 255, 255))
+        font = QFont("Arial", 16, QFont.Bold)
+        p.setFont(font)
+        p.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "S2")
+        p.end()
+        return QtGui.QIcon(pix)
+
+    def _create_sam2_tab(self, Main):
+        """Add SAM 2 as a permanent tab in the left sidebar."""
+        try:
+            from melage.plugins.sam.sam2 import Sam2Logic
+            sam2 = Sam2Logic(data_context={}, parent=Main)
+            sam2.setObjectName("sam2_sidebar_widget")
+            self.sam2_widget = sam2
+
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(sam2)
+            scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+            self.vscode_widget.add_tab(scroll, self._make_sam2_icon(), "SAM 2")
+        except Exception as e:
+            print(f"[SAM2] sidebar tab could not be created: {e}")
+            import traceback
+            traceback.print_exc()
+            self.sam2_widget = None
+
     def createDockWidget(self, Main):
         """
         Creating main attributes for the main widgets
@@ -1072,13 +1167,15 @@ class dockWidgets():
         #self._table_link_doc(Main)
         self._create_dockColor(Main)
         self._create_segDock(Main)
-        #self._setting_radius_dock(Main)
         self._dock_enhancement(Main)
         self._some_intial_steps()
         self._dock_progress_bar(Main)
         self._dock_folder(Main)
         self._table_measure(Main)
         self._batchImages_dock(Main)
+        self._create_nninteractive_tab(Main)
+        self._create_medsam_tab(Main)
+        self._create_sam2_tab(Main)
 
 
         #self.MainDock.setWindowTitle(_translate("Main", "Main Windows"))
@@ -1446,13 +1543,10 @@ class dockWidgets():
             if 0 in ind_avail:
                 ind_avail.remove(0)
 
-            color_vec = possible_color_index_rgb[:, 0].astype('int')
-            list_avail = list(set(color_vec) & set(ind_avail))
-            mask_color = np.isin(color_vec, list_avail)
-            if mask_color.sum()==0:
-                mask_color[0] = True
-            possible_color_index_rgb = possible_color_index_rgb[mask_color, :]
-            possible_color_name = list(np.array(possible_color_name)[mask_color])
+            # Show ALL labels from the scheme (not just the ones already in npSeg)
+            # so the user can enable any label for future segmentation.
+            # ind_avail is kept to auto-check labels that exist in the current npSeg
+            # after the tree is rebuilt (see the loop below after set_new_color_scheme).
 
             uq = []
             set_not_in_new_list = set(uq) - (set(possible_color_index_rgb[:, 0].astype('int')))
@@ -1497,6 +1591,28 @@ class dockWidgets():
                 pass
 
             set_new_color_scheme(self)
+
+            # Auto-check labels that already exist in the current segmentation
+            # so existing overlays stay visible after the scheme is switched.
+            # All other labels remain unchecked but are available for future use.
+            try:
+                _src  = self.tree_colors.model().sourceModel()
+                _root = _src.invisibleRootItem()
+                _src.blockSignals(True)
+                for _i in range(_root.rowCount()):
+                    _item = _root.child(_i)
+                    if _item is None:
+                        continue
+                    try:
+                        _id = int(float(_item.text()))
+                        if _id in ind_avail:   # label exists in npSeg → check it
+                            _item.setCheckState(QtCore.Qt.Checked)
+                    except (ValueError, TypeError):
+                        pass
+                _src.blockSignals(False)
+            except Exception:
+                pass
+
             try:
                 # self.dw2_cb.currentTextChanged.connect(self.changeColorPen)
                 self.tree_colors.itemChanged.connect(self.changeColorPen)

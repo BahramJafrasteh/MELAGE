@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "melage"
-version = "2.1.34"
+version = "2.1.5"
 description = "MELAGE: An open-source Python toolkit for medical imaging (3D MRI & 3D ultrasound, 3D CT, etc.)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -53,12 +53,16 @@ dependencies = [
 # install with: pip install melage[dl]
 ai = [
     "torch",
-     "einops",                 # Likely needed for core array manipulation
+    "einops",                  # mga_net and warpseg plugins
+    "segment-anything",        # MedSAM plugin
+    "sam2",                    # SAM 2 plugin (Meta, video-memory propagation)
+    "nnInteractive",           # nnInteractive plugin
+    "huggingface_hub",         # model weight downloads (SAM 2, MedSAM, nnInteractive)
 ]
 bet = [
- "numba",
- "trimesh",
- ]
+    "numba",
+    "trimesh",                 # BET plugin + melage.visualize.mesh() in the API
+]
 
 
 # Advanced Registration & Processing
@@ -72,7 +76,7 @@ reports = [
 
 # Install everything: pip install melage[all]
 all = [
-    "melage[ai,processing,reports]"
+    "melage[ai,bet,processing,reports]"
 ]
 
 

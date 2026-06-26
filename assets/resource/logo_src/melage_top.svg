@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 100">
+  <g transform="translate(0,2) scale(0.96)">
+    <!-- Left hemisphere -->
+    <path d="M50,12
+             C 38,8 24,12 16,22
+             C 6,28 4,42 10,52
+             C 4,62 10,76 22,80
+             C 32,88 44,86 50,78
+             Z"
+          fill="#1A72BB"/>
+    <!-- Right hemisphere -->
+    <path d="M50,12
+             C 62,8 76,12 84,22
+             C 94,28 96,42 90,52
+             C 96,62 90,76 78,80
+             C 68,88 56,86 50,78
+             Z"
+          fill="#3FA0E0"/>
+    <!-- Center division -->
+    <path d="M50,12 C 50,12 50,78 50,78" stroke="#19232D" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <!-- Sulci / gyri folds, left -->
+    <g stroke="#E0E1E3" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.85">
+      <path d="M20,28 C 28,32 30,40 24,46"/>
+      <path d="M14,46 C 22,48 26,56 20,64"/>
+      <path d="M30,66 C 36,68 40,74 36,80"/>
+      <path d="M40,20 C 46,26 46,34 40,38"/>
+    </g>
+    <!-- Sulci / gyri folds, right -->
+    <g stroke="#19232D" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6">
+      <path d="M80,28 C 72,32 70,40 76,46"/>
+      <path d="M86,46 C 78,48 74,56 80,64"/>
+      <path d="M70,66 C 64,68 60,74 64,80"/>
+      <path d="M60,20 C 54,26 54,34 60,38"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="112" y="68" font-family="Roboto" font-weight="700" font-size="58"
+        letter-spacing="4" fill="#E0E1E3">MELAGE</text>
+</svg>

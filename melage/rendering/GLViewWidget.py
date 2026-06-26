@@ -349,17 +349,12 @@ class GLViewWidget(QOpenGLWidget):
             self.opts['center'] = pos
         if distance is not None:
             self.opts['distance'] = distance
+        if elevation is not None:
+            self.opts['elevation'] = elevation
+        if azimuth is not None:
+            self.opts['azimuth'] = azimuth
         if rotation is not None:
-            # set with quaternion
             self.opts['rotation'] = rotation
-        else:
-            # set with elevation-azimuth, restored for compatibility
-            eu = self.opts['rotation'].toEulerAngles()
-            if azimuth is not None:
-                eu.setZ(-azimuth-90)
-            if elevation is not None:
-                eu.setX(elevation-90)
-            self.opts['rotation'] = QtGui.QQuaternion.fromEulerAngles(eu)
         self.update()
         
     def cameraPosition(self):

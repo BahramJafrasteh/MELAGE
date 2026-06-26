@@ -35,6 +35,11 @@ class MelagePlugin:
         """Category to group plugins in (e.g., "Segmentation", "Registration")."""
         return "General"  # Default category
 
+    @property
+    def dockable(self) -> bool:
+        """Return True to open the plugin as a docked panel instead of a floating dialog."""
+        return False
+
     def get_widget(self, parent=None) -> QWidget:
         """
         The main function. This method must create and return

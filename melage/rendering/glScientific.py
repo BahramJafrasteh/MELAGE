@@ -307,6 +307,36 @@ class glScientific(GLViewWidget):
 
 
 
+    def capture(self, width=None, height=None):
+        """
+        Render the current 3D view and return it as a QImage.
+        Pure pixel-capture — no dialogs, no file I/O — so it can be
+        driven headlessly (e.g. from melage.api) as well as from the GUI.
+        :param width: optional output width in pixels (defaults to current widget width)
+        :param height: optional output height in pixels (defaults to current widget height)
+        :return: QImage of the rendered view
+        """
+        init_width, init_height = self.width(), self.height()
+        resized = (width is not None and height is not None
+                   and (int(width), int(height)) != (init_width, init_height))
+        if resized:
+            self.setFixedWidth(int(width))
+            self.setFixedHeight(int(height))
+            QApplication.processEvents()
+        try:
+            self.makeCurrent()
+            self.paintGL()
+            glFinish()  # Wait for GPU to finish
+            return self.grabFramebuffer()
+        finally:
+            if resized:
+                self.setFixedWidth(init_width)
+                self.setFixedHeight(init_height)
+                QApplication.processEvents()
+                self.makeCurrent()
+                self.paintGL()
+                glFinish()
+
     def take_screenshot(self):
         """
         Take screenshot from 3D rendering
@@ -315,7 +345,6 @@ class glScientific(GLViewWidget):
         if self._seg_im is None:
             return
 
-        opts = QFileDialog.DontUseNativeDialog
         filter_str = (
             "High Res (1000px) (*.png);;"
             "High Res (2000px) (*.png);;"
@@ -338,57 +367,19 @@ class glScientific(GLViewWidget):
         )
         if fileObj == '':
             return
-        filename = fileObj + '.png'
+        filename = fileObj if fileObj.lower().endswith('.png') else fileObj + '.png'
+
         init_width, init_height = self.width(), self.height()
-        maxhw = max(init_width, init_height)
         width, height = init_width, init_height
+        for tag, target_px in (("1000px", 1000), ("2000px", 2000), ("3000px", 3000)):
+            if tag in selected_filter:
+                scale = target_px / max(init_width, init_height)
+                width = int(init_width * scale)
+                height = int(init_height * scale)
+                break
 
-        if "1000px" in selected_filter:
-            scale = 3000 / max(init_width, init_height)
-            width = int(init_width * scale)
-            height = int(init_width * scale)
-
-        elif "2000px" in selected_filter:
-            scale = 6000 / max(init_width, init_height)
-            width = int(init_width * scale)
-            height = int(init_width * scale)
-        elif "3000px" in selected_filter:
-            scale = 6000 / max(init_width, init_height)
-            width = int(init_width * scale)
-            height = int(init_width * scale)
-        else:
-            width = width+1
-            height = height+1
-
-        self.setFixedWidth(int(width))
-        self.setFixedHeight(int(height))
-
-        # Force the OS to redraw the window at the new size
-        # You might need to call this multiple times or use a small sleep
-        QApplication.processEvents()
-        self.makeCurrent()
-        self.paintGL()
-        glFinish()  # Wait for GPU to finish
-
-        #self.setGeometry()
-        self.removeItem('scatter_total')
-        self.GLV.setData(self._seg_im, self._artistic)
-        self.GLV.setDepthValue(10)
-        self.addItem(self.GLV, 'vol_total')
-        self.showEvent(0)
-        maxhw = max(self.width(), self.height())
-        img = glReadPixels(0, 0, maxhw, maxhw, GL_RGB, GL_FLOAT)
-        img = img[::-1]
-        img = img[:self.height(), :self.width(), :]
-        from matplotlib.image import imsave
-
-        imsave(filename, img)
-        self.setFixedWidth(init_width)
-        self.setFixedHeight(init_height)
-        QApplication.processEvents()
-        self.makeCurrent()
-        self.paintGL()
-        glFinish()  # Wait for GPU to finish
+        img = self.capture(width, height)
+        img.save(filename)
 
 
 
@@ -1222,15 +1213,13 @@ class glScientific(GLViewWidget):
         if not value:
             self.removeItem('ax')
         else:
-            self.addItem(self.ax,'ax')
-            self.axis_action.setChecked(True)
+            self.addItem(self.ax, 'ax')
 
     def grid_status(self, value):
         if not value:
             self.removeItem('xyz')
         else:
             self.addItem(self.gx, 'xyz')
-            self.grid_action.setChecked(True)
     def artistic_status(self, value):
         self._artistic = True
         if not value:
@@ -1238,48 +1227,24 @@ class glScientific(GLViewWidget):
         self._localUpdate()
 
 
-    def im_seg_status(self, value):
-
-
-        self.seg_action.setChecked(False)
+    def _set_render_mode(self, value, own_action, other_action):
+        other_action.setChecked(False)
         if value:
             self._renderMode = 'Seg'
-            self._threshold=0
-            self.im_seg_action.setChecked(True)
+            self._threshold = 0
+            own_action.setChecked(True)
             self.update_3dview.emit(True, None)
-
-
-            #self.removeItem('vol_total')
-
         else:
             self._renderMode = 'Img'
-            self.im_seg_action.setChecked(False)
-
+            own_action.setChecked(False)
             self.removeItem('vol_total')
             self.paintGL()
 
-
+    def im_seg_status(self, value):
+        self._set_render_mode(value, self.im_seg_action, self.seg_action)
 
     def seg_status(self, value):
-        self.im_seg_action.setChecked(False)
-
-        if value:
-            self._renderMode = 'Seg'
-            self._threshold=0
-
-            self.seg_action.setChecked(True)
-            self.update_3dview.emit(True, None)
-
-        else:
-            self._renderMode = 'Img'
-            self.seg_action.setChecked(False)
-            self.removeItem('vol_total')
-            self.paintGL()
-        #if hasattr(self, 'GLV'):
-        #    self.GLV.smooth = value
-        #    self.GLV._needUpload = True
-        #    self._localUpdate()
-        #    self.paintGL()
+        self._set_render_mode(value, self.seg_action, self.im_seg_action)
 
 
     def goto_status(self, value):

@@ -4,7 +4,7 @@ from .model.mga_net import MGA_NET
 import torch
 import sys
 import os
-from model.utils import *
+from .model.utils import *
 from scipy.ndimage import binary_fill_holes
 import torch.nn.functional as F
 

@@ -12,6 +12,8 @@
 - [Plugins & Dynamic Extensions](#plugins--dynamic-extensions)
 - [Installation](#installation)
 - [Usage](#usage)
+- [AI Segmentation Plugins](#-ai-segmentation-plugins)
+- [Python API & Scripting](#python-api--scripting)
 - [Dependencies](#dependencies)
 - [Manual](#manual) *(collapsible)*
 - [License](#license)
@@ -23,16 +25,23 @@
 MELAGE is an open-source **neuroimaging software** designed for analysis, segmentation, and visualization of multimodal datasets.  
 It combines classical medical image processing with state-of-the-art deep learning support, making it useful for both researchers and practitioners.
 
-🚀 New in v2.x: Real-Time Video Segmentation MELAGE now supports full medical video loading and processing. Apply segmentation algorithms to video streams (e.g., Ultrasound loops) with the same speed and accuracy as static images. Analyze, segment, and save results frame-by-frame in real-time.
+🚀 **What's new in v2.1.5:**
+- 🤖 **Integrated AI segmentation sidebar** — MedSAM, SAM 2 (with 3D/video propagation), and nnInteractive are now permanent sidebar panels, not floating dialogs. Click directly on the live GL canvas to segment.
+- 🐍 **Headless Python API & extended CLI** — `import melage` from Jupyter or scripts; no GUI, no PyQt5 import needed.
+- ✏️ **New toolbar tools** — Freehand drawing, Magic Wand (region grow by pixel similarity), and Image Info tool.
+- 🎨 **VS Code-style activity sidebar** — collapsible plugin panels with a 48 px icon rail for faster navigation.
+- 🎥 **Real-Time Video Segmentation** — full medical video loading and processing for Ultrasound loops and Cine-MRI.
 
 ## 🎥 Key Features
 - ⚡ Real-Time Video Processing: Seamlessly load medical videos (e.g., Ultrasound, Cine-MRI) and perform segmentation with the same high speed and accuracy as static images.
 - 🖼️ Multi-Modality Support: Comprehensive support for MRI, CT, X-Ray, and Ultrasound data in standard formats (DICOM, NIfTI, AVI, MP4).
+- 🤖 AI Segmentation Sidebar: MedSAM, SAM 2, and nnInteractive built directly into the sidebar — click or draw bounding boxes on any slice to segment interactively.
 - 🧠 Deep Learning Integration: Built-in support for PyTorch models, allowing you to deploy state-of-the-art AI for automated segmentation and classification.
 - 🛠️ Advanced Preprocessing: Powerful tools for denoising, filtering, resampling, and harmonizing image data before analysis.
 - 🎨 Interactive Visualization: 2D and 3D rendering capabilities for exploring anatomical structures and segmentation results in detail.
 - 🔌 Dynamic Plugin System: easily extend functionality by dropping Python scripts into the plugins/ folder—MELAGE automatically generates the GUI for you.
 - 💾 Flexible Export: Save your results, including video segmentation masks, into standard research-ready formats.
+- 🐍 Python API & CLI: Call every processing step from Jupyter notebooks or shell scripts — no GUI required. Ideal for large-cohort pipelines and automated studies.
 
 ## 🧩 Plugins & Dynamic Extensions
 
@@ -303,6 +312,274 @@ melage
 
 ---
 
+## 🤖 AI Segmentation Plugins
+
+Starting from **v2.1.5**, MELAGE ships three state-of-the-art interactive segmentation models as permanent **sidebar panels**. They draw directly on the live GL canvas — no separate window, no coordinate mapping needed.
+
+Install the AI extras first:
+```bash
+pip install melage[ai]
+```
+
+---
+
+### 🏥 MedSAM
+
+[MedSAM](https://github.com/bowang-lab/MedSAM) is a foundation model for medical image segmentation fine-tuned from SAM ViT-B.
+
+**How to use:**
+1. Open the **MedSAM** sidebar tab.
+2. Select a model variant and axis (Axial / Coronal / Sagittal).
+3. Draw a **bounding box** or click **positive/negative points** directly on the slice.
+4. The result is written back into the active segmentation color.
+
+Weights are downloaded automatically to `~/.melage/weights/` on first use.  
+Supports **fp16 autocast** for lower GPU memory usage.
+
+---
+
+### 🎬 SAM 2
+
+[SAM 2](https://github.com/facebookresearch/segment-anything-2) extends SAM with a video-memory attention mechanism, making it uniquely suited for propagating segmentations through 3D volumes slice-by-slice.
+
+**How to use:**
+1. Open the **SAM 2** sidebar tab.
+2. Draw a bounding box or click points on one slice.
+3. Press **Propagate current label mask** to let SAM 2's video predictor carry the segmentation through all adjacent slices automatically.
+4. Switch to a new label index to segment the next structure.
+
+Supports up to 8 simultaneous labels; each maps to a distinct integer in the segmentation volume.
+
+---
+
+### 🧠 nnInteractive
+
+[nnInteractive](https://github.com/MIC-DKFZ/nnInteractive) is a 3D-aware interactive segmentation framework from the MIC-DKFZ group. Unlike slice-based methods, it propagates each click through the **full 3D volume** immediately.
+
+**How to use:**
+1. Open the **nnInteractive** sidebar tab.
+2. Click positive points (green) or negative points (red) on any slice.
+3. The segmentation updates across the entire volume after each click — no manual propagation needed.
+4. Press **New Label →** to start the next structure; previous labels remain.
+
+Model weights are downloaded automatically from HuggingFace Hub (`nnInteractive/nnInteractive`) on first use.
+
+---
+
+### Sidebar navigation
+
+All three plugins appear as icon buttons in the **VS Code-style activity bar** on the left edge of the main window. Click an icon to expand or collapse its panel. The sidebar coexists with the existing plugin system — other dynamic plugins still appear in the **Plugins** menu.
+
+---
+
+## 🐍 Python API & Scripting
+
+Starting from **v2.1.5**, MELAGE ships a headless Python API and an extended CLI.  
+No GUI, no display, no PyQt5 import needed — just `import melage`.  
+This is designed for:
+
+- 📓 **Jupyter notebooks** — interactive exploration and visualisation of results
+- 🔁 **Shell pipelines** — chain tools with a single `melage run` command
+- 🏥 **Large studies** — loop over hundreds of subjects without touching the GUI
+
+---
+
+### 🔧 Quick start
+
+```python
+import melage
+
+# Load any supported format: NIfTI, NRRD, DICOM folder, GE Kretz .vol, video
+vol = melage.load("brain.nii.gz")
+print(vol)
+# Volume(shape=(189,233,197), spacing=(1.00,1.00,1.00) mm, dtype=float64)
+```
+
+The `Volume` object is Jupyter-friendly — in a notebook it renders as a metadata table.
+
+---
+
+### 🛠️ Preprocessing
+
+```python
+# N4 bias-field correction (SimpleITK)
+vol = melage.preprocess.n4_bias(vol)
+vol = melage.preprocess.n4_bias(vol, iterations=50, shrink_factor=2, use_otsu=True)
+
+# Resample to a new voxel spacing
+vol = melage.preprocess.resize(vol, spacing=1.0)          # isotropic 1 mm
+vol = melage.preprocess.resize(vol, spacing=[0.8, 0.8, 1.2], method="linear")
+
+# Percentile intensity normalisation
+vol = melage.preprocess.normalize(vol)
+vol = melage.preprocess.normalize(vol, percentile_low=1, percentile_high=99)
+
+# Hard intensity window
+vol = melage.preprocess.threshold(vol, low=100, high=3000)
+
+# Keep only the largest connected component of a segmentation label
+vol = melage.preprocess.largest_component(vol, label=1)
+```
+
+---
+
+### 🔬 Segmentation
+
+Results are stored in `vol.segmentation` (integer NumPy array).
+
+```python
+# Brain Extraction Tool (BET) — based on Smith 2002
+vol = melage.segment.bet(vol)
+vol = melage.segment.bet(vol, fractional_threshold=0.4, thresholding=True)
+
+# Fuzzy C-Means tissue segmentation
+vol = melage.segment.fcm(vol, n_classes=3)
+vol = melage.segment.fcm(vol, n_classes=3, method="PFCM", max_iter=200)
+
+# Convenience: N4 bias correction → BET in one call
+vol = melage.segment.preprocess_and_bet(vol)
+```
+
+---
+
+### 💾 Saving results
+
+```python
+melage.save(vol, "corrected.nii.gz")              # image data
+melage.save(vol, "brain_mask.nii.gz", what="seg") # integer segmentation
+melage.save(vol, "tissues.nii.gz",   what="seg")
+```
+
+---
+
+### 🧊 3D visualization
+
+MELAGE's interactive 3-D viewer (`glScientific`) needs a live Qt/OpenGL
+display, so the API ships a lightweight, headless counterpart in
+`melage.visualize` — built on scikit-image marching cubes + matplotlib —
+for quick surface previews, screenshots, and mesh export from scripts,
+servers, or notebooks.
+
+```python
+vol = melage.load("brain.nii.gz")
+vol = melage.segment.bet(vol)              # populates vol.segmentation
+
+# Quick interactive-style 3-D plot (matplotlib figure)
+fig = melage.visualize.render(vol, label=1, title="Brain surface")
+
+# Render several labels together with custom colours
+fig = melage.visualize.render(vol, label=[1, 2], color=[(0.8, 0.2, 0.2, 1), (0.2, 0.6, 0.9, 0.6)])
+
+# Save a static screenshot directly to disk
+melage.visualize.screenshot(vol, "brain_3d.png", label=1, elev=15, azim=45)
+
+# Extract a surface mesh (trimesh.Trimesh) or export it (.stl, .obj, .ply, .glb, ...)
+mesh = melage.visualize.mesh(vol, label=1, smooth=True)
+melage.visualize.export_mesh(vol, "brain.stl", label=1, smooth=True)
+```
+
+---
+
+### 📋 Image metadata
+
+```python
+melage.info("brain.nii.gz")
+# File   : brain.nii.gz
+# Format : NIfTI
+# Shape  : (189, 233, 197)
+# Spacing: 1.000 × 1.000 × 1.000 mm
+# Dtype  : int16
+```
+
+---
+
+### 🔁 Config-driven pipelines
+
+```python
+pipeline = [
+    ("n4_bias",   {}),
+    ("resize",    {"spacing": 1.0}),
+    ("normalize", {}),
+    ("bet",       {"fractional_threshold": 0.45}),
+]
+
+for subject in subject_list:
+    vol = melage.load(subject)
+    for tool, kwargs in pipeline:
+        vol = melage.run(tool, vol, **kwargs)
+    melage.save(vol, subject.replace(".nii.gz", "_bet.nii.gz"), what="seg")
+
+melage.list_tools()   # → ['bet', 'fcm', 'n4', 'n4_bias', 'normalize', 'resize', ...]
+```
+
+---
+
+### 📊 Jupyter notebook example
+
+```python
+import melage
+import matplotlib.pyplot as plt
+
+vol = melage.load("brain.nii.gz")
+vol                                         # renders metadata table in notebook
+
+vol = melage.preprocess.n4_bias(vol, progress=False)
+vol = melage.segment.bet(vol, progress=False)
+
+mid = vol.shape[2] // 2
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+ax1.imshow(vol.data[:, :, mid],        cmap="gray");  ax1.set_title("Image")
+ax2.imshow(vol.segmentation[:, :, mid], cmap="hot");  ax2.set_title("BET mask")
+plt.tight_layout()
+
+melage.visualize.render(vol, label=1, title="Brain surface")  # interactive 3-D plot
+```
+
+---
+
+### 🖥️ CLI subcommands
+
+```bash
+# List all available tools
+melage tools
+
+# Inspect an image (no full load)
+melage info brain.nii.gz
+
+# Run a single tool — input → output
+melage run n4_bias   brain.nii.gz   brain_n4.nii.gz
+melage run resize    brain.nii.gz   brain_1mm.nii.gz  --spacing 1.0
+melage run resize    brain.nii.gz   brain_ani.nii.gz  --spacing 0.8 0.8 1.2 --method linear
+melage run normalize brain.nii.gz   brain_norm.nii.gz
+melage run bet       brain.nii.gz   brain_mask.nii.gz
+melage run fcm       brain.nii.gz   tissues.nii.gz    --n-classes 3
+
+# Add --silent to suppress progress output (useful in scripts)
+melage run n4_bias brain.nii.gz out.nii.gz --silent
+```
+
+The original `--headless --tool` syntax is still supported for backward compatibility.
+
+---
+
+### 📈 Progress control
+
+Every function accepts a `progress` keyword:
+
+| Value | Behaviour |
+|-------|-----------|
+| `None` / `True` | Print percentage to stdout (default) |
+| `False` | Silent — no output |
+| `callable` | Call `fn(pct: int, msg: str)` on each update — wire into `tqdm`, logging, etc. |
+
+```python
+from tqdm.auto import tqdm
+
+bar = tqdm(total=100, desc="BET")
+vol = melage.segment.bet(vol, progress=lambda pct, msg: bar.update(pct - bar.n))
+```
+
+---
 
 ## 📦 Dependencies
 
@@ -321,7 +598,20 @@ MELAGE relies on the following core libraries:
 ```
 
 ### Optional Extras
-- **Deep Learning**: `torch>=1.12` (`pip install melage[dl]`)  
+
+| Extra | Packages | When you need it |
+|-------|----------|-----------------|
+| `melage[ai]` | `torch`, `einops`, `segment-anything`, `sam2`, `nnInteractive`, `huggingface_hub` | MedSAM, SAM 2, nnInteractive sidebar plugins |
+| `melage[bet]` | `numba`, `trimesh` | BET plugin; also enables `melage.visualize.mesh()` in the API |
+| `melage[processing]` | `vtk` | VTK-based I/O and advanced 3D processing |
+| `melage[reports]` | `dominate` | HTML report generation |
+| `melage[all]` | all of the above | Full install |
+
+```bash
+pip install melage[ai]      # AI segmentation plugins
+pip install melage[bet]     # BET + 3D mesh export
+pip install melage[all]     # everything
+```
 
 
 
@@ -400,7 +690,7 @@ To the **right of the Project Toolbar**, you’ll find the **Image Toolbar**, wh
 
 #### 3️⃣ Tools Toolbar  
 
-At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contains **seven buttons** grouped into three sections:  
+At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contains **ten buttons** grouped into sections:  
 
 - ✏️ **Build Lines** – Draw multiple lines in the same slice and create a segmentation by connecting their endpoints (explained in detail later).  
 - 🎯 **Point Selection** – Mark and locate selected points within a slice.  
@@ -409,6 +699,9 @@ At the **top-left of MELAGE**, you’ll find the **Tools Toolbar**, which contai
 - 📏 **Measurement** – Ruler tool to measure distances and lengths.  
 - 🔗 **Linking** – Synchronize sagittal, coronal, and axial slices. This makes it easy to locate the same point across all views.  
 - 🧊 **3D Toggle** – Show or hide 3D widgets in the view.  
+- 🖊 **Freehand** – Draw a freehand outline around a structure; right-click to access shape options.  
+- 🪄 **Magic Wand** – Select a region by pixel similarity (region grow from clicked seed point).  
+- ℹ️ **Image Info** – Display metadata and statistics for the image under the cursor.  
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/BahramJafrasteh/MELAGE/main/assets/resource/manual_images/toolbar_tools.png" 
@@ -1070,6 +1363,16 @@ We would like to acknowledge all contributors and collaborators who have support
 Stable releases and updates of **MELAGE** are available on the [GitHub Releases page](https://github.com/BahramJafrasteh/MELAGE/releases).  
 - 🟢 **Stable releases**: Fully tested, recommended for production and research use.  
 - 🧪 **Pre-releases / beta versions**: For testing new features and providing feedback.  
+
+### Changelog highlights
+
+| Version | Highlights |
+|---------|-----------|
+| **v2.1.5** | MedSAM + SAM 2 + nnInteractive sidebar plugins; headless Python API & CLI (`melage run/tools/info`); VS Code-style activity sidebar; Freehand / Magic Wand / Info toolbar tools; 3D rendering fixes; improved masking operations |
+| v2.0.5 | Bug fixes and rendering improvements |
+| v2.0.3 | Version bump and dependency updates |
+| v2.0.0 | Video segmentation support; dynamic plugin system |
+| v1.1.0 | Initial public release |
 
 Stay updated by watching the repository for new release notifications.
 

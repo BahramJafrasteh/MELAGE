@@ -800,6 +800,62 @@ def read_segmentation_file(self, file, reader, update_color_s=True):
     else:
         return data,True, True
 
+###################### Default label color index for drawing tools ##################
+def get_default_color_ind(self):
+    """
+    Pick the first real label index (smallest non-zero index that isn't the
+    special "Combined/show all" index 9876) to use as the active drawing
+    color when an image is freshly loaded. Falls back to 9876 if no real
+    label exists yet (e.g. an empty segmentation).
+    Args:
+        self: main window instance
+
+    Returns:
+        int label index
+    """
+    try:
+        keys = [int(float(k)) for k in self.colorsCombinations.keys()]
+        real_keys = [k for k in keys if k not in (0, 9876)]
+        if real_keys:
+            return min(real_keys)
+    except Exception:
+        pass
+    return 9876
+
+###################### Default brush radius scaled to the image/video #####
+def get_default_brush_radius(widget, slider_min=50, slider_max=1000, scale=1.1):
+    """
+    Pick a "Circle Radius" slider value proportional to the loaded image/
+    video's own resolution, instead of a fixed magic number that looks tiny
+    on a high-res image and oversized on a small one.
+
+    Deliberately independent of the widget's on-screen pixel size/zoom: that
+    varies with window layout and monitor and isn't what "based on the image
+    dimensions" means. The existing live, zoom-aware scaling in
+    changeRadiusCircle / _compute_mask_circle_box (which keeps the brush a
+    constant *screen* size while you zoom) is untouched — this only changes
+    the slider's starting position to track image resolution.
+
+    Args:
+        widget: a GLWidget with imWidth/imHeight already set (i.e. called
+            after updateInfo(..., initialState=True))
+        slider_min, slider_max: the Circle Radius slider's range
+        scale: slider units per image pixel (of the smaller side)
+
+    Returns:
+        int slider value, clamped to [slider_min, slider_max]
+    """
+    try:
+        img_w = float(getattr(widget, 'imWidth', 0) or 0)
+        img_h = float(getattr(widget, 'imHeight', 0) or 0)
+        if img_w <= 0 or img_h <= 0:
+            return slider_min
+
+        slider_value = min(img_w, img_h) * scale
+        return int(max(slider_min, min(slider_max, slider_value)))
+    except Exception:
+        return slider_min
+
 ###################### Manually check items in color tree ##################
 def manually_check_tree_item(self, txt='9876'):
     """
@@ -2199,6 +2255,7 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
     widget.enabledCircle = False
     #widget.enabledGoTo = False
     widget.enabledLine = False
+    widget.enabledInfo = False
     widget._magic_slice =  None # for magic coloring
     widget.setMouseTracking(False)
     #widget.makeObject()
@@ -2286,6 +2343,19 @@ def setCursorWidget(widget, code, reptime, rad_circle=50):
             #widget.setCursor(cursorCircle(rad_circle))
             widget.setCursor(QtCore.Qt.ArrowCursor)
             widget.is_cursor_on_screen = False
+        elif code == 10: # magic wand
+            widget.updateEvents()
+            widget.enabledMagicTool = True
+            widget.setCursor(cursorPaint())
+            try:
+                widget.customContextMenuRequested.connect(widget.ShowContextMenu)
+            except Exception as e:
+                print('Cursor Widget Error')
+                print(e)
+        elif code == 11: # pixel/contour info
+            widget.updateEvents()
+            widget.enabledInfo = True
+            widget.setCursor(Qt.WhatsThisCursor)
 
     else:
         if code == 4:  # ImPaint
@@ -3924,6 +3994,17 @@ def update_last(self, npSeg, colorInd, whiteInd, colorInd2, guide_lines = False)
     Returns:
 
     """
+
+    # Drop any pixel coordinates that fall outside npSeg's actual shape.
+    # The widget-side dimensions used to build whiteInd can be stale/out
+    # of sync with npSeg (e.g. after a reload), which otherwise causes
+    # an IndexError in getZeroSeg/getNoneZeroSeg below and aborts the
+    # whole update (leaving drawn/erased pixels untouched).
+    bounds = np.array(npSeg.shape[:whiteInd.shape[1]])
+    valid = np.all((whiteInd >= 0) & (whiteInd < bounds), axis=1)
+    whiteInd = whiteInd[valid]
+    if whiteInd.shape[0] < 1:
+        return
 
     if colorInd != 0:
         WI = getZeroSeg(npSeg, whiteInd, colorInd)

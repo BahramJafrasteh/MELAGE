@@ -160,7 +160,7 @@ class ChangeCoordLogic(DynamicDialog):
                 QMessageBox.information(self, "INVALID COORDINATION SYSTEM", f"{target} is not a valid coorrdiantion system")
                 self.progress_bar.setValue(0)
                 return
-            im = changeCoordSystem(im=data_view, target=target)
+            im = changeCoordSystem(im=data_view.im, target=target)
             result_package = {
                 "image": im.get_fdata(),
                 "affine": im.affine,

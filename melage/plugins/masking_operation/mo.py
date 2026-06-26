@@ -5,15 +5,43 @@ from melage.dialogs.dynamic_gui import DynamicDialog
 from .mo_schema import get_schema
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import pyqtSignal
-import SimpleITK as sitk
 
 
+def combine_label_masks(npSeg, label1, op, label2, output_label=None):
+    """
+    Combine two existing segmentation labels with a boolean set operation.
 
-#from .main.utils import changeCoordSystem
+    "+" = union, "-" = difference (label1 minus label2), "*" = intersection,
+    "/" = symmetric difference. The result replaces output_label (defaults
+    to label1); all other labels are left untouched.
+    """
+    if output_label is None:
+        output_label = label1
+
+    mask1 = npSeg == label1
+    mask2 = npSeg == label2
+
+    if op == "+":
+        result = mask1 | mask2
+    elif op == "-":
+        result = mask1 & ~mask2
+    elif op == "*":
+        result = mask1 & mask2
+    elif op == "/":
+        result = mask1 ^ mask2
+    else:
+        raise ValueError(f"Unknown operation {op!r}; expected one of '+', '-', '*', '/'.")
+
+    new_seg = npSeg.copy()
+    new_seg[new_seg == output_label] = 0
+    new_seg[result] = output_label
+    return new_seg
+
+
 # --- THE LOGIC CLASS ---
 class MainLogic(DynamicDialog):
     """
-    This class handles the BRAIN of the WarpSeg tool.
+    This class handles the BRAIN of the Masking Operation tool.
     The LOOKS are handled automatically by DynamicDialog + Schema.
     """
     completed = pyqtSignal(object)
@@ -60,34 +88,65 @@ class MainLogic(DynamicDialog):
                         signal.connect(handler)
                         # print(f"Auto-connected: {widget_id}.{signal_name} -> {handler_name}")
 
+        self._populate_label_combos()
 
     @property
     def ui_schema(self):
         # We call the function to get the dictionary
         return get_schema()
 
+    def on_combo_view_currentIndexChanged(self):
+        self._populate_label_combos()
+
+    def _populate_label_combos(self):
+        """Fill combo_1/combo_2 with the labels currently present in the
+        selected view's segmentation."""
+        view   = self.combo_view.currentText()
+        reader = self.data_context.get(view) if self.data_context else None
+
+        labels = []
+        if reader is not None and getattr(reader, "npSeg", None) is not None:
+            labels = [str(int(l)) for l in np.unique(reader.npSeg) if l != 0]
+
+        for combo in (self.combo_1, self.combo_2):
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(labels)
+            index = combo.findText(current)
+            combo.setCurrentIndex(index if index >= 0 else 0)
+            combo.blockSignals(False)
 
     # Renamed from 'run_process' to match the schema ID 'btn_apply'
     def on_btn_apply_clicked(self):
         view = self.combo_view.currentText()
-        data_view = self.data_context[view]
-        if  data_view is None:
+        data_obj = self.data_context[view]
+        if data_obj is None:
             QMessageBox.information(self, "Error", "No image data available for the selected view.")
+            return
+        if getattr(data_obj, "npSeg", None) is None:
+            QMessageBox.information(self, "Error", "No segmentation available for the selected view.")
+            return
+
+        label1_txt = self.combo_1.currentText()
+        label2_txt = self.combo_2.currentText()
+        if not label1_txt or not label2_txt:
+            QMessageBox.information(self, "Error", "No labels available to combine.")
             return
 
         try:
-            """The main execution function."""
-            self.progress_bar.setValue(0)
-            max_iters = int(self.iteration.value())
-            numberFittingLevels = int((self.fit_lvl.value()))
-            shrinkFactor = int((self.shrink_fct.value()))
-            status_otsu = self.check_otsu.isChecked()
-            im = N4_bias_correction(data_view, use_otsu=status_otsu, shrinkFactor=shrinkFactor,
-                       numberFittingLevels=numberFittingLevels, max_iter=max_iters)
+            self.progress_bar.setValue(10)
+            label1 = int(label1_txt)
+            label2 = int(label2_txt)
+            op     = self.combo_operation.currentText()
+
+            new_seg = combine_label_masks(data_obj.npSeg, label1, op, label2)
+            self.progress_bar.setValue(70)
+
             result_package = {
-                "image": im.get_fdata(),
-                "affine": im.affine,
-                "label": np.zeros_like(im.get_fdata()),
+                "image": None,
+                "affine": None,
+                "label": new_seg,
                 "view": view
             }
             self.completed.emit(result_package)

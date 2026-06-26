@@ -2,6 +2,11 @@
 # --- 1. Python Standard Library ---
 import sys
 import os
+
+# Allow PyTorch's CUDA allocator to return fragmented reserved memory to the
+# OS so that two concurrent models (nnInteractive + MedSAM) can share a 8 GB
+# GPU without hitting OOM from reserved-but-unallocated blocks.
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 import pickle
 from collections import defaultdict
 from time import gmtime, strftime
@@ -190,28 +195,155 @@ class MainWindow(QtWidgets.QMainWindow, Ui_Main):
 
 
 
-def main():
-    # 1. Setup Argument Parser
+def _cli_run(argv):
+    """
+    ``melage run <tool> <input> <output> [options]``
 
+    Process a single image through one named tool and save the result.
+    No GUI is launched.
+
+    Tool list (run ``melage tools`` to see all):
+      n4_bias   – N4 bias-field correction
+      n4        – alias for n4_bias
+      resize    – resample to target spacing
+      normalize – percentile intensity normalisation
+      bet       – brain extraction (BET)
+      fcm       – fuzzy C-means tissue segmentation
+    """
+    import melage as _m
+
+    p = argparse.ArgumentParser(
+        prog="melage run",
+        description="Run a single MELAGE processing tool on one image.",
+    )
+    p.add_argument("tool", help="Tool name (run 'melage tools' for a full list)")
+    p.add_argument("input", help="Input image path")
+    p.add_argument("output", help="Output image path")
+    p.add_argument("--what", default="image",
+                   choices=["image", "seg", "segmentation"],
+                   help="What to save: 'image' (default) or 'seg'/'segmentation'")
+    p.add_argument("--silent", action="store_true", help="Suppress progress output")
+
+    # Preprocessing options
+    p.add_argument("--iterations", type=int, default=50, metavar="N",
+                   help="N4: max fitting iterations per level (default 50)")
+    p.add_argument("--shrink-factor", type=int, default=1, metavar="N",
+                   help="N4: shrink factor before fitting (default 1)")
+    p.add_argument("--fitting-levels", type=int, default=4, metavar="N",
+                   help="N4: number of multi-resolution levels (default 4)")
+    p.add_argument("--spacing", type=float, nargs="+", metavar="MM",
+                   help="resize: target voxel spacing in mm (1 or 3 values)")
+    p.add_argument("--method", type=str, default="spline",
+                   choices=["spline", "linear", "nearest"],
+                   help="resize: interpolation method (default 'spline')")
+
+    # Segmentation options
+    p.add_argument("--n-classes", type=int, default=3, metavar="N",
+                   help="fcm: number of tissue classes (default 3)")
+    p.add_argument("--fractional-threshold", type=float, default=0.5, metavar="F",
+                   help="bet: fractional intensity threshold (default 0.5)")
+    p.add_argument("--no-thresholding", action="store_true",
+                   help="bet: disable automatic multi-Otsu thresholding")
+
+    args = p.parse_args(argv)
+    progress = False if args.silent else None
+
+    print(f"Loading  {args.input} …")
+    vol = _m.load(args.input)
+    print(vol)
+
+    tool = args.tool.lower().replace("-", "_")
+
+    # Build per-tool kwargs from parsed args
+    kwargs: dict = {"progress": progress}
+    if tool in ("n4_bias", "n4"):
+        kwargs.update(
+            iterations=args.iterations,
+            shrink_factor=args.shrink_factor,
+            fitting_levels=args.fitting_levels,
+        )
+    elif tool in ("resize", "resample"):
+        if not args.spacing:
+            p.error("--spacing is required for 'resize'")
+        sp = args.spacing if len(args.spacing) == 3 else args.spacing[0]
+        kwargs["spacing"] = sp
+        kwargs["method"] = args.method
+    elif tool == "bet":
+        kwargs["thresholding"] = not args.no_thresholding
+        kwargs["fractional_threshold"] = args.fractional_threshold
+        if args.what == "image":
+            args.what = "seg"  # BET always writes a mask
+    elif tool == "fcm":
+        kwargs["n_classes"] = args.n_classes
+        if args.what == "image":
+            args.what = "seg"
+
+    vol = _m.run(tool, vol, **kwargs)
+    _m.save(vol, args.output, what=args.what)
+
+
+def _cli_tools(_argv):
+    """``melage tools``  — list all registered API tools."""
+    import melage as _m
+    print("Available tools (use with 'melage run <tool> …'):\n")
+    for name in _m.list_tools():
+        print(f"  {name}")
+    print()
+
+
+def _cli_info(argv):
+    """``melage info <path>``  — print image metadata."""
+    import melage as _m
+    p = argparse.ArgumentParser(prog="melage info")
+    p.add_argument("path", help="Image file path")
+    args = p.parse_args(argv)
+    _m.info(args.path)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Legacy headless runner (kept for backward compatibility)
+# ──────────────────────────────────────────────────────────────────────
+
+def _legacy_headless(args):
+    """Handle the old ``--headless --tool … --input … --output …`` form."""
+    run_headless_mode(args)
+
+
+def main():
+    # ── Intercept subcommands before Qt touches sys.argv ──────────────
+    _subcommands = {
+        "run":   _cli_run,
+        "tools": _cli_tools,
+        "info":  _cli_info,
+    }
+    if len(sys.argv) > 1 and sys.argv[1] in _subcommands:
+        _subcommands[sys.argv[1]](sys.argv[2:])
+        return
+
+    # ── Legacy / GUI argument parser ──────────────────────────────────
     from melage.utils.headless_utils import list_available_tools
     tools_map = list_available_tools()
     tool_ids = list(tools_map.keys())
-    # Create a helpful description for the --tool argument
-    tool_help_text = "Choose a tool to run:\n"
-    for tid, tname in tools_map.items():
-        tool_help_text += f"  - {tid:<12} ({tname})\n"
-    # Add arguments
-    parser = argparse.ArgumentParser(description="MELAGE: Neuroimaging Tool")
-    parser.add_argument('--headless', action='store_true', help='Run in headless mode')
-    parser.add_argument('--tool', type=str, choices=tool_ids, help=tool_help_text)
-    parser.add_argument('--input', type=str,default='', help='Input image path')
-    parser.add_argument('--output', type=str, default='',help='Output image path')
 
-    # Parse known args to avoid conflict with Qt args
+    parser = argparse.ArgumentParser(
+        description="MELAGE: Neuroimaging Tool\n\n"
+                    "Subcommands (no GUI):\n"
+                    "  melage run <tool> <input> <output> [options]\n"
+                    "  melage tools\n"
+                    "  melage info <path>\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('--headless', action='store_true',
+                        help='Run in headless mode (legacy flag)')
+    parser.add_argument('--tool', type=str, choices=tool_ids,
+                        help='Tool to run in headless mode')
+    parser.add_argument('--input', type=str, default='', help='Input image path')
+    parser.add_argument('--output', type=str, default='', help='Output image path')
+
     args, unknown = parser.parse_known_args()
-    # 2. Check for Headless Mode
+
     if args.headless:
-        run_headless_mode(args)
+        _legacy_headless(args)
     else:
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)

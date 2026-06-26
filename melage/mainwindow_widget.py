@@ -62,6 +62,7 @@ from melage.utils.utils import (
     select_proper_widgets, setCursorWidget, find_avail_widgets,
     locateWidgets, loadAttributeWidget,
     add_new_tree_widget, addTreeRoot, manually_check_tree_item,
+    get_default_color_ind, get_default_brush_radius,
 
     # Image/View State
     getCurrentSlice, updateSight, changeCoronalSagittalAxial, slice_label_text,
@@ -280,20 +281,12 @@ class Ui_Main(dockWidgets, openglWidgets):
             for k in indices:
                 name = f'openGLWidget_{k + 1}'
                 widget = getattr(self, name, None)
-                if hasattr(self, "imSlice"):
-                    if widget and widget.imSlice is not None:
-                        widget.makeCurrent()
-                        widget.paintGL()
-                        q_img = widget.grabFramebuffer()
-                        if not q_img.isNull():
-                            images.append(q_img)
-                else:
-                    if widget:
-                        widget.makeCurrent()
-                        widget.paintGL()
-                        q_img = widget.grabFramebuffer()
-                        if not q_img.isNull():
-                            images.append(q_img)
+                if widget and (not hasattr(widget, "imSlice") or widget.imSlice is not None):
+                    widget.makeCurrent()
+                    widget.paintGL()
+                    q_img = widget.grabFramebuffer()
+                    if not q_img.isNull():
+                        images.append(q_img)
             if not images:
                 return None
                 # Calculate Row Dimensions
@@ -327,6 +320,9 @@ class Ui_Main(dockWidgets, openglWidgets):
         elif self.tabWidget.currentIndex() == 2:
             row1_indices = [11, 23]
             row2_indices = []
+        else:
+            print("No images captured.")
+            return
 
         # 1. Create the two horizontal strips (h1 and h2)
         img_h1 = create_row_image(row1_indices)
@@ -369,7 +365,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                                                         options=opts)
         if fileObj[0] == '':
             return
-        filename = fileObj[0] + '.png'
+        filename = fileObj[0] if fileObj[0].lower().endswith('.png') else fileObj[0] + '.png'
         self.save_screenshot(final_image, filename)
 
     def get_latest_pypi_version(self, package_name="melage"):
@@ -863,6 +859,26 @@ class Ui_Main(dockWidgets, openglWidgets):
 
         self.actionCircles.setIcon(self._icon_CircleFaded)
 
+        self.actionMagicTool = QtWidgets.QAction(Main)
+        self.actionMagicTool.setObjectName("actionMagicTool")
+        self._icon_magicToolFaded = QtGui.QIcon()
+        self._icon_magicToolFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/magic_wand_faded.png"),
+                                            QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self._icon_magicTool = QtGui.QIcon()
+        self._icon_magicTool.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/magic_wand.png"), QtGui.QIcon.Normal,
+                                       QtGui.QIcon.On)
+        self.actionMagicTool.setIcon(self._icon_magicToolFaded)
+
+        self.actionInfo = QtWidgets.QAction(Main)
+        self.actionInfo.setObjectName("actionInfo")
+        self._icon_infoFaded = QtGui.QIcon()
+        self._icon_infoFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/info_tool_faded.png"),
+                                       QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self._icon_info = QtGui.QIcon()
+        self._icon_info.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/info_tool.png"), QtGui.QIcon.Normal,
+                                  QtGui.QIcon.On)
+        self.actionInfo.setIcon(self._icon_infoFaded)
+
         self.actionGoTo = QtWidgets.QAction(Main)
         self.actionGoTo.setCheckable(True)
         self.actionGoTo.setObjectName("goto")
@@ -1043,10 +1059,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionPaint = QtWidgets.QAction(Main)
         self.actionPaint.setObjectName("actionPaint")
         self._icon_pencilFaded = QtGui.QIcon()
-        self._icon_pencilFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/paint-brush-2.png"), QtGui.QIcon.Normal,
+        self._icon_pencilFaded.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/freehandFaded.png"), QtGui.QIcon.Normal,
                                          QtGui.QIcon.On)
         self._icon_pencil = QtGui.QIcon()
-        self._icon_pencil.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/paint-brush-2.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
+        self._icon_pencil.addPixmap(QtGui.QPixmap(settings.RESOURCE_DIR + "/freehand.png"), QtGui.QIcon.Normal, QtGui.QIcon.On)
 
         self.actionPaint.setIcon(self._icon_pencilFaded)
 
@@ -1408,6 +1424,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.toolBar2.addAction(self.actionContour)
         self.toolBar2.addAction(self.actionContourX)
         self.toolBar2.addAction(self.actionCircles)
+        self.toolBar2.addAction(self.actionMagicTool)
         self.toolBar2.addSeparator()
 
         # Group: Modification (Erase)
@@ -1419,6 +1436,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.toolBar2.addAction(self.actionRuler)
         self.toolBar2.addAction(self.actionLine)
         self.toolBar2.addAction(self.actionPoints)
+        self.toolBar2.addAction(self.actionInfo)
         self.toolBar2.addSeparator()
 
         # Group: Properties (Color)
@@ -1501,6 +1519,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionContour.triggered.connect(partial(self.setCursors, 4))
         self.actionPoints.triggered.connect(partial(self.setCursors, 5))
         self.actionCircles.triggered.connect(partial(self.setCursors, 9, None))
+        self.actionMagicTool.triggered.connect(partial(self.setCursors, 10))
+        self.actionInfo.triggered.connect(partial(self.setCursors, 11))
         # self.actionGoTo.triggered.connect(partial(self.setCursors, 7))
         self.actionGoTo.triggered.connect(self.activateGuidelines)
         self.action3D.triggered.connect(self.activate3d)
@@ -1588,6 +1608,7 @@ class Ui_Main(dockWidgets, openglWidgets):
                 )
                 widget.requestExport.connect(self.handle_export_from_context)
                 widget.requestMask.connect(self.handle_mask_from_context)
+                widget.colorAutoSelected.connect(self._on_color_auto_selected)
 
         self.setNewImage_view1.connect(
             lambda shapeImage: self.openGLWidget_14.createGridAxis(shapeImage)
@@ -1639,11 +1660,15 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.tabWidget.setTabVisible(2, view2_loaded)
 
         if loaded_index == 0:
-            # View 1 just loaded — go to its dedicated tab
-            self.tabWidget.setCurrentIndex(1)
+            # View 1 just loaded — go to its dedicated tab, unless the user
+            # is already on the Mutual view tab, in which case stay there.
+            if self.tabWidget.currentIndex() != 0:
+                self.tabWidget.setCurrentIndex(1)
         elif loaded_index == 1:
-            # View 2 just loaded — go to its dedicated tab
-            self.tabWidget.setCurrentIndex(2)
+            # View 2 just loaded — go to its dedicated tab, unless the user
+            # is already on the Mutual view tab, in which case stay there.
+            if self.tabWidget.currentIndex() != 0:
+                self.tabWidget.setCurrentIndex(2)
         elif closed_index is not None:
             # A view was closed — move away from its (now hidden) tab if we're on it
             current = self.tabWidget.currentIndex()
@@ -2607,13 +2632,33 @@ class Ui_Main(dockWidgets, openglWidgets):
                 categories[plugin.category] = []
             categories[plugin.category].append(plugin)
 
+        # MedSAM/SAM 2 now live in their own permanent sidebar tabs (see
+        # _create_medsam_tab/_create_sam2_tab) instead of floating Plugins-menu dialogs.
+        sidebar_plugin_names = {"MedSAM", "SAM 2"}
+
         for category_name, plugins_in_category in sorted(categories.items()):
             # Create a sub-menu for the category
             category_menu = self.menuPlugins.addMenu(category_name)
             for plugin in plugins_in_category:
+                if plugin.name in sidebar_plugin_names:
+                    continue
                 self.add_plugin_action(category_menu, plugin)
 
         print(f"Finished loading {len(self.plugin_manager.get_plugins())} plugins.")
+
+        # Register the sidebar nnInteractive/MedSAM widgets so they receive
+        # automatic data_context updates (same loop used for floating plugin dialogs).
+        if getattr(self, 'nni_widget', None) is not None:
+            if self.nni_widget not in self.plugin_widgets:
+                self.plugin_widgets.append(self.nni_widget)
+
+        if getattr(self, 'medsam_widget', None) is not None:
+            if self.medsam_widget not in self.plugin_widgets:
+                self.plugin_widgets.append(self.medsam_widget)
+
+        if getattr(self, 'sam2_widget', None) is not None:
+            if self.sam2_widget not in self.plugin_widgets:
+                self.plugin_widgets.append(self.sam2_widget)
 
     def add_plugin_action(self, menu: QtWidgets.QMenu, plugin):
         """Helper to create a QAction for a plugin."""
@@ -2642,14 +2687,39 @@ class Ui_Main(dockWidgets, openglWidgets):
             widget = plugin.get_widget(data_context, parent=self)
 
             if widget:
-                print("Plugin is 'Custom UI'. Showing widget.")
-                self.plugin_widgets.append(widget)
-                widget.show()
-                #if hasattr(widget, 'finished'):
-                    #widget.finished.connect(lambda: self.plugin_widgets.remove(widget))
-                widget.destroyed.connect(
-                    lambda: self.plugin_widgets.remove(widget) if widget in self.plugin_widgets else None)
-                # Connect the widget's 'completed' signal
+                if getattr(plugin, 'dockable', False):
+                    dock_name = f"dock_plugin_{plugin.name.replace(' ', '_')}"
+
+                    # Toggle the existing dock if it is already open
+                    existing = self.findChild(QtWidgets.QDockWidget, dock_name)
+                    if existing is not None:
+                        existing.setVisible(not existing.isVisible())
+                        return
+
+                    # First time: create the dock
+                    dock = QtWidgets.QDockWidget(plugin.name, self)
+                    dock.setObjectName(dock_name)
+                    dock.setAllowedAreas(
+                        QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+                    dock.setWidget(widget)
+                    self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+                    dock.show()
+
+                    if hasattr(widget, '_on_dock_visibility'):
+                        dock.visibilityChanged.connect(widget._on_dock_visibility)
+
+                    dock.destroyed.connect(
+                        lambda: self.plugin_widgets.remove(widget)
+                        if widget in self.plugin_widgets else None)
+                    self.plugin_widgets.append(widget)
+                else:
+                    print("Plugin is 'Custom UI'. Showing widget.")
+                    self.plugin_widgets.append(widget)
+                    widget.show()
+                    widget.destroyed.connect(
+                        lambda: self.plugin_widgets.remove(widget)
+                        if widget in self.plugin_widgets else None)
+
                 if hasattr(widget, 'completed'):
                     widget.completed.connect(self.on_plugin_complete)
                 return
@@ -2980,6 +3050,8 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionContour.setIcon(self._icon_contourFaded)
         self.actionPoints.setIcon(self._icon_pointsFaded)
         self.actionCircles.setIcon(self._icon_CircleFaded)
+        self.actionMagicTool.setIcon(self._icon_magicToolFaded)
+        self.actionInfo.setIcon(self._icon_infoFaded)
         #self.actionGoTo.setIcon(self._icon_gotoFaded)
         self.actionContourX.setIcon(self._icon_contourXFaded)
         self.actionEraseX.setIcon(self._icon_eraseXFaded)
@@ -3007,7 +3079,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             elif val == 4:
                 self.actionContour.setIcon(self._icon_contour)
             elif val == 5:
-                self.actionPoints.setIcon(self._icon_pointsFaded)
+                self.actionPoints.setIcon(self._icon_points)
                 #self.dock_widget_table.setVisible(True)
                 #self.changedTab()
             elif val == 6:
@@ -3016,8 +3088,12 @@ class Ui_Main(dockWidgets, openglWidgets):
             elif val == 7:
                 self.actionGoTo.setIcon(self._icon_goto)
             elif val==9:
-                self.actionCircles.setIcon(self._icon_CircleFaded)
+                self.actionCircles.setIcon(self._icon_circles)
                 #self.main_toolbox.setCurrentIndex(5)
+            elif val==10:
+                self.actionMagicTool.setIcon(self._icon_magicTool)
+            elif val==11:
+                self.actionInfo.setIcon(self._icon_info)
 
 
         else:
@@ -3087,9 +3163,13 @@ class Ui_Main(dockWidgets, openglWidgets):
         manual_set = False
         self._Xtimes = 1
         if rad_circle is None and val==9:#circle
-            #self.scrol_rad_circle.setValue(200)
             #rad_circle = self._rad_circle_dot
             manual_set = True
+        if val in (9, 10) and hasattr(self, 'vscode_widget'):
+            # Smart Brush (9) and Magic Wand (10) both depend on the radius/
+            # tolerance sliders in this panel without auto-tuning them, unlike
+            # Paint/Contour below — surface the panel so the control isn't missed.
+            self.vscode_widget.switch_to_tab("Brush & Intensity")
         self._setFadedPix(val)
         if val == 7:
             self.action_guideLines.setChecked(True)
@@ -3512,7 +3592,6 @@ class Ui_Main(dockWidgets, openglWidgets):
         curr_list = num_els-self._undoTimes-1
         _lastReaderSegInd = self._lastReaderSegInd[curr_list]
         _lastReaderSegInd, inds, us, slice = _lastReaderSegInd
-        sliceNum = [slice]*len(us)
         _lastReaderSegCol = self._lastReaderSegCol[curr_list]
         _lastReaderSegPrevCol = self._lastReaderSegPrevCol[curr_list]
         if _lastReaderSegPrevCol == _lastReaderSegCol or not any([_lastReaderSegCol==0, _lastReaderSegPrevCol==0]):
@@ -3522,7 +3601,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         if _lastReaderSegInd.shape[0]!=0:
             if not reader.isChunkedVideo:
                 if inds is not None:
-                    for ind, u in zip(inds, us, sliceNum):
+                    for ind, u in zip(inds, us):
                         reader.npSeg[tuple(zip(*_lastReaderSegInd[ind]))] = u
                 else:
                     reader.npSeg[tuple(zip(*_lastReaderSegInd))] =  _lastReaderSegCol
@@ -4073,6 +4152,17 @@ class Ui_Main(dockWidgets, openglWidgets):
                     if item_in_row:
                         item_in_row.setBackground(brush)
 
+    def _on_color_auto_selected(self, colorInd):
+        """
+        A GLWidget auto-picked a real label (see DisplayIm._auto_select_color,
+        triggered when the user clicks a drawing tool while in 'show all'/9876
+        mode). Sync the tree_colors checkbox and active-color UI to match,
+        same as the manual color-selection path.
+        """
+        ls = manually_check_tree_item(self, str(colorInd))
+        if ls:
+            item = self.tree_colors.model().sourceModel().invisibleRootItem().child(ls[0])
+            self.changeColorPen(item)
 
     def changeColorPen(self,value): # change color pen
         """
@@ -4875,9 +4965,23 @@ class Ui_Main(dockWidgets, openglWidgets):
                         label.setVisible(True)
 
                     widget.setVisible(True)
-                    #widget.UpdatePaintInfo()
 
-                    #widget.makeObject()
+                    # Sync segmentation from the reader before redrawing so that
+                    # any paint/segmentation done while in another tab is visible here.
+                    # k 0,1,2,10 → view1 (widgets 1-3 + fullscreen 11)
+                    # k 3,4,5,11 → view2 (widgets 4-6 + fullscreen 12)
+                    try:
+                        if k in (0, 1, 2, 10) and hasattr(self, 'readView1') \
+                                and hasattr(self.readView1, 'npSeg'):
+                            setSliceSeg(widget, self.readView1.npSeg)
+                            widget.makeObject()
+                        elif k in (3, 4, 5, 11) and hasattr(self, 'readView2') \
+                                and hasattr(self.readView2, 'npSeg'):
+                            setSliceSeg(widget, self.readView2.npSeg)
+                            widget.makeObject()
+                    except Exception:
+                        pass
+
                     widget.update()
         if self.tabWidget.currentIndex()>0 and len(widgets_num)>1:
             self.changeToCoronal()
@@ -4895,16 +4999,15 @@ class Ui_Main(dockWidgets, openglWidgets):
             #        self.openGLWidget_2.update()
             # --- UNDO (Ctrl + Z) ---
             if is_ctrl and event.key() == Qt.Key_Z:
-                # Check for Shift (Optional: Some apps use Ctrl+Shift+Z for Redo)
                 if modifiers == (Qt.ControlModifier | Qt.ShiftModifier):
-                    self.Redo()
+                    self.actionRedo.trigger()   # fires all connected slots (Redo + plugins)
                 else:
-                    self.Undo()
-                return True  # Consume event
+                    self.actionUndo.trigger()   # fires all connected slots (Undo + plugins)
+                return True
 
             # --- REDO (Ctrl + Y) ---
             if is_ctrl and event.key() == Qt.Key_Y:
-                self.Redo()
+                self.actionRedo.trigger()
                 return True
         if event.type() == QEvent.UpdateRequest:
             pass
@@ -5202,6 +5305,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         if npImage is None:
             return
+        if initialState:
+            self._sync_tab_visibility(loaded_index=0)
+            if hasattr(self, 'vscode_widget'):
+                self.vscode_widget.switch_to_tab("Color Settings")
         #if not '9876_Combined' in self.dw2Text:
         #    self.dw2Text.append('9876_Combined')
 
@@ -5218,9 +5325,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.ImageEnh_view1.setVisible(True)
         self.tree_colors.setVisible(True)
         #ind, colorPen = self.colorsCombinations[self.dw2Text.index(self.dw2_cb.currentText())]
-        ind = 9876#self.dw2Text.index(self.dw2_cb.currentText())+1
-
-        colorPen = [1, 0, 0, 1]
+        ind = get_default_color_ind(self)
+        colorPen = self.colorsCombinations.get(ind, [1, 0, 0, 1])
+        if ind != 9876:
+            manually_check_tree_item(self, str(ind))
         if not self.is_view1_video:
 
             # 1. HIDE Play Button and STOP Timer
@@ -5333,6 +5441,10 @@ class Ui_Main(dockWidgets, openglWidgets):
             else:
                 widget._image = self.readView1.npImage
 
+        if initialState and hasattr(self, 'scrol_rad_circle'):
+            default_radius = get_default_brush_radius(self.openGLWidget_1)
+            self.scrol_rad_circle.setValue(default_radius)
+
         self.allowChangeScn = True
 
 
@@ -5348,6 +5460,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         """
         if npImage is None:
             return
+        if initialState:
+            self._sync_tab_visibility(loaded_index=1)
+            if hasattr(self, 'vscode_widget'):
+                self.vscode_widget.switch_to_tab("Color Settings")
         #if not '9876_Combined' in self.dw2Text:
         #    self.dw2Text.append('9876_Combined')
 
@@ -5364,8 +5480,10 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.ImageEnh_view1.setVisible(True)
         self.tree_colors.setVisible(True)
         #ind, colorPen = self.colorsCombinations[self.dw2Text.index(self.dw2_cb.currentText())]
-        ind = 9876#self.dw2Text.index(self.dw2_cb.currentText())+1
-        colorPen = [1, 0, 0, 1]
+        ind = get_default_color_ind(self)
+        colorPen = self.colorsCombinations.get(ind, [1, 0, 0, 1])
+        if ind != 9876:
+            manually_check_tree_item(self, str(ind))
 
         if not self.is_view2_video:
 
@@ -5489,6 +5607,10 @@ class Ui_Main(dockWidgets, openglWidgets):
             else:
                 widget._image = self.readView2.npImage
 
+        if initialState and hasattr(self, 'scrol_rad_circle'):
+            default_radius = get_default_brush_radius(self.openGLWidget_4)
+            self.scrol_rad_circle.setValue(default_radius)
+
         self.allowChangeScn = True
 
 
@@ -5525,18 +5647,42 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.action_guideLines.setText(self._translate("Main", "Guides"))
         self.action_axisLines.setText(self._translate("Main", "Axis"))
         self.actionPan.setText(self._translate("Main", "Pan"))
+        self.actionPan.setToolTip(self._translate("Main", "Pan: drag to move the view."))
         self.actionContour.setText(self._translate("Main", "Contour"))
+        self.actionContour.setToolTip(self._translate(
+            "Main", "Draw a freehand outline around a structure. Right-click for "
+                     "area, perimeter, location, and interpolation tools."))
         self.actionPoints.setText(self._translate("Main", "Point Selection"))
-        self.actionCircles.setText(self._translate("Main", "Circle Selection"))
+        self.actionPoints.setToolTip(self._translate("Main", "Click to mark individual points on the image."))
+        self.actionCircles.setText(self._translate("Main", "Smart Brush"))
+        self.actionCircles.setToolTip(self._translate(
+            "Main", "Drag to paint. Fills only similar-intensity pixels within "
+                     "the brush radius as you sweep over an area."))
+        self.actionMagicTool.setText(self._translate("Main", "Magic Wand"))
+        self.actionMagicTool.setToolTip(self._translate(
+            "Main", "Click once to flood-fill a region based on intensity "
+                     "similarity (no size limit, unlike Smart Brush)."))
+        self.actionInfo.setText(self._translate("Main", "Info"))
+        self.actionInfo.setToolTip(self._translate(
+            "Main", "Click a pixel to see its label, area, perimeter, and "
+                     "world-space location."))
         self.actionGoTo.setText(self._translate("Main", "Link"))
         self.action3D.setText(self._translate("Main", "3D"))
         self.actionPlay.setText(self._translate("Main", "Play"))
         self.actionZoomIn.setText(self._translate("Main", "Zoom In"))
         self.actionZoomOut.setText(self._translate("Main", "Zoom Out"))
         self.actionContourX.setText(self._translate("Main", "Contour X times"))
+        self.actionContourX.setToolTip(self._translate(
+            "Main", "Repeat the next contour automatically across multiple slices."))
         self.actionEraseX.setText(self._translate("Main", "Eraser X times"))
+        self.actionEraseX.setToolTip(self._translate(
+            "Main", "Repeat erasing automatically across multiple slices."))
         self.actionPaint.setText(self._translate("Main", "Paint"))
+        self.actionPaint.setToolTip(self._translate(
+            "Main", "Draw a freehand outline (same drawing as Contour, with a "
+                     "simpler right-click menu)."))
         self.actionErase.setText(self._translate("Main", "Erase"))
+        self.actionErase.setToolTip(self._translate("Main", "Drag to erase segmentation."))
 
 
 
@@ -5565,6 +5711,7 @@ class Ui_Main(dockWidgets, openglWidgets):
         self.actionsaveas.setText(self._translate("Main", "Save as"))
         self.actionGenerateReport.setText(self._translate("Main", "Generate Report..."))
         self.actionLine.setText(self._translate("Main", "Draw Line"))
+        self.actionLine.setToolTip(self._translate("Main", "Draw a straight line segment."))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.mutulaViewTab), self._translate("Main", "Mutual view"))
         #self.tabWidget.setTabText(self.tabWidget.indexOf(self.reservedTab), self._translate("Main", "Rserved"))
 
