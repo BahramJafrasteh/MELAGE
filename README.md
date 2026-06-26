@@ -25,7 +25,7 @@
 MELAGE is an open-source **neuroimaging software** designed for analysis, segmentation, and visualization of multimodal datasets.  
 It combines classical medical image processing with state-of-the-art deep learning support, making it useful for both researchers and practitioners.
 
-🚀 **What's new in v2.1.5:**
+🚀 **What's new in v2.2.0:**
 - 🤖 **Integrated AI segmentation sidebar** — MedSAM, SAM 2 (with 3D/video propagation), and nnInteractive are now permanent sidebar panels, not floating dialogs. Click directly on the live GL canvas to segment.
 - 🐍 **Headless Python API & extended CLI** — `import melage` from Jupyter or scripts; no GUI, no PyQt5 import needed.
 - ✏️ **New toolbar tools** — Freehand drawing, Magic Wand (region grow by pixel similarity), and Image Info tool.
@@ -314,7 +314,7 @@ melage
 
 ## 🤖 AI Segmentation Plugins
 
-Starting from **v2.1.5**, MELAGE ships three state-of-the-art interactive segmentation models as permanent **sidebar panels**. They draw directly on the live GL canvas — no separate window, no coordinate mapping needed.
+Starting from **v2.2.0**, MELAGE ships three state-of-the-art interactive segmentation models as permanent **sidebar panels**. They draw directly on the live GL canvas — no separate window, no coordinate mapping needed.
 
 Install the AI extras first:
 ```bash
@@ -374,7 +374,7 @@ All three plugins appear as icon buttons in the **VS Code-style activity bar** o
 
 ## 🐍 Python API & Scripting
 
-Starting from **v2.1.5**, MELAGE ships a headless Python API and an extended CLI.  
+Starting from **v2.2.0**, MELAGE ships a headless Python API and an extended CLI.  
 No GUI, no display, no PyQt5 import needed — just `import melage`.  
 This is designed for:
 
@@ -1368,7 +1368,7 @@ Stable releases and updates of **MELAGE** are available on the [GitHub Releases 
 
 | Version | Highlights |
 |---------|-----------|
-| **v2.1.5** | MedSAM + SAM 2 + nnInteractive sidebar plugins; headless Python API & CLI (`melage run/tools/info`); VS Code-style activity sidebar; Freehand / Magic Wand / Info toolbar tools; 3D rendering fixes; improved masking operations |
+| **v2.2.0** | MedSAM + SAM 2 + nnInteractive sidebar plugins; headless Python API & CLI (`melage run/tools/info`); VS Code-style activity sidebar; Freehand / Magic Wand / Info toolbar tools; 3D rendering fixes; improved masking operations |
 | v2.0.5 | Bug fixes and rendering improvements |
 | v2.0.3 | Version bump and dependency updates |
 | v2.0.0 | Video segmentation support; dynamic plugin system |

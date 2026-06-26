@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Bahram Jafraste'
-__version__ = '2.1.34'
+__version__ = '2.2.0'
 
 # ── Non-GUI utilities (always safe to import) ──────────────────────────
 from . import utils

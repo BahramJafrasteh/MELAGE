@@ -421,7 +421,13 @@ class Ui_Main(dockWidgets, openglWidgets):
             return
 
         # 4. Compare Versions
-        if current_ver == latest_ver:
+        try:
+            from packaging.version import Version
+            up_to_date = Version(current_ver) >= Version(latest_ver)
+        except Exception:
+            up_to_date = (current_ver == latest_ver)
+
+        if up_to_date:
             QtWidgets.QMessageBox.information(
                 self,
                 "Up to Date",
@@ -429,7 +435,7 @@ class Ui_Main(dockWidgets, openglWidgets):
             )
             return
 
-        # 5. If different, prompt the user
+        # 5. If a newer version exists, prompt the user
         reply = QtWidgets.QMessageBox.question(
             self,
             'Update Available',
